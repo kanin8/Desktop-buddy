@@ -1,0 +1,18 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('electronAPI', {
+  // Settings Window API
+  toggleRunning: () => ipcRenderer.send('toggle-avatar'),
+  getAvatarState: () => ipcRenderer.invoke('get-avatar-state'),
+  setColor: (color) => ipcRenderer.send('set-color', color),
+  setPersonality: (name) => ipcRenderer.send('set-personality', name),
+
+  // Overlay Window API
+  updateColor: (callback) => ipcRenderer.on('update-color', (event, color) => callback(color)),
+  updatePersonality: (callback) => ipcRenderer.on('update-personality', (event, config) => callback(config)),
+  speak: (callback) => ipcRenderer.on('avatar-speak', (event, text) => callback(text)),
+  setScreenGrayscale: (callback) => ipcRenderer.on('set-screen-grayscale', (event, enabled) => callback(enabled)),
+
+  // General purpose (for the mouse-ignore logic)
+  setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),
+});
