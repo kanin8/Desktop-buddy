@@ -9,7 +9,7 @@
  * channels. Callers only decide what "close" means: the standalone app quits,
  * Desktop-buddy only hides the panel so the avatar keeps running.
  */
-const { BrowserWindow, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const path = require('path');
 const CONFIG = require('./config');
 
@@ -141,9 +141,16 @@ ipcMain.on('todo-close', () => {
 
 // Re-anchor on resolution or monitor changes so the panel follows the work area.
 // Uses the live contentHeight, so no per-window closure is needed here.
-screen.on('display-metrics-changed', anchor);
-screen.on('display-added', anchor);
-screen.on('display-removed', anchor);
+//
+// Deferred until app-ready because this module is imported at the top of the
+// host's main.js, i.e. before Electron emits 'ready'. Touching `screen` any
+// earlier throws "The 'screen' module can't be used before the app 'ready'
+// event", which takes down the whole app on startup.
+app.whenReady().then(() => {
+  screen.on('display-metrics-changed', anchor);
+  screen.on('display-added', anchor);
+  screen.on('display-removed', anchor);
+});
 
 module.exports = {
   createTodoWindow,
