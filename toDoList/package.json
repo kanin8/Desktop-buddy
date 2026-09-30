@@ -15,7 +15,7 @@
   "build": {
     "appId": "local.todo.helper",
     "productName": "To-do helper",
-    "files": ["main.js", "preload.js", "index.html", "renderer.js"],
+    "files": ["main.js", "preload.js", "todoWindow.js", "config.js", "index.html", "renderer.js"],
     "linux": { "target": ["AppImage"], "category": "Utility" },
     "win": { "target": ["nsis"] },
     "mac": { "target": ["dmg"], "category": "public.app-category.productivity" }
