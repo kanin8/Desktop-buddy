@@ -7,6 +7,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setColor: (color) => ipcRenderer.send('set-color', color),
   setPersonality: (name) => ipcRenderer.send('set-personality', name),
 
+  // To-Do List panel API
+  toggleTodoList: () => ipcRenderer.send('toggle-todolist'),
+  getTodoListState: () => ipcRenderer.invoke('get-todolist-state'),
+
   // Overlay Window API
   updateColor: (callback) => ipcRenderer.on('update-color', (event, color) => callback(color)),
   updatePersonality: (callback) => ipcRenderer.on('update-personality', (event, config) => callback(config)),
