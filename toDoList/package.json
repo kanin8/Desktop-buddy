@@ -1,0 +1,23 @@
+{
+  "name": "todo-helper",
+  "version": "1.0.0",
+  "description": "Small always-on-top to-do list pinned to the bottom-right corner of the screen",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "start:nosandbox": "electron . --no-sandbox",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "local.todo.helper",
+    "productName": "To-do helper",
+    "files": ["main.js", "preload.js", "todoWindow.js", "config.js", "index.html", "renderer.js"],
+    "linux": { "target": ["AppImage"], "category": "Utility" },
+    "win": { "target": ["nsis"] },
+    "mac": { "target": ["dmg"], "category": "public.app-category.productivity" }
+  }
+}

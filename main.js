@@ -1,6 +1,11 @@
 const { app, BrowserWindow, screen, Tray, Menu, nativeImage, ipcMain } = require('electron');
 const path = require('path');
 const http = require('http');
+const {
+  createTodoWindow,
+  isTodoWindowVisible,
+  hideTodoWindow,
+} = require('./toDoList/todoWindow');
 
 // --- SINGLE INSTANCE LOCK ---
 const gotTheLock = app.requestSingleInstanceLock();
@@ -52,7 +57,7 @@ function createOverlayWindow() {
 function createSettingsWindow() {
   settingsWin = new BrowserWindow({
     width: 320,
-    height: 420,
+    height: 520,
     resizable: false,
     skipTaskbar: false,
     webPreferences: {
@@ -77,6 +82,7 @@ function createTray() {
 
   const updateMenu = () => {
     const isRunning = overlayWin && !overlayWin.isDestroyed() && overlayWin.isVisible();
+    const todoRunning = isTodoWindowVisible();
     const contextMenu = Menu.buildFromTemplate([
       { label: 'Show Settings', click: () => settingsWin.show() },
       { type: 'separator' },
@@ -86,11 +92,17 @@ function createTray() {
           ipcMain.emit('toggle-avatar');
         }
       },
+      {
+        label: todoRunning ? 'Hide To-Do List' : 'Show To-Do List',
+        click: () => {
+          ipcMain.emit('toggle-todolist');
+        }
+      },
       { type: 'separator' },
       { label: 'Quit', click: () => app.quit() },
     ]);
     tray.setContextMenu(contextMenu);
-    tray.setToolTip(`Avatar: ${isRunning ? 'Running' : 'Stopped'}`);
+    tray.setToolTip(`Avatar: ${isRunning ? 'Running' : 'Stopped'} | To-Do List: ${todoRunning ? 'On' : 'Off'}`);
   };
 
   tray.on('click', () => {
@@ -99,6 +111,7 @@ function createTray() {
 
   // Update menu whenever state changes
   ipcMain.on('avatar-state-changed', updateMenu);
+  ipcMain.on('todolist-state-changed', updateMenu);
   updateMenu();
 }
 
@@ -185,6 +198,22 @@ ipcMain.on('set-ignore-mouse', (event, ignore) => {
   }
 });
 
+// --- TO-DO LIST PANEL ---
+// The panel is optional and off until the user enables it in Settings. Closing
+// it hides rather than destroys, so toggling back on is instant and the task
+// list in localStorage is untouched.
+ipcMain.handle('get-todolist-state', () => (isTodoWindowVisible() ? 'running' : 'stopped'));
+
+ipcMain.on('toggle-todolist', () => {
+  if (isTodoWindowVisible()) {
+    hideTodoWindow();
+  } else {
+    // Closing the panel must not take the avatar down with it.
+    createTodoWindow({ onClose: hideTodoWindow });
+  }
+  ipcMain.emit('todolist-state-changed');
+});
+
 app.whenReady().then(() => {
   console.log('Electron is ready');
   console.log('nativeImage:', nativeImage);
@@ -194,6 +223,9 @@ app.whenReady().then(() => {
 
   // Start the avatar by default
   createOverlayWindow();
+
+  // The to-do list panel is opt-in, so it is deliberately not created here.
+  // Enable it from Settings or the tray menu.
 
   // Test bedtime trigger
   if (process.argv.includes('--test-bedtime')) {
