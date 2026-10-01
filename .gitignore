@@ -3,3 +3,6 @@ venv/
 .claude/
 .agents/
 *.log
+
+# Local working notes, not part of the project
+SESSION_SUMMARY.txt
