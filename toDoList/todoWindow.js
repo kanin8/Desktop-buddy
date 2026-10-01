@@ -77,7 +77,14 @@ function createTodoWindow({ onClose } = {}) {
   todoWin.setAlwaysOnTop(true, 'screen-saver');
   todoWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   todoWin.setMenuBarVisibility(false);
-  todoWin.loadFile('index.html');
+
+  // Absolute path required: loadFile() resolves a relative path against the
+  // process working directory, not this module's folder. Launched from the repo
+  // root (the normal way to start Desktop-buddy) cwd has no index.html, the load
+  // fails silently, and the panel renders as an empty box in its backgroundColor.
+  // Standalone runs from inside toDoList/ where cwd happens to match, which is
+  // why this only showed up once the panel moved into the host app.
+  todoWin.loadFile(path.join(__dirname, 'index.html'));
 
   // Wait for first paint so the panel never flashes at the wrong position.
   todoWin.once('ready-to-show', () => {
