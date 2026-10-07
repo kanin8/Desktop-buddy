@@ -2,7 +2,7 @@ const avatar = document.getElementById('avatar');
 const bubble = document.getElementById('speech-bubble');
 
 // --- GLOBAL CONSTANTS ---
-const BOX_SIZE = 40;
+const BOX_SIZE = 200;
 const SCREEN_MARGIN = 30;
 
 // --- MOVEMENT PARAMETERS ---
@@ -51,6 +51,7 @@ const KANGAROO = {
 };
 
 // --- STATE ---
+let currentAvatarType = 'color';
 let currentMode = 'worm';
 let posX = SCREEN_MARGIN + Math.random() * (window.innerWidth - BOX_SIZE - 2 * SCREEN_MARGIN);
 let posY = SCREEN_MARGIN + Math.random() * (window.innerHeight - BOX_SIZE - 2 * SCREEN_MARGIN);
@@ -126,12 +127,15 @@ function update() {
   posX = Math.max(minX, Math.min(posX, maxX));
   posY = Math.max(minY, Math.min(posY, maxY));
 
+  // Apply a 50px downward offset for rendering
+  const renderY = posY + 50;
+
   avatar.style.left = posX + 'px';
-  avatar.style.top = posY + 'px';
+  avatar.style.top = renderY + 'px';
 
   // Position bubble relative to avatar
   bubble.style.left = posX + 'px';
-  bubble.style.top = (posY - 40) + 'px';
+  bubble.style.top = (renderY - 40) + 'px';
 
   requestAnimationFrame(update);
 }
@@ -163,21 +167,16 @@ function updateWorm(now) {
     const speed = WORM.baseSpeed * pulse;
 
     // Circuit Logic: Bottom -> Right -> Top -> Left -> Bottom
-    // We check corners first to ensure smooth transitions
     if (isOnRight && isOnRoof) {
-      // Top-Right corner: must move Left
       velX = -speed;
       velY = 0;
     } else if (isOnLeft && isOnRoof) {
-      // Top-Left corner: must move Down
       velX = 0;
       velY = speed;
     } else if (isOnLeft && isOnBottom) {
-      // Bottom-Left corner: must move Right
       velX = speed;
       velY = 0;
     } else if (isOnRight && isOnBottom) {
-      // Bottom-Right corner: must move Up
       velX = 0;
       velY = -speed;
     } else if (isOnRight && velX >= 0) {
@@ -193,7 +192,6 @@ function updateWorm(now) {
       velX = speed;
       velY = 0; // Turn Right
     } else {
-      // Maintain current direction if not turning
       if (Math.abs(velX) > 0) {
         velY = 0;
         velX = (velX > 0 ? 1 : -1) * speed;
@@ -201,7 +199,6 @@ function updateWorm(now) {
         velX = 0;
         velY = (velY > 0 ? 1 : -1) * speed;
       } else {
-        // Initial state if stopped on border
         if (isOnBottom) { velX = speed; velY = 0; }
         else if (isOnRight) { velX = 0; velY = -speed; }
         else if (isOnRoof) { velX = -speed; velY = 0; }
@@ -219,23 +216,19 @@ function updateBird() {
   const s = modeState.bird;
   const now = performance.now();
 
-  // 1. Curved Horizontal Movement
   s.currentDirection += (s.targetDirection - s.currentDirection) * BIRD.smoothing;
   velX = BIRD.horizontalSpeed * s.currentDirection;
 
-  // 2. Long Glide Trigger (Too high on screen)
   if (!s.isLongGliding && posY < BIRD.highThreshold) {
     s.isLongGliding = true;
   }
 
-  // Exit long glide when low enough
   if (s.isLongGliding && posY > window.innerHeight * BIRD.lowThreshold) {
     s.isLongGliding = false;
     s.phase = 0;
     s.subPhase = 0;
   }
 
-  // 3. Vertical Cycle Logic
   let targetVelY = BIRD.floatFallSpeed;
 
   if (s.isLongGliding) {
@@ -247,7 +240,6 @@ function updateBird() {
   } else {
     s.subPhase++;
 
-    // Launch phase
     if (s.phase === 0) {
       if (s.subPhase < BIRD.launchDuration) {
         const progress = s.subPhase / BIRD.launchDuration;
@@ -257,7 +249,6 @@ function updateBird() {
         s.subPhase = 0;
       }
     }
-    // Nudge phase
     else if (s.phase === 1) {
       const nudgeIdx = Math.floor(s.subPhase / BIRD.nudgeDuration);
       if (nudgeIdx < BIRD.nudgeCount) {
@@ -268,7 +259,6 @@ function updateBird() {
         s.subPhase = 0;
       }
     }
-    // Fall phase
     else if (s.phase === 2) {
       if (s.subPhase < BIRD.fallDuration) {
         const progress = s.subPhase / BIRD.fallDuration;
@@ -280,10 +270,8 @@ function updateBird() {
     }
   }
 
-  // Smoothing vertical velocity for a buoyant feel
   velY += (targetVelY - velY) * BIRD.smoothing;
 
-  // 4. Random Events
   if (!s.isLongGliding && Math.random() < BIRD.glideChance) {
     s.glideUntil = now + BIRD.glideDuration;
   }
@@ -332,20 +320,10 @@ function updateKangaroo() {
 
   s.phase++;
   if (s.phase < KANGAROO.hopDuration) {
-    // Parabolic hop
-    // X is linear
     velX = KANGAROO.hopSpeed * s.direction;
-
-    // Y is a parabola: y = -a*t^2 + v0*t
-    // We want peak height at hopDuration/2
     const t = s.phase / KANGAROO.hopDuration;
-    const heightFactor = 4 * t * (1 - t); // 0 at 0, 1 at 0.5, 0 at 1
-
-    // Instead of calculating absolute posY, we can use velocity
-    // v_y = -2at + v0
-    // v_y = - (constant) * (t - 0.5)
     const vFactor = (0.5 - t);
-    velY = -vFactor * 15; // Increased scale for a more visible jump
+    velY = -vFactor * 15;
   } else {
     s.isPausing = true;
     s.phase = 0;
@@ -353,12 +331,14 @@ function updateKangaroo() {
 }
 
 window.electronAPI.updateColor((color) => {
-  avatar.style.backgroundColor = color;
+  if (currentAvatarType === 'color') {
+    avatar.style.backgroundColor = color;
+    avatar.style.backgroundImage = 'none';
+  }
 });
 
 window.electronAPI.updatePersonality((name) => {
   currentMode = name;
-  // Reset mode states when switching
   modeState.bird.phase = 0;
   modeState.bird.subPhase = 0;
   modeState.bird.glideUntil = 0;
@@ -368,7 +348,6 @@ window.electronAPI.updatePersonality((name) => {
   modeState.kangaroo.phase = 0;
   modeState.kangaroo.isPausing = false;
 
-  // Initialize velocities based on mode
   if (currentMode === 'worm') {
     velX = 0;
     velY = WORM.fallSpeed;
@@ -384,6 +363,19 @@ window.electronAPI.updatePersonality((name) => {
   }
 });
 
+window.electronAPI.updateAvatarType((type) => {
+  currentAvatarType = type;
+  if (type === 'image') {
+    avatar.style.backgroundImage = "url('Avatar/Frog_avatar.png')";
+    avatar.style.backgroundSize = 'contain';
+    avatar.style.backgroundRepeat = 'no-repeat';
+    avatar.style.backgroundPosition = 'center';
+    avatar.style.backgroundColor = 'transparent';
+  } else {
+    avatar.style.backgroundImage = 'none';
+  }
+});
+
 // --- MESSAGE QUEUE SYSTEM ---
 const messageQueue = [];
 let isSpeaking = false;
@@ -394,21 +386,12 @@ async function processQueue() {
 
   while (messageQueue.length > 0) {
     const text = messageQueue.shift();
-    console.log(`Processing message: ${text}`);
-
     bubble.innerText = text;
     bubble.style.display = 'block';
-
-    // Display each message for 4 seconds
     await new Promise(resolve => setTimeout(resolve, 4000));
-
     bubble.style.display = 'none';
-
-    // Small gap between messages
     await new Promise(resolve => setTimeout(resolve, 500));
   }
-
-  console.log('Queue empty, stopping speech.');
   isSpeaking = false;
 }
 
@@ -418,10 +401,6 @@ window.electronAPI.speak((text) => {
 });
 
 window.electronAPI.setScreenGrayscale((enabled) => {
-  // OS-level grayscale is not possible via CSS in Electron.
-  // Instead, we create a "bedtime" atmosphere:
-  // 1. Dim the screen with a darker overlay
-  // 2. Grayscale the avatar itself
   document.body.style.backgroundColor = enabled ? 'rgba(0,0,0,0.4)' : 'transparent';
   avatar.style.filter = enabled ? 'grayscale(100%)' : 'none';
 });

@@ -192,6 +192,12 @@ ipcMain.on('set-personality', (event, name) => {
   }
 });
 
+ipcMain.on('set-avatar-type', (event, type) => {
+  if (overlayWin && !overlayWin.isDestroyed()) {
+    overlayWin.webContents.send('update-avatar-type', type);
+  }
+});
+
 ipcMain.on('set-ignore-mouse', (event, ignore) => {
   if (overlayWin && !overlayWin.isDestroyed()) {
     overlayWin.setIgnoreMouseEvents(ignore, { forward: true });
