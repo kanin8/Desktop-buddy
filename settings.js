@@ -2,6 +2,7 @@ const toggleBtn = document.getElementById('toggleBtn');
 const colorGrid = document.getElementById('colorGrid');
 const colorCube = document.getElementById('colorCube');
 const personalityInputs = document.querySelectorAll('input[name="personality"]');
+const avatarTypeInputs = document.querySelectorAll('input[name="avatarType"]');
 const statusBar = document.getElementById('statusBar');
 const todoToggle = document.getElementById('todoToggle');
 
@@ -57,6 +58,12 @@ personalityInputs.forEach(input => {
     currentPersonality = input.value;
     window.electronAPI.setPersonality(currentPersonality);
     updateUI();
+  });
+});
+
+avatarTypeInputs.forEach(input => {
+  input.addEventListener('change', () => {
+    window.electronAPI.setAvatarType(input.value);
   });
 });
 
