@@ -8,6 +8,7 @@ const {
 } = require('./toDoList/todoWindow');
 const { registerAiIpc } = require('./toDoList/aiService');
 const { flushStore } = require('./toDoList/todoService');
+const CONFIG = require('./config');
 
 // --- HARDWARE ACCELERATION ---
 // Must be set before the app becomes ready. On machines where Chromium cannot
@@ -143,10 +144,19 @@ setInterval(() => {
   if (now.getHours() === 22 && now.getMinutes() === 0) {
     triggerBedtime();
   }
-}, 60000);
+}, CONFIG.BEDTIME_CHECK_MS);
 
-// --- SPELLING SERVER ---
-const server = http.createServer((req, res) => {
+// Let check_spelling.py push text into the avatar's speech bubble.
+//
+// Two things this must get right, because both used to break startup:
+//  1. It is only started when we own the single-instance lock. Without this a
+//     second launch still ran this module top to bottom and raced the first
+//     instance for the port.
+//  2. It has an 'error' handler. Without one, a bind failure surfaces as an
+//     uncaught 'EADDRINUSE' exception that aborts the whole main process.
+//
+// The helper is auxiliary, so failing to bind only costs the spell-checker.
+const spellingServer = http.createServer((req, res) => {
   if (req.method === 'POST' && req.url === '/speak') {
     let body = '';
     req.on('data', chunk => { body += chunk.toString(); });
@@ -170,8 +180,22 @@ const server = http.createServer((req, res) => {
   }
 });
 
-server.listen(5000, '127.0.0.1');
-console.log('Spelling server listening on port 5000');
+if (gotTheLock) {
+  spellingServer.on('error', (err) => {
+    if (err && err.code === 'EADDRINUSE') {
+      console.warn(
+        `Spelling helper not started: port ${CONFIG.SPELLING_SERVER_PORT} is already in use ` +
+        '(another copy of the app may already be running). Everything else still works.'
+      );
+    } else {
+      console.warn('Spelling helper failed to start:', err && err.message);
+    }
+  });
+
+  spellingServer.listen(CONFIG.SPELLING_SERVER_PORT, CONFIG.SPELLING_SERVER_HOST, () => {
+    console.log(`Spelling server listening on port ${CONFIG.SPELLING_SERVER_PORT}`);
+  });
+}
 
 // IPC Handlers
 ipcMain.handle('get-avatar-state', () => {
