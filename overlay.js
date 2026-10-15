@@ -66,6 +66,9 @@ let posX = SCREEN_MARGIN + Math.random() * (window.innerWidth - BOX_SIZE - 2 * S
 let posY = SCREEN_MARGIN + Math.random() * (window.innerHeight - BOX_SIZE - 2 * SCREEN_MARGIN);
 let velX = 0;
 let velY = 0;
+// True while the chat panel is open, so the avatar stops crawling and the
+// panel stays under the user's cursor.
+let movementPaused = false;
 
 // Mode-specific state
 let modeState = {
@@ -85,56 +88,61 @@ let modeState = {
 function update() {
   const now = performance.now();
 
-  switch (currentMode) {
-    case 'worm':
-      updateWorm(now);
-      break;
-    case 'bird':
-      updateBird();
-      break;
-    case 'rock':
-      updateRock();
-      break;
-    case 'kangaroo':
-      updateKangaroo();
-      break;
-  }
+  // The chat panel is anchored to the avatar, so it drifts while you type and
+  // can slide out from under the cursor. Freezing movement while it is open
+  // keeps the text box still.
+  if (!movementPaused) {
+    switch (currentMode) {
+      case 'worm':
+        updateWorm(now);
+        break;
+      case 'bird':
+        updateBird();
+        break;
+      case 'rock':
+        updateRock();
+        break;
+      case 'kangaroo':
+        updateKangaroo();
+        break;
+    }
 
-  // Boundary Handling
-  const minX = SCREEN_MARGIN;
-  const maxX = window.innerWidth - BOX_SIZE - SCREEN_MARGIN;
-  const minY = SCREEN_MARGIN;
-  const maxY = window.innerHeight - BOX_SIZE - SCREEN_MARGIN;
+    // Boundary Handling
+    const minX = SCREEN_MARGIN;
+    const maxX = window.innerWidth - BOX_SIZE - SCREEN_MARGIN;
+    const minY = SCREEN_MARGIN;
+    const maxY = window.innerHeight - BOX_SIZE - SCREEN_MARGIN;
 
-  if (posX <= minX || posX >= maxX) {
-    if (currentMode === 'bird') {
+    if (posX <= minX || posX >= maxX) {
+      if (currentMode === 'bird') {
         modeState.bird.targetDirection *= -1;
-    }
-    if (currentMode === 'kangaroo') {
+      }
+      if (currentMode === 'kangaroo') {
         modeState.kangaroo.direction *= -1;
+      }
+      if (currentMode !== 'worm') {
+        velX *= -1;
+      }
     }
-    if (currentMode !== 'worm') {
-      velX *= -1;
-    }
-  }
-  if (posY <= minY) {
-    velY *= -1;
-  } else if (posY >= maxY) {
-    if (currentMode === 'bird') {
+    if (posY <= minY) {
       velY *= -1;
-    } else if (currentMode === 'kangaroo') {
-      if (velY > 0) velY = 0;
-    } else {
-      velY = 0;
+    } else if (posY >= maxY) {
+      if (currentMode === 'bird') {
+        velY *= -1;
+      } else if (currentMode === 'kangaroo') {
+        if (velY > 0) velY = 0;
+      } else {
+        velY = 0;
+      }
     }
+
+    posX += velX;
+    posY += velY;
+
+    // Constrain to screen
+    posX = Math.max(minX, Math.min(posX, maxX));
+    posY = Math.max(minY, Math.min(posY, maxY));
   }
-
-  posX += velX;
-  posY += velY;
-
-  // Constrain to screen
-  posX = Math.max(minX, Math.min(posX, maxX));
-  posY = Math.max(minY, Math.min(posY, maxY));
 
   // Apply a 50px downward offset for rendering
   const renderY = posY + 50;
@@ -434,17 +442,38 @@ window.electronAPI.setScreenGrayscale((enabled) => {
 
 // --- AVATAR INTERACTION ---
 // The overlay covers the whole screen and is click-through by default, so the
-// only interactive region is the avatar plus whatever is currently attached to
-// it: the hover affordance, and the chat panel once it is open.
+// only interactive region is the avatar plus whatever is attached to it: the
+// hover affordance, and the chat panel once it is open.
 //
 // Flow: hover the avatar -> a clickable option appears -> click it -> the chat
 // opens. Everything else on screen still passes clicks through.
 
 const isChatOpen = () => chatPanel.style.display === 'flex';
-const isOptionVisible = () => bubbleOption.style.display !== 'none';
+// Compared against 'flex' rather than "not none": the hidden state comes from
+// the stylesheet, so a never-toggled element has an empty inline display and
+// would otherwise look visible.
+const isOptionVisible = () => bubbleOption.style.display === 'flex';
+
+// The avatar keeps crawling while you reach for the option, so the option is
+// given a short grace period before it disappears.
+const OPTION_GRACE_MS = 400;
+let optionHideTimer = null;
 
 function rectsOverlap(x, y, rect) {
   return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+// The option sits just above the avatar's top edge. Without treating the strip
+// between them as interactive, the pointer crosses dead space on its way up and
+// the option vanishes before it can be clicked.
+function isInBridge(x, y) {
+  if (isChatOpen() || !isOptionVisible()) return false;
+  const avatarRect = avatar.getBoundingClientRect();
+  const optionRect = bubbleOption.getBoundingClientRect();
+  if (!optionRect.height) return false;
+  const left = Math.min(avatarRect.left, optionRect.left);
+  const right = Math.max(avatarRect.right, optionRect.right);
+  return x >= left && x <= right && y >= optionRect.bottom && y <= avatarRect.top;
 }
 
 function isOverInteractiveArea(x, y) {
@@ -453,6 +482,23 @@ function isOverInteractiveArea(x, y) {
   if (isChatOpen() && rectsOverlap(x, y, chatPanel.getBoundingClientRect())) return true;
   return false;
 }
+
+function showOption() {
+  if (optionHideTimer) { clearTimeout(optionHideTimer); optionHideTimer = null; }
+  if (!isChatOpen() && !isOptionVisible()) bubbleOption.style.display = 'flex';
+}
+
+function hideOptionSoon() {
+  if (optionHideTimer) clearTimeout(optionHideTimer);
+  optionHideTimer = setTimeout(() => {
+    optionHideTimer = null;
+    if (!isChatOpen() && !isOverInteractiveArea(lastX, lastY)) bubbleOption.style.display = 'none';
+  }, OPTION_GRACE_MS);
+}
+
+// Last known pointer position, so the grace timer can re-check where the pointer
+// actually is by the time it fires.
+let lastX = -1, lastY = -1;
 
 // --- AI CHAT ---
 // Stream listeners are registered once at startup rather than per message, so
@@ -493,7 +539,9 @@ function endExchange() {
 
 function openChat() {
   bubbleOption.style.display = 'none';
+  if (optionHideTimer) { clearTimeout(optionHideTimer); optionHideTimer = null; }
   chatPanel.style.display = 'flex';
+  movementPaused = true;
   chatInput.focus();
   // The chat is open, so the overlay must stay interactive even before the
   // pointer moves again.
@@ -503,6 +551,7 @@ function openChat() {
 function closeChat() {
   window.electronAPI.cancelAI();
   endExchange();
+  movementPaused = false;
   chatPanel.style.display = 'none';
   chatInput.value = '';
 }
@@ -555,19 +604,25 @@ bubbleOption.addEventListener('click', openChat);
 chatClose.addEventListener('click', closeChat);
 chatForm.addEventListener('submit', submitChat);
 
-// Hovering the avatar reveals the option; it disappears again on leave unless
-// the chat is open (the panel is its own affordance then).
-avatar.addEventListener('mouseenter', () => {
-  if (!isChatOpen()) bubbleOption.style.display = 'flex';
-});
-avatar.addEventListener('mouseleave', () => {
-  if (!isChatOpen()) bubbleOption.style.display = 'none';
-});
-
+// One mousemove drives everything, because it is the only event that keeps
+// arriving while the window is click-through and forwarding.
 window.addEventListener('mousemove', (e) => {
-  const over = isOverInteractiveArea(e.clientX, e.clientY);
+  lastX = e.clientX;
+  lastY = e.clientY;
+
+  const overAvatar = rectsOverlap(e.clientX, e.clientY, avatar.getBoundingClientRect());
+  const over = isOverInteractiveArea(e.clientX, e.clientY) || isInBridge(e.clientX, e.clientY);
+
   window.electronAPI.setIgnoreMouse(!over);
-  if (!over && !isChatOpen()) bubbleOption.style.display = 'none';
+
+  if (isChatOpen()) return;
+
+  if (over) {
+    if (optionHideTimer) { clearTimeout(optionHideTimer); optionHideTimer = null; }
+    if (overAvatar) showOption();
+  } else {
+    hideOptionSoon();
+  }
 });
 
 // Escape closes the chat from anywhere in the overlay.
