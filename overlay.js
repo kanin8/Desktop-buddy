@@ -1,6 +1,14 @@
 const avatar = document.getElementById('avatar');
 const bubble = document.getElementById('speech-bubble');
 
+// Plays the sprite sheet onto the child element; #avatar itself stays the
+// 200x200 movement/hit-test box and keeps carrying the plain colour avatar.
+const spriteAnimator = new SpriteAnimator(document.getElementById('avatar-sprite'));
+
+// The animation shown whenever the image avatar is selected. Swap this for a
+// lookup against currentMode once more behaviour sheets exist.
+const DEFAULT_IMAGE_ANIMATION = 'idle';
+
 // --- GLOBAL CONSTANTS ---
 const BOX_SIZE = 200;
 const SCREEN_MARGIN = 30;
@@ -136,6 +144,10 @@ function update() {
   // Position bubble relative to avatar
   bubble.style.left = posX + 'px';
   bubble.style.top = (renderY - 40) + 'px';
+
+  // Step the sprite sheet from the same loop that moves the avatar, so both
+  // share one clock.
+  spriteAnimator.update(now);
 
   requestAnimationFrame(update);
 }
@@ -366,12 +378,12 @@ window.electronAPI.updatePersonality((name) => {
 window.electronAPI.updateAvatarType((type) => {
   currentAvatarType = type;
   if (type === 'image') {
-    avatar.style.backgroundImage = "url('Avatar/Frog_avatar.png')";
-    avatar.style.backgroundSize = 'contain';
-    avatar.style.backgroundRepeat = 'no-repeat';
-    avatar.style.backgroundPosition = 'center';
+    spriteAnimator.play(DEFAULT_IMAGE_ANIMATION);
     avatar.style.backgroundColor = 'transparent';
   } else {
+    // Clearing the sprite matters as much as restoring the colour: #avatar's
+    // background colour shows through the sprite element otherwise.
+    spriteAnimator.stop();
     avatar.style.backgroundImage = 'none';
   }
 });
