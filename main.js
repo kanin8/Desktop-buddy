@@ -9,6 +9,19 @@ const {
 const { registerAiIpc } = require('./toDoList/aiService');
 const { flushStore } = require('./toDoList/todoService');
 
+// --- HARDWARE ACCELERATION ---
+// Must be set before the app becomes ready. On machines where Chromium cannot
+// start a GPU process it aborts the whole app with
+// "GPU process isn't usable. Goodbye." and SIGTRAP, so `npm start` appears to do
+// nothing. This app only draws simple DOM and transparent windows, which render
+// fine without the GPU, so opting out keeps startup reliable everywhere.
+// --disable-gpu on its own is not enough: the software rasterizer then takes
+// over and fails too, hence app.commandLine.appendSwitch as well.
+// Guarded because Electron throws if this is called once the app is ready (for
+// example when a test harness requires this module after app-ready).
+if (!app.isReady()) app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('disable-software-rasterizer');
+
 // --- SINGLE INSTANCE LOCK ---
 const gotTheLock = app.requestSingleInstanceLock();
 
