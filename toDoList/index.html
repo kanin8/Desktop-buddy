@@ -32,10 +32,27 @@ li input[type=checkbox]:checked::after{content:"";width:5px;height:10px;border:s
 li.done .t{color:var(--muted);text-decoration:line-through}
 .del:hover{color:var(--danger)}
 .empty{color:var(--muted);padding:10px 2px;display:block}
-.foot{display:flex;justify-content:flex-end;margin-top:6px}
+.foot{display:flex;gap:6px;justify-content:flex-end;margin-top:6px}
 .clear{background:none;border:0;color:var(--muted);font-size:13px;padding:2px 6px;border-radius:6px}
 .clear:hover{color:var(--ink)}
 [hidden]{display:none!important}
+
+/* ============================
+   To-do list — subtask progress
+   ============================ */
+
+.progress{
+  flex:none;
+  color:var(--muted);
+  font-size:11px;
+  font-variant-numeric:tabular-nums;
+  padding:1px 6px;
+  border:1px solid var(--line);
+  border-radius:999px;
+}
+li.done .progress{
+  opacity:0.6;
+}
 
 /* ============================
    To-do list — task tree
@@ -142,7 +159,10 @@ li.item.is-grabbed{
       <button class="add" type="submit">Add</button>
     </form>
     <ul id="list"></ul>
-    <div class="foot"><button class="clear" id="clear" type="button" hidden>Clear completed</button></div>
+    <div class="foot">
+      <button class="clear" id="undo" type="button" hidden>Undo last AI insert</button>
+      <button class="clear" id="clear" type="button" hidden>Clear completed</button>
+    </div>
   </section>
   <div id="sr" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 </div>

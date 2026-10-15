@@ -1,0 +1,123 @@
+/**
+ * Electron wiring for the AI task-breakdown feature.
+ *
+ * Owns the `ai-*` IPC surface: it runs the remote calls (so the API key stays in
+ * this process), streams the reply tokens back to the overlay, and writes the
+ * resulting task tree through the store.
+ */
+
+const { ipcMain, BrowserWindow } = require('electron');
+const path = require('path');
+const ai = require('./ai');
+const CONFIG = require('./config');
+const { createSettingsStore } = require('./appSettings');
+const { getStore, broadcastItems } = require('./todoService');
+
+let settings = null;
+// In-flight request per requesting window, so a closed overlay can cancel work.
+const inFlight = new Map();
+
+function getSettings() {
+  if (settings) return settings;
+  settings = createSettingsStore({ filePath: path.join(require('electron').app.getPath('userData'), 'settings.json') });
+  settings.load();
+  return settings;
+}
+
+/** Overlay window (the avatar chat) — the only window that talks to the AI. */
+function overlayOf(event) {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  return win && !win.isDestroyed() ? win : null;
+}
+
+function send(win, channel, payload) {
+  if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
+}
+
+/**
+ * Runs one exchange: stream an in-character reply into the bubble, then ask for
+ * a structured breakdown and insert it as a parent task with subtasks.
+ */
+async function askAndBreakdown(win, text) {
+  const config = getSettings();
+  const goal = String(text || '').trim();
+  if (!goal) return;
+
+  if (!config.isConfigured()) {
+    send(win, 'ai-error', 'Add an API key in Settings to use AI task breakdown.');
+    return;
+  }
+
+  const controller = new AbortController();
+  inFlight.set(eventKey(win), controller);
+  const base = { baseUrl: config.read().baseUrl, apiKey: config.resolveApiKey(), model: config.read().model, signal: controller.signal };
+
+  try {
+    const reply = await ai.streamReply(Object.assign({ text: goal, onToken: t => send(win, 'ai-stream', t) }, base));
+    send(win, 'ai-stream-end', reply || '');
+  } catch (e) {
+    send(win, 'ai-error', friendlyError(e));
+    inFlight.delete(eventKey(win));
+    return;
+  }
+
+  // Only unfinished tasks are sent, so the model can avoid re-suggesting them.
+  const openItems = getStore().getItems()
+    .filter(function (it) { return !it.done; })
+    .slice(0, CONFIG.MAX_CONTEXT_ITEMS)
+    .map(function (it) { return it.text; });
+
+  try {
+    const breakdown = await ai.breakdownGoal(Object.assign({ text: goal, openItems: openItems }, base));
+    const parentText = (breakdown.parent || goal).trim();
+    const inserted = getStore().addSubtasks({ parentText: parentText, subtasks: breakdown.subtasks });
+    if (inserted) {
+      broadcastItems(getStore().getItems());
+      send(win, 'ai-tasks-added', { parentText: parentText, count: inserted.itemIds.length - 1 });
+    }
+  } catch (e) {
+    // The reply already streamed fine, so this is a partial success: tell the
+    // user the goal could not be broken down rather than failing the whole turn.
+    send(win, 'ai-tasks-failed', friendlyError(e));
+  } finally {
+    inFlight.delete(eventKey(win));
+  }
+}
+
+function eventKey(win) {
+  return win ? win.id : 0;
+}
+
+/** Turns a network failure into something worth showing a user. */
+function friendlyError(e) {
+  const message = String((e && e.message) || e);
+  if (/abort/i.test(message)) return 'The AI request timed out.';
+  if (/fetch failed|ENOTFOUND|ECONNREFUSED|EAI_AGAIN/i.test(message)) {
+    return 'Could not reach the AI endpoint. Check the URL in Settings.';
+  }
+  if (/401|403/.test(message)) return 'The API key was rejected. Check it in Settings.';
+  if (/429/.test(message)) return 'Rate limited by the AI provider. Try again shortly.';
+  return message.slice(0, 200);
+}
+
+/** Registers the `ai-*` channels. Called once by the host app's main.js. */
+function registerAiIpc() {
+  ipcMain.handle('ai-ask', (event, text) => askAndBreakdown(overlayOf(event), text));
+
+  ipcMain.handle('ai-get-settings', () => getSettings().read());
+
+  ipcMain.handle('ai-set-settings', (_event, patch) => getSettings().update(patch || {}));
+
+  // Cancels the pending exchange for the calling window (chat closed mid-reply).
+  ipcMain.handle('ai-cancel', (event) => {
+    const key = eventKey(overlayOf(event));
+    const controller = inFlight.get(key);
+    if (controller) {
+      controller.abort();
+      inFlight.delete(key);
+    }
+    return true;
+  });
+}
+
+module.exports = { registerAiIpc, getSettings, friendlyError };

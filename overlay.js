@@ -1,5 +1,14 @@
+// Avatar overlay: movement animation, the speech bubble, and the hover-to-chat
+// interaction that drives the AI task-breakdown chat.
 const avatar = document.getElementById('avatar');
 const bubble = document.getElementById('speech-bubble');
+const bubbleOption = document.getElementById('bubble-option');
+const chatPanel = document.getElementById('chat-panel');
+const chatLog = document.getElementById('chat-log');
+const chatForm = document.getElementById('chat-form');
+const chatInput = document.getElementById('chat-input');
+const chatSend = document.getElementById('chat-send');
+const chatClose = document.getElementById('chat-close');
 
 // --- GLOBAL CONSTANTS ---
 const BOX_SIZE = 200;
@@ -136,8 +145,26 @@ function update() {
   // Position bubble relative to avatar
   bubble.style.left = posX + 'px';
   bubble.style.top = (renderY - 40) + 'px';
+  bubbleOption.style.left = posX + 'px';
+  bubbleOption.style.top = (renderY - 48) + 'px';
+  positionChat(renderY);
 
   requestAnimationFrame(update);
+}
+
+// Keeps the chat panel above the avatar, flipping below it and clamping to the
+// viewport when the avatar is too close to an edge to fit it there.
+function positionChat(renderY) {
+  const panelH = chatPanel.offsetHeight || 0;
+  const panelW = chatPanel.offsetWidth || 280;
+  const above = renderY - 48 - panelH - 12;
+  const below = renderY + BOX_SIZE + 12;
+  const top = above < SCREEN_MARGIN ? Math.min(below, window.innerHeight - panelH - SCREEN_MARGIN) : above;
+  const left = Math.max(SCREEN_MARGIN,
+    Math.min(posX, window.innerWidth - panelW - SCREEN_MARGIN));
+
+  chatPanel.style.left = left + 'px';
+  chatPanel.style.top = top + 'px';
 }
 
 function updateWorm(now) {
@@ -405,15 +432,147 @@ window.electronAPI.setScreenGrayscale((enabled) => {
   avatar.style.filter = enabled ? 'grayscale(100%)' : 'none';
 });
 
-window.addEventListener('mousemove', (e) => {
-  const rect = avatar.getBoundingClientRect();
-  const isOver = (
-    e.clientX >= rect.left &&
-    e.clientX <= rect.right &&
-    e.clientY >= rect.top &&
-    e.clientY <= rect.bottom
+// --- AVATAR INTERACTION ---
+// The overlay covers the whole screen and is click-through by default, so the
+// only interactive region is the avatar plus whatever is currently attached to
+// it: the hover affordance, and the chat panel once it is open.
+//
+// Flow: hover the avatar -> a clickable option appears -> click it -> the chat
+// opens. Everything else on screen still passes clicks through.
+
+const isChatOpen = () => chatPanel.style.display === 'flex';
+const isOptionVisible = () => bubbleOption.style.display !== 'none';
+
+function rectsOverlap(x, y, rect) {
+  return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+}
+
+function isOverInteractiveArea(x, y) {
+  if (rectsOverlap(x, y, avatar.getBoundingClientRect())) return true;
+  if (isOptionVisible() && rectsOverlap(x, y, bubbleOption.getBoundingClientRect())) return true;
+  if (isChatOpen() && rectsOverlap(x, y, chatPanel.getBoundingClientRect())) return true;
+  return false;
+}
+
+// --- AI CHAT ---
+// Stream listeners are registered once at startup rather than per message, so
+// repeated exchanges cannot leak handlers. They read this state:
+
+let activeReply = null;   // element showing the reply being streamed
+let activePending = null; // "..." placeholder shown until the first token
+
+function addChatLine(text, kind) {
+  const el = document.createElement('div');
+  el.className = 'chat-entry ' + kind;
+  el.textContent = text;
+  chatLog.appendChild(el);
+  chatLog.scrollTop = chatLog.scrollHeight;
+  return el;
+}
+
+function removeChatLine(el) {
+  if (el && el.parentNode) el.parentNode.removeChild(el);
+}
+
+// Called on the first token of a reply, so the placeholder is replaced exactly
+// once no matter how the events interleave.
+function ensureReplyElement() {
+  if (activeReply) return activeReply;
+  removeChatLine(activePending);
+  activePending = null;
+  activeReply = addChatLine('', 'buddy');
+  return activeReply;
+}
+
+function endExchange() {
+  removeChatLine(activePending);
+  activePending = null;
+  activeReply = null;
+  chatSend.disabled = false;
+}
+
+function openChat() {
+  bubbleOption.style.display = 'none';
+  chatPanel.style.display = 'flex';
+  chatInput.focus();
+  // The chat is open, so the overlay must stay interactive even before the
+  // pointer moves again.
+  window.electronAPI.setIgnoreMouse(false);
+}
+
+function closeChat() {
+  window.electronAPI.cancelAI();
+  endExchange();
+  chatPanel.style.display = 'none';
+  chatInput.value = '';
+}
+
+function submitChat(e) {
+  e.preventDefault();
+  const goal = chatInput.value.trim();
+  if (!goal) return;
+
+  addChatLine(goal, 'user');
+  chatInput.value = '';
+  chatSend.disabled = true;
+  activePending = addChatLine('...', 'pending');
+
+  window.electronAPI.askAI(goal);
+}
+
+window.electronAPI.onAIStream(() => { ensureReplyElement(); });
+
+window.electronAPI.onAIStream((token) => {
+  ensureReplyElement().textContent += token;
+  chatLog.scrollTop = chatLog.scrollHeight;
+});
+
+window.electronAPI.onAIStreamEnd((reply) => {
+  // A model can finish without emitting content; show what it did send.
+  if (!activeReply && reply) addChatLine(reply, 'buddy');
+  endExchange();
+});
+
+window.electronAPI.onAIError((message) => {
+  addChatLine(message, 'error');
+  endExchange();
+});
+
+window.electronAPI.onAITasksAdded((info) => {
+  addChatLine(
+    info.count > 0
+      ? 'Added ' + info.count + ' subtask' + (info.count === 1 ? '' : 's') + ' to your list.'
+      : 'Added it to your list.',
+    'buddy'
   );
-  window.electronAPI.setIgnoreMouse(!isOver);
+});
+
+window.electronAPI.onAITasksFailed((message) => {
+  addChatLine('Could not break that down: ' + message, 'error');
+});
+
+bubbleOption.addEventListener('click', openChat);
+chatClose.addEventListener('click', closeChat);
+chatForm.addEventListener('submit', submitChat);
+
+// Hovering the avatar reveals the option; it disappears again on leave unless
+// the chat is open (the panel is its own affordance then).
+avatar.addEventListener('mouseenter', () => {
+  if (!isChatOpen()) bubbleOption.style.display = 'flex';
+});
+avatar.addEventListener('mouseleave', () => {
+  if (!isChatOpen()) bubbleOption.style.display = 'none';
+});
+
+window.addEventListener('mousemove', (e) => {
+  const over = isOverInteractiveArea(e.clientX, e.clientY);
+  window.electronAPI.setIgnoreMouse(!over);
+  if (!over && !isChatOpen()) bubbleOption.style.display = 'none';
+});
+
+// Escape closes the chat from anywhere in the overlay.
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && isChatOpen()) closeChat();
 });
 
 update();

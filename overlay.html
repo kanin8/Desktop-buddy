@@ -47,6 +47,151 @@
       display: block;
       width: 0;
     }
+
+    /* ============================
+       Avatar — hover affordance
+       ============================ */
+
+    /* The affordance that appears above the avatar on hover. It is the only
+       clickable thing on the overlay besides the chat itself, so it opts back
+       into pointer events while the pointer is over the avatar. */
+    #bubble-option {
+      position: absolute;
+      background: white;
+      border: 2px solid black;
+      border-radius: 999px;
+      padding: 6px 14px;
+      font-family: sans-serif;
+      font-size: 12px;
+      color: black;
+      white-space: nowrap;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      z-index: 100;
+      box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+      cursor: pointer;
+    }
+    #bubble-option::after {
+      content: '';
+      position: absolute;
+      bottom: -9px;
+      left: 24px;
+      border-width: 9px 9px 0;
+      border-style: solid;
+      border-color: white transparent;
+      display: block;
+      width: 0;
+    }
+    #bubble-option:hover,
+    #bubble-option:focus-visible {
+      background: #f0f4f7;
+    }
+
+    /* ============================
+       Avatar — AI chat panel
+       ============================ */
+
+    #chat-panel {
+      position: absolute;
+      width: 280px;
+      background: white;
+      border: 2px solid black;
+      border-radius: 12px;
+      font-family: sans-serif;
+      font-size: 12px;
+      color: black;
+      display: none;
+      flex-direction: column;
+      z-index: 101;
+      box-shadow: 2px 2px 8px rgba(0,0,0,0.25);
+    }
+    #chat-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px;
+      border-bottom: 1px solid #e2e8ee;
+      font-weight: 700;
+    }
+    #chat-close {
+      background: none;
+      border: 0;
+      font: inherit;
+      cursor: pointer;
+      color: #6b7c8d;
+      padding: 0 4px;
+      border-radius: 4px;
+    }
+    #chat-close:hover {
+      color: black;
+    }
+    #chat-log {
+      padding: 8px 10px;
+      max-height: 180px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    #chat-log:empty::before {
+      content: 'Describe a goal and I will break it into steps.';
+      color: #6b7c8d;
+    }
+    .chat-entry {
+      border-radius: 8px;
+      padding: 6px 8px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .chat-entry.user {
+      background: #eef2f6;
+      align-self: flex-end;
+      max-width: 85%;
+    }
+    .chat-entry.buddy {
+      background: #f6fbf9;
+      align-self: flex-start;
+      max-width: 92%;
+    }
+    .chat-entry.error {
+      background: #fdecea;
+      color: #8d2f28;
+      align-self: flex-start;
+    }
+    .chat-entry.pending {
+      color: #6b7c8d;
+      font-style: italic;
+    }
+    #chat-form {
+      display: flex;
+      gap: 6px;
+      padding: 8px;
+      border-top: 1px solid #e2e8ee;
+    }
+    #chat-input {
+      flex: 1;
+      min-width: 0;
+      font: inherit;
+      padding: 6px 8px;
+      border: 1px solid #cbd5dd;
+      border-radius: 8px;
+    }
+    #chat-send {
+      background: #0f8b7a;
+      color: #fff;
+      border: 0;
+      border-radius: 8px;
+      padding: 0 12px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #chat-send:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
     .bird-svg {
       width: 100%;
       height: 100%;
@@ -62,6 +207,18 @@
   <div id="avatar">
   </div>
   <div id="speech-bubble"></div>
+  <button id="bubble-option" type="button">Ask the buddy</button>
+  <div id="chat-panel" role="dialog" aria-label="Ask the buddy to break down a task">
+    <div id="chat-head">
+      <span>Ask the buddy</span>
+      <button id="chat-close" type="button" aria-label="Close chat">&times;</button>
+    </div>
+    <div id="chat-log" role="log" aria-live="polite" aria-relevant="additions text"></div>
+    <form id="chat-form">
+      <input type="text" id="chat-input" aria-label="Describe a goal" placeholder="I need to write my thesis" maxlength="200" autocomplete="off">
+      <button id="chat-send" type="submit">Send</button>
+    </form>
+  </div>
   <script src="overlay.js"></script>
 </body>
 </html>

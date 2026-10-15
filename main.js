@@ -6,6 +6,8 @@ const {
   isTodoWindowVisible,
   hideTodoWindow,
 } = require('./toDoList/todoWindow');
+const { registerAiIpc } = require('./toDoList/aiService');
+const { flushStore } = require('./toDoList/todoService');
 
 // --- SINGLE INSTANCE LOCK ---
 const gotTheLock = app.requestSingleInstanceLock();
@@ -207,7 +209,7 @@ ipcMain.on('set-ignore-mouse', (event, ignore) => {
 // --- TO-DO LIST PANEL ---
 // The panel is optional and off until the user enables it in Settings. Closing
 // it hides rather than destroys, so toggling back on is instant and the task
-// list in localStorage is untouched.
+// list in the main-process store is untouched.
 ipcMain.handle('get-todolist-state', () => (isTodoWindowVisible() ? 'running' : 'stopped'));
 
 // Handles the panel's own close button. Hides the panel instead of closing it,
@@ -236,6 +238,15 @@ function broadcastTodoState() {
 }
 
 ipcMain.on('todolist-state-changed', broadcastTodoState);
+
+// --- AI TASK BREAKDOWN ---
+// Requests run in the main process so the API key never reaches a renderer.
+// The overlay chat (hover the avatar, click "Ask the buddy") is the only
+// consumer.
+registerAiIpc();
+
+// A debounced task write could still be pending when the app quits.
+app.on('before-quit', flushStore);
 
 app.whenReady().then(() => {
   console.log('Electron is ready');
