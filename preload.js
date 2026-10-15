@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // To-Do List panel API
   toggleTodoList: () => ipcRenderer.send('toggle-todolist'),
   getTodoListState: () => ipcRenderer.invoke('get-todolist-state'),
+  // The panel can also be toggled from the tray menu, so the main process
+  // pushes the authoritative state after every change.
+  onTodoListStateChanged: (callback) => ipcRenderer.on('todolist-state-changed', (event, state) => callback(state)),
 
   // Overlay Window API
   updateColor: (callback) => ipcRenderer.on('update-color', (event, color) => callback(color)),

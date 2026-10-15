@@ -75,8 +75,17 @@ async function syncTodoState() {
   todoToggle.checked = todoState === 'running';
 }
 
+// The main process reports the real state after every change, including
+// tray-menu toggles this window never initiated.
+window.electronAPI.onTodoListStateChanged((todoState) => {
+  todoToggle.checked = todoState === 'running';
+});
+
 todoToggle.addEventListener('change', () => {
   window.electronAPI.toggleTodoList();
+  // Re-read rather than trusting the click: the toggle is asynchronous and a
+  // stale panel state would otherwise leave the checkbox lying.
+  syncTodoState();
 });
 
 // Initial UI state

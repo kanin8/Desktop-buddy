@@ -210,15 +210,32 @@ ipcMain.on('set-ignore-mouse', (event, ignore) => {
 // list in localStorage is untouched.
 ipcMain.handle('get-todolist-state', () => (isTodoWindowVisible() ? 'running' : 'stopped'));
 
+// Handles the panel's own close button. Hides the panel instead of closing it,
+// then announces the new state — without the announce, the tray menu and the
+// Settings checkbox would still show the panel as on.
+function closeTodoPanel() {
+  hideTodoWindow();
+  ipcMain.emit('todolist-state-changed');
+}
+
 ipcMain.on('toggle-todolist', () => {
   if (isTodoWindowVisible()) {
-    hideTodoWindow();
+    closeTodoPanel();
   } else {
     // Closing the panel must not take the avatar down with it.
-    createTodoWindow({ onClose: hideTodoWindow });
+    createTodoWindow({ onClose: closeTodoPanel });
   }
   ipcMain.emit('todolist-state-changed');
 });
+
+// Pushes the authoritative panel state to Settings so its checkbox reflects
+// reality even when the panel was toggled from the tray menu instead.
+function broadcastTodoState() {
+  if (!settingsWin || settingsWin.isDestroyed()) return;
+  settingsWin.webContents.send('todolist-state-changed', isTodoWindowVisible() ? 'running' : 'stopped');
+}
+
+ipcMain.on('todolist-state-changed', broadcastTodoState);
 
 app.whenReady().then(() => {
   console.log('Electron is ready');
