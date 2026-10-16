@@ -2,12 +2,16 @@ const avatar = document.getElementById('avatar');
 const bubble = document.getElementById('speech-bubble');
 
 // Plays the sprite sheet onto the child element; #avatar itself stays the
-// 200x200 movement/hit-test box and keeps carrying the plain colour avatar.
-const spriteAnimator = new SpriteAnimator(document.getElementById('avatar-sprite'));
+// 200x200 movement box and keeps carrying the plain colour avatar.
+const spriteElement = document.getElementById('avatar-sprite');
+const spriteAnimator = new SpriteAnimator(spriteElement);
 
 // The animation shown whenever the image avatar is selected. Swap this for a
 // lookup against currentMode once more behaviour sheets exist.
 const DEFAULT_IMAGE_ANIMATION = 'idle';
+
+// One-shot reaction played on click; hands back to the idle loop when it ends.
+const CLICK_ANIMATION = 'standingClicked';
 
 // --- GLOBAL CONSTANTS ---
 const BOX_SIZE = 200;
@@ -417,8 +421,19 @@ window.electronAPI.setScreenGrayscale((enabled) => {
   avatar.style.filter = enabled ? 'grayscale(100%)' : 'none';
 });
 
+// The element the pointer should actually be tested against, so hover and
+// clicks land on the visible avatar rather than on the empty corners of the
+// 200x200 movement box.
+function getHitTarget() {
+  if (currentAvatarType !== 'image') return avatar;
+
+  // Before the sheet has loaded the sprite has no size, so fall back to the
+  // full box rather than leaving the avatar briefly unclickable.
+  return spriteElement.offsetWidth > 0 ? spriteElement : avatar;
+}
+
 window.addEventListener('mousemove', (e) => {
-  const rect = avatar.getBoundingClientRect();
+  const rect = getHitTarget().getBoundingClientRect();
   const isOver = (
     e.clientX >= rect.left &&
     e.clientX <= rect.right &&
@@ -426,6 +441,18 @@ window.addEventListener('mousemove', (e) => {
     e.clientY <= rect.bottom
   );
   window.electronAPI.setIgnoreMouse(!isOver);
+});
+
+// Reacts to a click on the sprite avatar by playing the reaction animation
+// once, then returning to the idle loop. Clicking again mid-reaction restarts
+// it from the top, which feels more responsive than queueing or ignoring it.
+// The listener sits on #avatar because #avatar-sprite is pointer-events: none.
+avatar.addEventListener('click', () => {
+  if (currentAvatarType !== 'image') return;
+
+  spriteAnimator.play(CLICK_ANIMATION, {
+    onComplete: () => spriteAnimator.play(DEFAULT_IMAGE_ANIMATION),
+  });
 });
 
 update();

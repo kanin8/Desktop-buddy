@@ -11,6 +11,8 @@ class SpriteAnimator {
   constructor(element) {
     this.element = element;
     this.animation = null;
+    this.display = null;
+    this.onComplete = null;
     this.frameIndex = 0;
     this.lastFrameAt = 0;
   }
@@ -18,7 +20,9 @@ class SpriteAnimator {
   // Starts (or restarts) the named animation from its first frame.
   // Unknown names are logged and ignored so a typo leaves the avatar blank
   // rather than throwing inside the render loop.
-  play(name) {
+  // `onComplete` fires only for animations with loop: false, after the last
+  // frame has been shown; looping animations never call it.
+  play(name, { onComplete = null } = {}) {
     const config = window.AVATAR_SPRITE_CONFIG;
     const animation = config.animations[name];
 
@@ -28,6 +32,8 @@ class SpriteAnimator {
     }
 
     this.animation = animation;
+    this.display = animation.display || config.frameDisplay;
+    this.onComplete = onComplete;
     this.frameIndex = 0;
     this.lastFrameAt = performance.now();
 
@@ -47,6 +53,12 @@ class SpriteAnimator {
     // Step by whole frames rather than one frame per tick: a long stall (or a
     // throttled hidden window) should skip ahead, not replay every frame.
     const steps = Math.floor(elapsed / this.animation.frameDurationMs);
+
+    if (this.hasReachedEnd(steps)) {
+      this.finish();
+      return;
+    }
+
     this.frameIndex = (this.frameIndex + steps) % this.animation.frameCount;
 
     // Advance the clock by the frames consumed instead of snapping it to `now`,
@@ -60,36 +72,70 @@ class SpriteAnimator {
   // plain colour avatar can show through.
   stop() {
     this.animation = null;
+    this.display = null;
+    // Dropped so a reaction interrupted by a mode switch cannot fire its
+    // callback later and yank the sprite back.
+    this.onComplete = null;
     this.frameIndex = 0;
     this.lastFrameAt = 0;
 
     this.element.style.backgroundImage = 'none';
     this.element.style.backgroundSize = 'auto';
     this.element.style.backgroundPosition = '0 0';
+    this.element.style.transform = '';
     this.element.style.width = '';
     this.element.style.height = '';
+  }
+
+  // Reports whether advancing `steps` frames would overshoot the last frame of
+  // a one-shot animation. Looping animations wrap and so never end.
+  hasReachedEnd(steps) {
+    return !this.animation.loop && this.frameIndex + steps >= this.animation.frameCount;
+  }
+
+  // Ends a one-shot: parks on the final frame, drops all playback state, then
+  // hands control back to the caller. State is cleared before the callback so
+  // a callback that starts another animation starts from a clean slate.
+  finish() {
+    this.frameIndex = this.animation.frameCount - 1;
+    this.lastFrameAt = performance.now();
+    this.applyFrame();
+
+    const onComplete = this.onComplete;
+    this.animation = null;
+    this.display = null;
+    this.onComplete = null;
+    this.frameIndex = 0;
+
+    if (onComplete) onComplete();
   }
 
   // Sizes the element to one frame and scales the whole sheet to match, so the
   // background tiles line up exactly one frame apart.
   applySheet(animation) {
-    const { width, height } = window.AVATAR_SPRITE_CONFIG.frameDisplay;
     const rowCount = Math.ceil(animation.frameCount / animation.columns);
 
-    this.element.style.width = `${width}px`;
-    this.element.style.height = `${height}px`;
+    this.element.style.width = `${this.display.width}px`;
+    this.element.style.height = `${this.display.height}px`;
     this.element.style.backgroundImage = `url('${animation.sheet}')`;
-    this.element.style.backgroundSize = `${animation.columns * width}px ${rowCount * height}px`;
+    this.element.style.backgroundSize =
+      `${animation.columns * this.display.width}px ${rowCount * this.display.height}px`;
+
+    // Sheets rarely place the character at the same height within the cell, so
+    // each animation nudges itself back onto a shared baseline. Applied as a
+    // transform so it does not disturb the parent's centring, and so the
+    // element's bounding rect (used for click/hover) follows the shift.
+    this.element.style.transform = `translateY(${animation.offsetY || 0}px)`;
   }
 
   // Moves the background to the current frame. Offsets are negative to pull the
   // sheet up and left under the element.
   applyFrame() {
-    const { width, height } = window.AVATAR_SPRITE_CONFIG.frameDisplay;
     const column = this.frameIndex % this.animation.columns;
     const row = Math.floor(this.frameIndex / this.animation.columns);
 
-    this.element.style.backgroundPosition = `${-column * width}px ${-row * height}px`;
+    this.element.style.backgroundPosition =
+      `${-column * this.display.width}px ${-row * this.display.height}px`;
   }
 }
 
