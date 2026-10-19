@@ -44,6 +44,118 @@ let overlayWin = null;
 let settingsWin = null;
 let tray = null;
 
+// --- CURSOR TRACKING ---
+// The overlay is a click-through window, so it cannot rely on DOM mousemove
+// events: Electron's { forward: true } mouse forwarding does not reach the page
+// on every platform/window configuration. Polling screen.getCursorScreenPoint()
+// is also unreliable on X11: it only reflects motion events the app connection
+// has received, and a click-through fullscreen overlay receives none, so the
+// value freezes after the first read.
+//
+// Instead, on X11 we read the pointer from a persistent `xinput test-xi2 --root`
+// child, which emits a Motion event with absolute root coordinates whenever the
+// pointer moves (including XTest warps). A getCursorScreenPoint() interval poll
+// remains as a fallback for non-X11 sessions or if xinput is unavailable.
+// Kept in one place so the whole app has exactly one global cursor reader.
+let cursorPollTimer = null;
+let cursorStream = null;      // ChildProcess running `xinput test-xi2 --root`.
+let cursorStreamBuffer = '';  // Partial line carried between stream chunks.
+// NaN marks "nothing sent yet", so the first sample always delivers a position.
+// Without a guaranteed first sample the renderer would sit at its -1 sentinel
+// and never reveal the hover affordance until the pointer happened to move.
+let lastCursorX = NaN;
+let lastCursorY = NaN;
+
+// Pushes a cursor position to the overlay. Screen coordinates equal renderer
+// client coordinates here because the overlay is a frameless window pinned to
+// the top-left of the work area. Deduplicated so a still pointer causes no IPC.
+function emitCursorPosition(x, y) {
+  if (!overlayWin || overlayWin.isDestroyed()) return;
+  if (x === lastCursorX && y === lastCursorY) return;
+  lastCursorX = x;
+  lastCursorY = y;
+  overlayWin.webContents.send('cursor-move', { x, y });
+}
+
+// One-shot read of the current pointer, used for the initial sync on load and
+// as the fallback poll body.
+function sendCursorPosition() {
+  if (!overlayWin || overlayWin.isDestroyed()) return;
+  const { x, y } = screen.getCursorScreenPoint();
+  lastCursorX = x;
+  lastCursorY = y;
+  overlayWin.webContents.send('cursor-move', { x, y });
+}
+
+// Parses Motion blocks from `xinput test-xi2 --root` output. Each block has a
+// line like "root: 501.18/510.42"; value 0.00/0.00 is emitted for button-only
+// events and must be ignored. Returns nothing; feeds emitCursorPosition().
+function consumeCursorStream(chunk) {
+  cursorStreamBuffer += chunk;
+  const lines = cursorStreamBuffer.split('\n');
+  cursorStreamBuffer = lines.pop(); // keep any partial trailing line
+  for (const line of lines) {
+    const match = line.match(/^\s*root:\s*(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\s*$/);
+    if (!match) continue;
+    const x = Math.round(parseFloat(match[1]));
+    const y = Math.round(parseFloat(match[2]));
+    if (x === 0 && y === 0) continue;
+    emitCursorPosition(x, y);
+  }
+}
+
+// Starts the live cursor stream. Falls back to an interval poll when the stream
+// cannot be started. Only one source runs at a time.
+function startCursorPolling() {
+  if (cursorStream || cursorPollTimer) return;
+
+  if (process.platform === 'linux' && CONFIG.XINPUT_BIN) {
+    const { spawn } = require('child_process');
+    try {
+      cursorStream = spawn(CONFIG.XINPUT_BIN, ['test-xi2', '--root'], {
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+    } catch {
+      cursorStream = null;
+    }
+    if (cursorStream) {
+      cursorStream.on('error', () => { cursorStream = null; startFallbackPoll(); });
+      cursorStream.on('exit', () => { cursorStream = null; startFallbackPoll(); });
+      cursorStream.stdout.setEncoding('utf8');
+      cursorStream.stdout.on('data', consumeCursorStream);
+      return;
+    }
+  }
+
+  startFallbackPoll();
+}
+
+// Interval-based cursor reader used off X11 or when the xinput stream is not
+// available. ~60 Hz keeps the affordance attached to the pointer without
+// busy-waiting.
+function startFallbackPoll() {
+  if (cursorPollTimer) return;
+  cursorPollTimer = setInterval(() => {
+    if (!overlayWin || overlayWin.isDestroyed()) return;
+    const { x, y } = screen.getCursorScreenPoint();
+    emitCursorPosition(x, y);
+  }, CONFIG.CURSOR_POLL_MS);
+}
+
+function stopCursorPolling() {
+  if (cursorPollTimer) {
+    clearInterval(cursorPollTimer);
+    cursorPollTimer = null;
+  }
+  if (cursorStream) {
+    cursorStream.removeAllListeners();
+    cursorStream.stdout.removeAllListeners();
+    cursorStream.kill();
+    cursorStream = null;
+  }
+  cursorStreamBuffer = '';
+}
+
 function createOverlayWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
   overlayWin = new BrowserWindow({
@@ -68,6 +180,20 @@ function createOverlayWindow() {
   overlayWin.setIgnoreMouseEvents(true, { forward: true });
   overlayWin.loadFile('overlay.html');
   overlayWin.show();
+
+  // Push cursor positions to the overlay so the hover affordance works without
+  // depending on forwarded DOM mouse events.
+  startCursorPolling();
+
+  // The renderer attaches its listener while loading, which can be after the
+  // first poll. Send the current position once it is ready so the overlay never
+  // starts blind.
+  overlayWin.webContents.on('did-finish-load', sendCursorPosition);
+
+  overlayWin.on('closed', () => {
+    overlayWin = null;
+    stopCursorPolling();
+  });
 }
 
 function createSettingsWindow() {

@@ -157,6 +157,11 @@ function update() {
   bubbleOption.style.top = (renderY - 48) + 'px';
   positionChat(renderY);
 
+  // The avatar crawls under a possibly stationary cursor, so re-evaluate the
+  // hover state each frame using the last known pointer position. Without this
+  // the option would only appear once the pointer itself moved.
+  if (lastX >= 0 && lastY >= 0) reevaluateHover();
+
   requestAnimationFrame(update);
 }
 
@@ -446,7 +451,13 @@ window.electronAPI.setScreenGrayscale((enabled) => {
 // hover affordance, and the chat panel once it is open.
 //
 // Flow: hover the avatar -> a clickable option appears -> click it -> the chat
-// opens. Everything else on screen still passes clicks through.
+// opens. Clicking the avatar also reveals the option (not the chat), so the
+// feature is reachable even when the pointer never triggers the hover.
+// Everything else passes clicks through.
+//
+// The hover signal comes from the main process (see `onCursorMove`), not from
+// DOM mousemove events. A click-through window only receives forwarded mouse
+// moves on some platforms, so relying on them left this flow dead on Linux.
 
 const isChatOpen = () => chatPanel.style.display === 'flex';
 // Compared against 'flex' rather than "not none": the hidden state comes from
@@ -499,6 +510,38 @@ function hideOptionSoon() {
 // Last known pointer position, so the grace timer can re-check where the pointer
 // actually is by the time it fires.
 let lastX = -1, lastY = -1;
+
+// Single source of truth for "where is the pointer, and what should be shown".
+// Both the polled cursor position and any forwarded DOM mousemove feed it, so
+// the behaviour is identical whichever signal actually arrives.
+function handlePointerAt(x, y) {
+  lastX = x;
+  lastY = y;
+
+  const over = isOverInteractiveArea(x, y) || isInBridge(x, y);
+  // Keep the overlay interactive only while the pointer is over something the
+  // user can actually click; everywhere else stays click-through. Only sent
+  // here (not on every animation frame) so a still pointer does not spam IPC.
+  window.electronAPI.setIgnoreMouse(!over);
+
+  reevaluateHover();
+}
+
+// Recomputes the hover affordance from the last known pointer position. Safe to
+// call every frame: it only touches the option's visibility, never IPC.
+function reevaluateHover() {
+  if (isChatOpen()) return;
+
+  const over = isOverInteractiveArea(lastX, lastY) || isInBridge(lastX, lastY);
+  const overAvatar = rectsOverlap(lastX, lastY, avatar.getBoundingClientRect());
+
+  if (over) {
+    if (optionHideTimer) { clearTimeout(optionHideTimer); optionHideTimer = null; }
+    if (overAvatar) showOption();
+  } else if (isOptionVisible()) {
+    hideOptionSoon();
+  }
+}
 
 // --- AI CHAT ---
 // Stream listeners are registered once at startup rather than per message, so
@@ -601,29 +644,20 @@ window.electronAPI.onAITasksFailed((message) => {
 });
 
 bubbleOption.addEventListener('click', openChat);
+// Clicking the avatar is a hover-independent way to reveal the affordance, not
+// to open the chat directly: the avatar crawls constantly, so an immediate open
+// would fire on accidental clicks. The deliberate second click is on the pill.
+avatar.addEventListener('click', showOption);
 chatClose.addEventListener('click', closeChat);
 chatForm.addEventListener('submit', submitChat);
 
-// One mousemove drives everything, because it is the only event that keeps
-// arriving while the window is click-through and forwarding.
-window.addEventListener('mousemove', (e) => {
-  lastX = e.clientX;
-  lastY = e.clientY;
+// Primary hover source: the cursor position polled by the main process. This is
+// the only signal guaranteed to arrive on a click-through overlay.
+window.electronAPI.onCursorMove((pos) => handlePointerAt(pos.x, pos.y));
 
-  const overAvatar = rectsOverlap(e.clientX, e.clientY, avatar.getBoundingClientRect());
-  const over = isOverInteractiveArea(e.clientX, e.clientY) || isInBridge(e.clientX, e.clientY);
-
-  window.electronAPI.setIgnoreMouse(!over);
-
-  if (isChatOpen()) return;
-
-  if (over) {
-    if (optionHideTimer) { clearTimeout(optionHideTimer); optionHideTimer = null; }
-    if (overAvatar) showOption();
-  } else {
-    hideOptionSoon();
-  }
-});
+// Secondary source: forwarded DOM mouse moves, when the platform provides them.
+// Feeding both through one handler keeps the interaction consistent everywhere.
+window.addEventListener('mousemove', (e) => handlePointerAt(e.clientX, e.clientY));
 
 // Escape closes the chat from anywhere in the overlay.
 window.addEventListener('keydown', (e) => {

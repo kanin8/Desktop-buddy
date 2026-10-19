@@ -36,4 +36,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // General purpose (for the mouse-ignore logic)
   setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),
+
+  // The main process polls the global cursor and pushes its position here.
+  // This is the reliable hover signal for a click-through overlay, which cannot
+  // count on forwarded DOM mousemove events.
+  onCursorMove: (callback) => ipcRenderer.on('cursor-move', (event, pos) => callback(pos)),
 });
