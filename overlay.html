@@ -21,6 +21,16 @@
       align-items: center;
       justify-content: center;
     }
+    /* ============================
+       Avatar — sprite animation
+       ============================
+       The sprite element is sized and positioned per-frame by
+       spriteAnimator.js, so only the fixed rules live here. */
+    #avatar-sprite {
+      flex: 0 0 auto;
+      background-repeat: no-repeat;
+      pointer-events: none;
+    }
     #speech-bubble {
       position: absolute;
       background: white;
@@ -60,8 +70,11 @@
 </head>
 <body>
   <div id="avatar">
+    <div id="avatar-sprite"></div>
   </div>
   <div id="speech-bubble"></div>
+  <script src="avatar/config.js"></script>
+  <script src="avatar/spriteAnimator.js"></script>
   <script src="overlay.js"></script>
 </body>
 </html>
