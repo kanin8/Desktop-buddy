@@ -304,3 +304,71 @@ test('breakdownGoal stops immediately when the caller aborts', async () => {
   })), /abort/i);
   assert.strictEqual(attempts, 1, 'no retry after an abort');
 });
+
+// ----------------------------------------------------------- classification ---
+
+test('buildClassifyMessages asks for JSON classification', () => {
+  const messages = ai.buildClassifyMessages('write my thesis');
+  assert.strictEqual(messages[0].role, 'system');
+  assert.match(messages[0].content, /task.*chat|chat.*task/);
+  assert.match(messages[0].content, /JSON/);
+  assert.strictEqual(messages[1].content, 'write my thesis');
+});
+
+test('parseClassification reads a clean task response', () => {
+  const parsed = ai.parseClassification('{"type":"task"}');
+  assert.deepStrictEqual(parsed, { type: 'task' });
+});
+
+test('parseClassification reads a clean chat response', () => {
+  const parsed = ai.parseClassification('{"type":"chat"}');
+  assert.deepStrictEqual(parsed, { type: 'chat' });
+});
+
+test('parseClassification unwraps a code fence', () => {
+  const parsed = ai.parseClassification('```json\n{"type":"task"}\n```');
+  assert.deepStrictEqual(parsed, { type: 'task' });
+});
+
+test('parseClassification finds JSON embedded in prose', () => {
+  const parsed = ai.parseClassification('The answer is {"type":"chat"} for you.');
+  assert.deepStrictEqual(parsed, { type: 'chat' });
+});
+
+test('parseClassification returns null for unusable output', () => {
+  assert.strictEqual(ai.parseClassification('not json at all'), null);
+  assert.strictEqual(ai.parseClassification(''), null);
+  assert.strictEqual(ai.parseClassification(null), null);
+  assert.strictEqual(ai.parseClassification('{"type":"invalid"}'), null);
+  assert.strictEqual(ai.parseClassification('{"other":"key"}'), null);
+});
+
+test('classifyInput returns task for a task-like goal', async () => {
+  await withFetch(async () => jsonResponse({ choices: [{ message: { content: '{"type":"task"}' } }] }, {}), () => {
+    return ai.classifyInput({
+      baseUrl: 'https://example.test/v1', apiKey: 'k', model: 'm', text: 'write my thesis',
+    });
+  }).then((result) => {
+    assert.deepStrictEqual(result, { type: 'task' });
+  });
+});
+
+test('classifyInput returns chat for casual input', async () => {
+  await withFetch(async () => jsonResponse({ choices: [{ message: { content: '{"type":"chat"}' } }] }, {}), () => {
+    return ai.classifyInput({
+      baseUrl: 'https://example.test/v1', apiKey: 'k', model: 'm', text: 'hello there',
+    });
+  }).then((result) => {
+    assert.deepStrictEqual(result, { type: 'chat' });
+  });
+});
+
+test('classifyInput defaults to chat when parsing fails', async () => {
+  await withFetch(async () => jsonResponse({ choices: [{ message: { content: 'not json' } }] }, {}), () => {
+    return ai.classifyInput({
+      baseUrl: 'https://example.test/v1', apiKey: 'k', model: 'm', text: 'something',
+    });
+  }).then((result) => {
+    assert.deepStrictEqual(result, { type: 'chat' });
+  });
+});

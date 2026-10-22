@@ -35,8 +35,8 @@ function send(win, channel, payload) {
 }
 
 /**
- * Runs one exchange: stream an in-character reply into the bubble, then ask for
- * a structured breakdown and insert it as a parent task with subtasks.
+ * Runs one exchange: stream an in-character reply into the bubble, then classify
+ * the input. If it's a task/goal, break it down and insert subtasks.
  */
 async function askAndBreakdown(win, text) {
   const config = getSettings();
@@ -57,6 +57,23 @@ async function askAndBreakdown(win, text) {
     send(win, 'ai-stream-end', reply || '');
   } catch (e) {
     send(win, 'ai-error', friendlyError(e));
+    inFlight.delete(eventKey(win));
+    return;
+  }
+
+  // Classify the input: only break down if it's a task/goal, not casual chat.
+  let classification;
+  try {
+    classification = await ai.classifyInput(Object.assign({ text: goal }, base));
+    console.log('[AI] Classification result:', classification, 'for:', goal);
+  } catch (e) {
+    // If classification fails, assume chat to avoid unwanted subtasks
+    console.warn('[AI] Classification failed:', e);
+    classification = { type: 'chat' };
+  }
+
+  if (classification.type !== 'task') {
+    // Casual chat - reply was already streamed, nothing more to do
     inFlight.delete(eventKey(win));
     return;
   }

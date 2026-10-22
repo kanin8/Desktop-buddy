@@ -17,6 +17,14 @@ const PERSONA =
   'You are a small, encouraging desk buddy. Reply in at most two short sentences. ' +
   'Be warm and concrete, never use lists or markdown.';
 
+// Classification prompt: determines if user input is a task/goal (needs subtasks)
+// or casual chat (question, greeting, follow-up, venting).
+const CLASSIFY_PERSONA =
+  'Classify the user\'s message as "task" (goal, plan, or request to break into steps) ' +
+  'or "chat" (greeting, question, follow-up, venting, casual talk). ' +
+  'Examples: "plan a website"->task, "write a script"->task, "hello"->chat, "how are you"->chat. ' +
+  'Reply with JSON only: {"type": "task"} or {"type": "chat"}.';
+
 /**
  * Messages for the streamed in-character reply.
  * No JSON mode: the tokens are shown live, so they must be readable prose.
@@ -24,6 +32,16 @@ const PERSONA =
 function buildReplyMessages(text) {
   return [
     { role: 'system', content: PERSONA },
+    { role: 'user', content: String(text || '').trim() },
+  ];
+}
+
+/**
+ * Messages for input classification.
+ */
+function buildClassifyMessages(text) {
+  return [
+    { role: 'system', content: CLASSIFY_PERSONA },
     { role: 'user', content: String(text || '').trim() },
   ];
 }
@@ -283,14 +301,70 @@ async function breakdownGoal({ baseUrl, apiKey, model, text, openItems, signal }
   return { parent: String(text || '').trim(), subtasks: [] };
 }
 
+/**
+ * Parses the classification response into { type: 'task' | 'chat' }.
+ * Returns null if parsing fails.
+ */
+function parseClassification(raw) {
+  var candidate = stripCodeFences(raw);
+  var json = firstJsonObject(candidate);
+  if (!json) return null;
+
+  var parsed;
+  try {
+    parsed = JSON.parse(json);
+  } catch (e) {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+
+  var type = typeof parsed.type === 'string' ? parsed.type.toLowerCase() : '';
+  if (type !== 'task' && type !== 'chat') return null;
+
+  return { type: type };
+}
+
+/**
+ * Classifies user input as 'task' (wants subtasks) or 'chat' (casual).
+ * Uses a fast, low-temperature call to avoid latency.
+ */
+async function classifyInput({ baseUrl, apiKey, model, text, signal }) {
+  var messages = buildClassifyMessages(text);
+
+  var raw = await callChatApi({
+    baseUrl: baseUrl,
+    apiKey: apiKey,
+    model: model,
+    messages: messages,
+    stream: false,
+    json: true,
+    temperature: CONFIG.AI_CLASSIFY_TEMPERATURE,
+    maxTokens: CONFIG.AI_CLASSIFY_MAX_TOKENS,
+    timeoutMs: CONFIG.AI_TIMEOUT_MS,
+    signal: signal,
+  });
+
+  console.log('[AI] Raw classification response:', raw);
+
+  var parsed = parseClassification(raw);
+  if (parsed) return parsed;
+
+  // Fallback: if classification fails, assume chat to avoid unwanted subtasks
+  console.warn('[AI] Classification parse failed, defaulting to chat');
+  return { type: 'chat' };
+}
+
 module.exports = {
   buildReplyMessages,
   buildBreakdownMessages,
+  buildClassifyMessages,
   parseBreakdown,
+  parseClassification,
   stripCodeFences,
   firstJsonObject,
   readSseStream,
   callChatApi,
   streamReply,
   breakdownGoal,
+  classifyInput,
 };

@@ -30,6 +30,10 @@ module.exports = {
   AI_MAX_TOKENS: 400,                    // caps cost of the in-character reply
   AI_TEMPERATURE: 0.7,
 
+  // Input classification (task vs chat)
+  AI_CLASSIFY_TEMPERATURE: 0.1,
+  AI_CLASSIFY_MAX_TOKENS: 50,
+
   // Task breakdown shaping
   MAX_SUBTASKS: 7,          // hard cap on generated subtasks
   MAX_CONTEXT_ITEMS: 50,    // open task texts sent for de-duplication
