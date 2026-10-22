@@ -109,6 +109,26 @@
     }
 
 
+    /* ============================
+       To-Do List toggle
+       ============================ */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.9rem;
+      color: #333;
+      cursor: pointer;
+    }
+    .toggle-row input {
+      cursor: pointer;
+    }
+    .hint {
+      margin: 8px 0 0 0;
+      font-size: 0.75rem;
+      color: #888;
+    }
+
     .personality-list {
       display: flex;
       flex-direction: column;
@@ -150,6 +170,18 @@
     </div>
 
     <div class="section">
+      <span class="section-title">Avatar Appearance</span>
+      <div class="personality-list">
+        <label class="personality-item">
+          <input type="radio" name="avatarType" value="color" checked> Color
+        </label>
+        <label class="personality-item">
+          <input type="radio" name="avatarType" value="image"> Image (Frog)
+        </label>
+      </div>
+    </div>
+
+    <div class="section">
       <span class="section-title">Avatar Color</span>
       <div class="cube-scene">
         <div class="cube" id="colorCube">
@@ -170,6 +202,15 @@
         <div class="swatch" style="background-color: purple;" data-color="purple"></div>
         <div class="swatch" style="background-color: orange;" data-color="orange"></div>
       </div>
+    </div>
+
+    <div class="section">
+      <span class="section-title">To-Do List</span>
+      <label class="toggle-row">
+        <input type="checkbox" id="todoToggle">
+        <span>Show to-do list panel</span>
+      </label>
+      <p class="hint">Pins a small task list to the bottom-right corner.</p>
     </div>
 
     <div class="section">

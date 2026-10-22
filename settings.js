@@ -2,7 +2,9 @@ const toggleBtn = document.getElementById('toggleBtn');
 const colorGrid = document.getElementById('colorGrid');
 const colorCube = document.getElementById('colorCube');
 const personalityInputs = document.querySelectorAll('input[name="personality"]');
+const avatarTypeInputs = document.querySelectorAll('input[name="avatarType"]');
 const statusBar = document.getElementById('statusBar');
+const todoToggle = document.getElementById('todoToggle');
 
 // AI Settings elements
 const aiProvider = document.getElementById('aiProvider');
@@ -104,8 +106,27 @@ personalityInputs.forEach(input => {
   });
 });
 
+avatarTypeInputs.forEach(input => {
+  input.addEventListener('change', () => {
+    window.electronAPI.setAvatarType(input.value);
+  });
+});
+
+// Syncs the to-do list checkbox with the actual panel state in the main
+// process. The panel can also be toggled from the tray menu, so the checkbox
+// must reflect reality rather than just what was last clicked here.
+async function syncTodoState() {
+  const todoState = await window.electronAPI.getTodoListState();
+  todoToggle.checked = todoState === 'running';
+}
+
+todoToggle.addEventListener('change', () => {
+  window.electronAPI.toggleTodoList();
+});
+
 // Initial UI state
 syncState();
+syncTodoState();
 updateUI();
 
 saveAiBtn.addEventListener('click', async () => {
