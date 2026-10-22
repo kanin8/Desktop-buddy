@@ -10,6 +10,18 @@ const chatInput = document.getElementById('chat-input');
 const chatSend = document.getElementById('chat-send');
 const chatClose = document.getElementById('chat-close');
 
+// Plays the sprite sheet onto the child element; #avatar itself stays the
+// 200x200 movement box and keeps carrying the plain colour avatar.
+const spriteElement = document.getElementById('avatar-sprite');
+const spriteAnimator = new SpriteAnimator(spriteElement);
+
+// The animation shown whenever the image avatar is selected. Swap this for a
+// lookup against currentMode once more behaviour sheets exist.
+const DEFAULT_IMAGE_ANIMATION = 'idle';
+
+// One-shot reaction played on click; hands back to the idle loop when it ends.
+const CLICK_ANIMATION = 'standingClicked';
+
 // --- GLOBAL CONSTANTS ---
 const BOX_SIZE = 200;
 const SCREEN_MARGIN = 30;
@@ -161,6 +173,10 @@ function update() {
   // hover state each frame using the last known pointer position. Without this
   // the option would only appear once the pointer itself moved.
   if (lastX >= 0 && lastY >= 0) reevaluateHover();
+
+  // Step the sprite sheet from the same loop that moves the avatar, so both
+  // share one clock.
+  spriteAnimator.update(now);
 
   requestAnimationFrame(update);
 }
@@ -406,12 +422,12 @@ window.electronAPI.updatePersonality((name) => {
 window.electronAPI.updateAvatarType((type) => {
   currentAvatarType = type;
   if (type === 'image') {
-    avatar.style.backgroundImage = "url('Avatar/Frog_avatar.png')";
-    avatar.style.backgroundSize = 'contain';
-    avatar.style.backgroundRepeat = 'no-repeat';
-    avatar.style.backgroundPosition = 'center';
+    spriteAnimator.play(DEFAULT_IMAGE_ANIMATION);
     avatar.style.backgroundColor = 'transparent';
   } else {
+    // Clearing the sprite matters as much as restoring the colour: #avatar's
+    // background colour shows through the sprite element otherwise.
+    spriteAnimator.stop();
     avatar.style.backgroundImage = 'none';
   }
 });
@@ -445,6 +461,7 @@ window.electronAPI.setScreenGrayscale((enabled) => {
   avatar.style.filter = enabled ? 'grayscale(100%)' : 'none';
 });
 
+<<<<<<< HEAD
 // --- AVATAR INTERACTION ---
 // The overlay covers the whole screen and is click-through by default, so the
 // only interactive region is the avatar plus whatever is attached to it: the
@@ -636,6 +653,26 @@ window.electronAPI.onAITasksAdded((info) => {
       ? 'Added ' + info.count + ' subtask' + (info.count === 1 ? '' : 's') + ' to your list.'
       : 'Added it to your list.',
     'buddy'
+=======
+// The element the pointer should actually be tested against, so hover and
+// clicks land on the visible avatar rather than on the empty corners of the
+// 200x200 movement box.
+function getHitTarget() {
+  if (currentAvatarType !== 'image') return avatar;
+
+  // Before the sheet has loaded the sprite has no size, so fall back to the
+  // full box rather than leaving the avatar briefly unclickable.
+  return spriteElement.offsetWidth > 0 ? spriteElement : avatar;
+}
+
+window.addEventListener('mousemove', (e) => {
+  const rect = getHitTarget().getBoundingClientRect();
+  const isOver = (
+    e.clientX >= rect.left &&
+    e.clientX <= rect.right &&
+    e.clientY >= rect.top &&
+    e.clientY <= rect.bottom
+>>>>>>> main
   );
 });
 
@@ -662,6 +699,18 @@ window.addEventListener('mousemove', (e) => handlePointerAt(e.clientX, e.clientY
 // Escape closes the chat from anywhere in the overlay.
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && isChatOpen()) closeChat();
+});
+
+// Reacts to a click on the sprite avatar by playing the reaction animation
+// once, then returning to the idle loop. Clicking again mid-reaction restarts
+// it from the top, which feels more responsive than queueing or ignoring it.
+// The listener sits on #avatar because #avatar-sprite is pointer-events: none.
+avatar.addEventListener('click', () => {
+  if (currentAvatarType !== 'image') return;
+
+  spriteAnimator.play(CLICK_ANIMATION, {
+    onComplete: () => spriteAnimator.play(DEFAULT_IMAGE_ANIMATION),
+  });
 });
 
 update();
