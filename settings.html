@@ -137,6 +137,13 @@
     <h1>Desktop Avatar</h1>
 
     <div class="section">
+      <span class="section-title">Current Activity</span>
+      <div id="activityStatus" style="font-size: 0.85rem; text-align: center; padding: 5px 0;">
+        Detecting...
+      </div>
+    </div>
+
+    <div class="section">
       <div class="toggle-container">
         <button id="toggleBtn" class="btn-stop">STOP</button>
       </div>
@@ -156,7 +163,7 @@
       </div>
       <div class="color-grid" id="colorGrid">
 
-        <div class="swatch active" style="background-color: cyan;" data-color="cyan"></div>
+        <div class="swatch active" style="background-color: black;" data-color="black"></div>
         <div class="swatch" style="background-color: red;" data-color="red"></div>
         <div class="swatch" style="background-color: blue;" data-color="blue"></div>
         <div class="swatch" style="background-color: green;" data-color="green"></div>
@@ -183,7 +190,35 @@
       </div>
     </div>
 
+    <div class="section">
+      <span class="section-title">AI Configuration</span>
+      <div class="personality-list">
+        <div class="personality-item" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+          <label style="font-size: 0.8rem;">Provider</label>
+          <select id="aiProvider" style="width: 100%; padding: 4px;">
+            <option value="ollama">Ollama (Local)</option>
+            <option value="anthropic">Anthropic (Claude)</option>
+            <option value="openai">OpenAI (GPT)</option>
+          </select>
+        </div>
+        <div class="personality-item" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+          <label style="font-size: 0.8rem;">API Key</label>
+          <input type="password" id="aiApiKey" style="width: 100%; padding: 4px;" placeholder="Not needed for Ollama">
+        </div>
+        <div class="personality-item" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+          <label style="font-size: 0.8rem;">Model</label>
+          <input type="text" id="aiModel" style="width: 100%; padding: 4px;" placeholder="e.g. gemma:2b">
+        </div>
+        <div class="personality-item" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+          <label style="font-size: 0.8rem;">Server Endpoint</label>
+          <input type="text" id="aiEndpoint" style="width: 100%; padding: 4px;" placeholder="http://localhost:3000">
+        </div>
+        <button id="saveAiBtn" style="margin-top: 10px; width: 100%; padding: 8px; cursor: pointer; background: #4CAF50; color: white; border: none; border-radius: 4px;">Save AI Settings</button>
+      </div>
+    </div>
+
     <div class="status-bar" id="statusBar">
+
       Status: Running | Personality: Balanced | Color: black
     </div>
   </div>
