@@ -4,7 +4,8 @@
   "description": "",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
+    "start": "npx concurrently \"npm run start:server\" \"electron .\"",
+    "start:server": "node ./ai-server/index.js",
     "test:bedtime": "electron . --test-bedtime",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -12,5 +13,8 @@
   "type": "commonjs",
   "devDependencies": {
     "electron": "^44.3.0"
+  },
+  "dependencies": {
+    "active-win": "^8.2.1"
   }
 }

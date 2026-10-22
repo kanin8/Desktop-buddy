@@ -15,6 +15,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // pushes the authoritative state after every change.
   onTodoListStateChanged: (callback) => ipcRenderer.on('todolist-state-changed', (event, state) => callback(state)),
 
+  // AI Configuration API
+  getAIConfig: () => ipcRenderer.invoke('get-ai-config'),
+  saveAIConfig: (config) => ipcRenderer.invoke('save-ai-config', config),
+
   // Overlay Window API
   updateColor: (callback) => ipcRenderer.on('update-color', (event, color) => callback(color)),
   updatePersonality: (callback) => ipcRenderer.on('update-personality', (event, config) => callback(config)),
@@ -37,8 +41,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // General purpose (for the mouse-ignore logic)
   setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),
 
+<<<<<<< HEAD
   // The main process polls the global cursor and pushes its position here.
   // This is the reliable hover signal for a click-through overlay, which cannot
   // count on forwarded DOM mousemove events.
   onCursorMove: (callback) => ipcRenderer.on('cursor-move', (event, pos) => callback(pos)),
+=======
+  // Activity Detection API
+  getActivity: () => ipcRenderer.invoke('activity:get-current'),
+  updateActivityCategory: (id, cat) => ipcRenderer.invoke('activity:update-override', id, cat),
+  onActivityUpdate: (callback) => ipcRenderer.on('activity:status-update', (event, data) => callback(data)),
+>>>>>>> main
 });

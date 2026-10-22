@@ -1,6 +1,8 @@
 const { app, BrowserWindow, screen, Tray, Menu, nativeImage, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const http = require('http');
+const { ActivityIPCHandlers } = require('./src/features/activity-detection/ipc/handlers.js');
 const {
   createTodoWindow,
   isTodoWindowVisible,
@@ -44,6 +46,7 @@ let overlayWin = null;
 let settingsWin = null;
 let tray = null;
 
+<<<<<<< HEAD
 // --- CURSOR TRACKING ---
 // The overlay is a click-through window, so it cannot rely on DOM mousemove
 // events: Electron's { forward: true } mouse forwarding does not reach the page
@@ -156,7 +159,42 @@ function stopCursorPolling() {
   cursorStreamBuffer = '';
 }
 
+=======
+// --- SETTINGS PERSISTENCE ---
+const SETTINGS_PATH = path.join(app.getPath('userData'), 'settings.json');
+
+function loadSettings() {
+  try {
+    if (fs.existsSync(SETTINGS_PATH)) {
+      return JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
+    }
+  } catch (e) {
+    console.error('Error loading settings:', e);
+  }
+  // Default settings
+  return {
+    aiConfig: {
+      endpoint: 'http://localhost:3000',
+      provider: 'ollama',
+      apiKey: '',
+      model: 'gemma:2b'
+    }
+  };
+}
+
+function saveSettings(settings) {
+  try {
+    fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2));
+  } catch (e) {
+    console.error('Error saving settings:', e);
+  }
+}
+
+const currentSettings = loadSettings();
+
+>>>>>>> main
 function createOverlayWindow() {
+
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
   overlayWin = new BrowserWindow({
     width,
@@ -218,6 +256,20 @@ function createSettingsWindow() {
   });
 }
 
+function createActivityWindow() {
+  let activityWin = new BrowserWindow({
+    width: 500,
+    height: 600,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  activityWin.loadFile(path.join(__dirname, 'src/features/activity-detection/ui/activity.html'));
+}
+
 function createTray() {
   const icon = nativeImage.createFromPath(path.join(__dirname, 'icon.png'));
   tray = new Tray(icon);
@@ -227,6 +279,7 @@ function createTray() {
     const todoRunning = isTodoWindowVisible();
     const contextMenu = Menu.buildFromTemplate([
       { label: 'Show Settings', click: () => settingsWin.show() },
+      { label: 'Show Activity', click: () => createActivityWindow() },
       { type: 'separator' },
       {
         label: isRunning ? 'Stop Avatar' : 'Start Avatar',
@@ -328,7 +381,35 @@ ipcMain.handle('get-avatar-state', () => {
   return (overlayWin && !overlayWin.isDestroyed()) ? (overlayWin.isVisible() ? 'running' : 'stopped') : 'stopped';
 });
 
+ipcMain.handle('get-ai-config', () => {
+  return currentSettings.aiConfig;
+});
+
+ipcMain.handle('save-ai-config', async (event, config) => {
+  currentSettings.aiConfig = config;
+  saveSettings(currentSettings);
+
+  try {
+    // Sync with AI server
+    await fetch(config.endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: config.provider,
+        apiKey: config.apiKey,
+        model: config.model
+      })
+    });
+    console.log('[Main] AI config synced with server');
+  } catch (e) {
+    console.error('[Main] Failed to sync AI config with server:', e.message);
+  }
+
+  return { success: true };
+});
+
 ipcMain.on('toggle-avatar', () => {
+
   if (!overlayWin) {
     createOverlayWindow();
   } else {
@@ -421,6 +502,9 @@ app.whenReady().then(() => {
   // Start the avatar by default
   createOverlayWindow();
 
+  // Initialize Activity Detection
+  const activityHandlers = new ActivityIPCHandlers();
+  activityHandlers.init();
   // The to-do list panel is opt-in, so it is deliberately not created here.
   // Enable it from Settings or the tray menu.
 
