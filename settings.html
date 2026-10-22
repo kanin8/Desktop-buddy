@@ -150,6 +150,25 @@
       text-align: center;
       padding: 10px 0;
     }
+    .field-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      font-size: 13px;
+    }
+    .field-row > span {
+      flex: 0 0 70px;
+      color: #556;
+    }
+    .field-row input {
+      flex: 1;
+      min-width: 0;
+      font: inherit;
+      padding: 5px 8px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
   </style>
 </head>
 <body>
@@ -204,6 +223,30 @@
         <span>Show to-do list panel</span>
       </label>
       <p class="hint">Pins a small task list to the bottom-right corner.</p>
+    </div>
+
+    <div class="section">
+      <span class="section-title">AI Task Breakdown</span>
+      <label class="toggle-row">
+        <input type="checkbox" id="aiToggle">
+        <span>Enable AI breakdown</span>
+      </label>
+      <p class="hint">Hover the avatar, then click "Ask the buddy" to break a goal into subtasks.</p>
+      <label class="field-row">
+        <span>Endpoint</span>
+        <input type="text" id="aiBaseUrl" placeholder="https://api.openai.com/v1" spellcheck="false">
+      </label>
+      <label class="field-row">
+        <span>Model</span>
+        <input type="text" id="aiModel" placeholder="gpt-4o-mini" spellcheck="false" list="aiModelHints">
+        <datalist id="aiModelHints"></datalist>
+      </label>
+      <label class="field-row">
+        <span>API key</span>
+        <input type="password" id="aiApiKey" placeholder="sk-..." spellcheck="false" autocomplete="off">
+      </label>
+      <p class="hint" id="aiKeyHint">The key is stored in your user data folder, never in the repo.</p>
+      <p class="hint" id="aiStatus"></p>
     </div>
 
     <div class="section">

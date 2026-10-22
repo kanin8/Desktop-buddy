@@ -12,6 +12,7 @@
 const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const path = require('path');
 const CONFIG = require('./config');
+const { registerTodoIpc } = require('./todoService');
 
 // The live panel window, or null when it has been closed.
 let todoWin = null;
@@ -44,12 +45,20 @@ function anchor() {
   });
 }
 
-// Creates and shows the panel. Safe to call when the panel is already open —
-// the existing window is returned untouched so callers need not track state.
-// `onClose` overrides what the panel's close button does; defaults to closing
-// just the panel.
+// Creates and shows the panel. Safe to call when the panel already exists —
+// the existing window is reused and made visible so callers need not track
+// state. `onClose` overrides what the panel's close button does; defaults to
+// closing just the panel.
 function createTodoWindow({ onClose } = {}) {
-  if (todoWin && !todoWin.isDestroyed()) return todoWin;
+  const existing = getTodoWindow();
+  if (existing) {
+    if (onClose) onCloseRequested = onClose;
+    // Hiding does not destroy the window, so a hidden panel still counts as
+    // existing here. Re-anchoring before showing avoids a flash at stale bounds.
+    anchor();
+    existing.show();
+    return existing;
+  }
 
   onCloseRequested = onClose || null;
   contentHeight = CONFIG.DEFAULT_HEIGHT;
@@ -145,6 +154,10 @@ ipcMain.on('todo-close', () => {
   if (onCloseRequested) onCloseRequested();
   else destroyTodoWindow();
 });
+
+// The task CRUD channels live here rather than in the app entrypoints, so the
+// standalone app and the Desktop-buddy host get identical behaviour.
+registerTodoIpc();
 
 // Re-anchor on resolution or monitor changes so the panel follows the work area.
 // Uses the live contentHeight, so no per-window closure is needed here.
