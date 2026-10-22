@@ -46,7 +46,6 @@ let overlayWin = null;
 let settingsWin = null;
 let tray = null;
 
-<<<<<<< HEAD
 // --- CURSOR TRACKING ---
 // The overlay is a click-through window, so it cannot rely on DOM mousemove
 // events: Electron's { forward: true } mouse forwarding does not reach the page
@@ -159,7 +158,6 @@ function stopCursorPolling() {
   cursorStreamBuffer = '';
 }
 
-=======
 // --- SETTINGS PERSISTENCE ---
 const SETTINGS_PATH = path.join(app.getPath('userData'), 'settings.json');
 
@@ -192,7 +190,6 @@ function saveSettings(settings) {
 
 const currentSettings = loadSettings();
 
->>>>>>> main
 function createOverlayWindow() {
 
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;

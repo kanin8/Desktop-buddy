@@ -8,24 +8,19 @@ const avatarTypeInputs = document.querySelectorAll('input[name="avatarType"]');
 const statusBar = document.getElementById('statusBar');
 const todoToggle = document.getElementById('todoToggle');
 
-<<<<<<< HEAD
 // AI task-breakdown settings. The API key is write-only: the main process
 // reports whether a key exists, but never sends the stored value back here.
+// Supports both provider selection (ollama/openai/etc) and model hints.
+const aiProvider = document.getElementById('aiProvider');
 const aiToggle = document.getElementById('aiToggle');
 const aiBaseUrl = document.getElementById('aiBaseUrl');
+const aiEndpoint = document.getElementById('aiEndpoint');
 const aiModel = document.getElementById('aiModel');
 const aiApiKey = document.getElementById('aiApiKey');
 const aiModelHints = document.getElementById('aiModelHints');
 const aiKeyHint = document.getElementById('aiKeyHint');
 const aiStatus = document.getElementById('aiStatus');
-=======
-// AI Settings elements
-const aiProvider = document.getElementById('aiProvider');
-const aiApiKey = document.getElementById('aiApiKey');
-const aiModel = document.getElementById('aiModel');
-const aiEndpoint = document.getElementById('aiEndpoint');
 const saveAiBtn = document.getElementById('saveAiBtn');
->>>>>>> main
 
 
 let currentState = 'running';
@@ -192,15 +187,11 @@ function pushAiSettings() {
   });
 }
 
+// Auto-sync for quick toggles (enabled, baseUrl, model)
 [aiToggle, aiBaseUrl, aiModel].forEach((el) => el.addEventListener('change', pushAiSettings));
 aiApiKey.addEventListener('change', pushAiSettings);
 
-// Initial UI state
-syncState();
-syncTodoState();
-syncAiSettings();
-updateUI();
-
+// Manual save for provider/endpoint (requires explicit confirmation)
 saveAiBtn.addEventListener('click', async () => {
   const config = {
     provider: aiProvider.value,
@@ -216,6 +207,12 @@ saveAiBtn.addEventListener('click', async () => {
     alert('Failed to save AI settings.');
   }
 });
+
+// Initial UI state
+syncState();
+syncTodoState();
+syncAiSettings();
+updateUI();
 
 // Listen for activity updates in real-time
 window.electronAPI.onActivityUpdate((event) => {
