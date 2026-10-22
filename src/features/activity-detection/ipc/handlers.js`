@@ -1,0 +1,141 @@
+const { ipcMain, BrowserWindow } = require('electron');
+const { createDetector } = require('../detector/index.js');
+const { ActivityClassifier } = require('../classifier/index.js');
+
+class ActivityIPCHandlers {
+  constructor() {
+    this.detector = createDetector();
+    this.classifier = new ActivityClassifier();
+    this.currentActivity = null;
+    this.pollingInterval = null;
+
+    // Procrastination tracking
+    this.leisureStartTime = null;
+    this.PROCRASTINATION_THRESHOLD = 15000; // 15 seconds
+  }
+
+  init() {
+    console.log('[Activity] Initializing IPC Handlers...');
+    ipcMain.handle('activity:get-current', () => {
+      return this.currentActivity;
+    });
+
+    ipcMain.handle('activity:update-override', async (_, identifier, category) => {
+      this.classifier.setOverride(identifier, category);
+      await this.updateLoop();
+      return { success: true };
+    });
+
+    this.startPolling();
+  }
+
+  startPolling() {
+    // Slowed down to 30 seconds as requested
+    console.log('[Activity] Starting polling loop (every 30 seconds)...');
+    this.pollingInterval = setInterval(async () => {
+      await this.updateLoop();
+    }, 30000);
+  }
+
+  async updateLoop() {
+    try {
+      const info = await this.detector.getActiveWindow();
+      let category = this.classifier.classify(info);
+
+      if (category === 'uncategorized') {
+        category = await this.aiClassify(info);
+      }
+
+      const event = {
+        app: info.appName,
+        domain: info.url ? new URL(info.url).hostname : null,
+        title: info.title,
+        category: category,
+        source: info.source,
+        startedAt: Date.now(),
+      };
+
+      if (this.hasActivityChanged(event)) {
+        console.log(`[Activity] Activity changed to: ${event.app} (${event.category})`);
+        this.currentActivity = event;
+        this.broadcastActivity(event);
+      }
+
+      this.trackProcrastination(event);
+    } catch (e) {
+      console.error('[Activity] CRITICAL ERROR in updateLoop:', e);
+    }
+  }
+
+  async aiClassify(info) {
+    console.log(`[AI] Analyzing content for: ${info.appName} - ${info.title}`);
+
+    const context = `${info.appName} ${info.title}`.toLowerCase();
+
+    // EXPANDED SEMANTIC DICTIONARY
+    // These act as the "weights" the AI uses to make a decision.
+    const productivityWeights = ['doc', 'study', 'learn', 'code', 'dev', 'assignment', 'research', 'project', 'mail', 'calendar', 'work', 'university', 'college', 'lecture', 'school', 'zoom', 'teams', 'vscode', 'intellij', 'pycharm', 'git', 'github', 'stack', 'readme', 'tutorial'];
+    const leisureWeights = ['game', 'social', 'stream', 'video', 'entertainment', 'movie', 'shop', 'meme', 'youtube', 'netflix', 'reddit', 'facebook', 'twitter', 'x.com', 'instagram', 'tiktok', 'discord', 'steam', 'epic', 'amazon', 'ebay', 'twitch'];
+
+    // The AI "scores" the activity
+    let prodScore = 0;
+    let leisScore = 0;
+
+    productivityWeights.forEach(k => { if (context.includes(k)) prodScore++; });
+    leisureWeights.forEach(k => { if (context.includes(k)) leisScore++; });
+
+    console.log(`[AI] Scoring - Productive: ${prodScore}, Leisure: ${leisureScore}`);
+
+    if (prodScore > leisScore) return 'productive';
+    if (leisScore > prodScore) return 'leisure';
+
+    // If tied or both zero, the AI "guesses" based on the app name
+    if (info.appName.toLowerCase().includes('chrome') || info.appName.toLowerCase().includes('edge')) {
+      return 'uncategorized'; // Let the next loop try to find more context
+    }
+
+    return 'uncategorized';
+  }
+
+  trackProcrastination(event) {
+    if (event.category === 'leisure') {
+      if (!this.leisureStartTime) {
+        this.leisureStartTime = Date.now();
+      } else {
+        const elapsed = Date.now() - this.leisureStartTime;
+        if (elapsed >= this.PROCRASTINATION_THRESHOLD) {
+          this.triggerNudge(event);
+          this.leisureStartTime = Date.now();
+        }
+      }
+    } else {
+      this.leisureStartTime = null;
+    }
+  }
+
+  triggerNudge(event) {
+    const windows = BrowserWindow.getAllWindows();
+    windows.forEach(win => {
+      win.webContents.send('avatar-speak', `I've been watching... ${event.app} isn't exactly "studying", is it? Focus up!`);
+    });
+  }
+
+  hasActivityChanged(newEvent) {
+    if (!this.currentActivity) return true;
+    return (
+      newEvent.app !== this.currentActivity.app ||
+      newEvent.domain !== this.currentActivity.domain ||
+      newEvent.title !== this.//LITERAL_START
+      newEvent.title !== this.currentActivity.title
+    );
+  }
+
+  broadcastActivity(event) {
+    const windows = BrowserWindow.getAllWindows();
+    windows.forEach(win => {
+      win.webContents.send('activity:status-update', event);
+    });
+  }
+}
+
+module.exports = { ActivityIPCHandlers };

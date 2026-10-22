@@ -1,0 +1,14 @@
+{
+  "rules": [
+    { "pattern": "github.com", "category": "productive", "type": "url" },
+    { "pattern": "docs.google.com", "category": "productive", "type": "url" },
+    { "pattern": "notion.so", "category": "productive", "type": "url" },
+    { "pattern": "stackoverflow.com", "category": "productive", "type": "url" },
+    { "pattern": "Visual Studio Code", "category": "productive", "type": "app" },
+    { "pattern": "Terminal", "category": "productive", "type": "app" },
+    { "pattern": "youtube.com", "category": "leisure", "type": "url" },
+    { "pattern": "netflix.com", "category": "leisure", "type": "url" },
+    { "pattern": "reddit.com", "category": "leisure", "type": "url" },
+    { "pattern": "facebook.com", "category": "leisure", "type": "url" }
+  ]
+}
