@@ -6,15 +6,60 @@ const avatarTypeInputs = document.querySelectorAll('input[name="avatarType"]');
 const statusBar = document.getElementById('statusBar');
 const todoToggle = document.getElementById('todoToggle');
 
+// AI Settings elements
+const aiProvider = document.getElementById('aiProvider');
+const aiApiKey = document.getElementById('aiApiKey');
+const aiModel = document.getElementById('aiModel');
+const aiEndpoint = document.getElementById('aiEndpoint');
+const saveAiBtn = document.getElementById('saveAiBtn');
+
 
 let currentState = 'running';
 let currentPersonality = 'balanced';
 let currentColor = 'black';
 
+// Activity state
+let currentActivity = null;
+
 async function syncState() {
   const state = await window.electronAPI.getAvatarState();
   currentState = state;
+
+  // Sync initial activity
+  const activity = await window.electronAPI.getActivity();
+  if (activity) {
+    currentActivity = activity;
+    updateActivityUI();
+  }
+
+  // Sync AI config
+  const aiConfig = await window.electronAPI.getAIConfig();
+  if (aiConfig) {
+    aiProvider.value = aiConfig.provider;
+    aiApiKey.value = aiConfig.apiKey;
+    aiModel.value = aiConfig.model;
+    aiEndpoint.value = aiConfig.endpoint;
+  }
+
   updateUI();
+}
+
+function updateActivityUI() {
+
+  const el = document.getElementById('activityStatus');
+  if (!currentActivity) {
+    el.textContent = 'Detecting...';
+    return;
+  }
+
+  const categoryColors = {
+    productive: '#2c7a7b',
+    leisure: '#b7791f',
+    uncategorized: '#4a5568'
+  };
+
+  const color = categoryColors[currentActivity.category] || '#333';
+  el.innerHTML = `<span style="color: ${color}; font-weight: bold;">${currentActivity.category.toUpperCase()}</span>: ${currentActivity.app} ${currentActivity.domain ? `(${currentActivity.domain})` : ''}`;
 }
 
 function updateUI() {
@@ -83,3 +128,25 @@ todoToggle.addEventListener('change', () => {
 syncState();
 syncTodoState();
 updateUI();
+
+saveAiBtn.addEventListener('click', async () => {
+  const config = {
+    provider: aiProvider.value,
+    apiKey: aiApiKey.value,
+    model: aiModel.value,
+    endpoint: aiEndpoint.value
+  };
+
+  const result = await window.electronAPI.saveAIConfig(config);
+  if (result.success) {
+    alert('AI Settings saved and synced!');
+  } else {
+    alert('Failed to save AI settings.');
+  }
+});
+
+// Listen for activity updates in real-time
+window.electronAPI.onActivityUpdate((event) => {
+  currentActivity = event;
+  updateActivityUI();
+});

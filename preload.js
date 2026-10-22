@@ -12,6 +12,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleTodoList: () => ipcRenderer.send('toggle-todolist'),
   getTodoListState: () => ipcRenderer.invoke('get-todolist-state'),
 
+  // AI Configuration API
+  getAIConfig: () => ipcRenderer.invoke('get-ai-config'),
+  saveAIConfig: (config) => ipcRenderer.invoke('save-ai-config', config),
+
   // Overlay Window API
   updateColor: (callback) => ipcRenderer.on('update-color', (event, color) => callback(color)),
   updatePersonality: (callback) => ipcRenderer.on('update-personality', (event, config) => callback(config)),
@@ -21,4 +25,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // General purpose (for the mouse-ignore logic)
   setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),
+
+  // Activity Detection API
+  getActivity: () => ipcRenderer.invoke('activity:get-current'),
+  updateActivityCategory: (id, cat) => ipcRenderer.invoke('activity:update-override', id, cat),
+  onActivityUpdate: (callback) => ipcRenderer.on('activity:status-update', (event, data) => callback(data)),
 });
