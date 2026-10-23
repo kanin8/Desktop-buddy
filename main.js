@@ -27,6 +27,9 @@ if (!gotTheLock) {
 let overlayWin = null;
 let settingsWin = null;
 let tray = null;
+// True once the app is really quitting, so the settings window knows to
+// close for real instead of just hiding (see createSettingsWindow).
+let isQuitting = false;
 
 function createOverlayWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -69,8 +72,11 @@ function createSettingsWindow() {
 
   settingsWin.loadFile('settings.html');
 
-  // Prevent the app from quitting when settings window is closed
+  // Closing the settings window only hides it, so it can be reopened.
+  // While the app is quitting it must close for real; otherwise blocking
+  // the close also cancels the quit and leaves the app running unseen.
   settingsWin.on('close', (event) => {
+    if (isQuitting) return;
     event.preventDefault();
     settingsWin.hide();
   });
@@ -271,6 +277,10 @@ app.whenReady().then(() => {
     console.log('Test mode: triggering bedtime...');
     setTimeout(triggerBedtime, 2000); // Give window time to load
   }
+});
+
+app.on('before-quit', () => {
+  isQuitting = true;
 });
 
 app.on('window-all-closed', () => {
