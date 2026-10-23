@@ -1,0 +1,118 @@
+/* Theme tokens for the study buddy UI: every colour, opacity, blur, radius,
+   spacing and font value lives here, so components never hardcode styles. */
+
+/* ============================
+   1. Variables — raw palette
+   ============================
+   The actual colour values. Components should NOT use these directly;
+   use the named tokens further down instead. To change the look, edit
+   the values here. */
+:root {
+  --navy-900: #0f1b2d;
+  --teal-300: #4fd1bc;
+  --teal-400: #2fbfa9;
+  --teal-950: #06231f;
+  --grey-100: #f2f5f8;
+  --grey-300: #b8c4d0;
+  --white: #ffffff;
+  --black: #000000;
+}
+
+/* ============================
+   1. Variables — theme tokens
+   ============================
+   The names components use (e.g. "the colour of a panel"). A future light
+   mode only needs to give these names new values in a second block. */
+:root {
+  /* Glass panels (menu, chat bubbles, nudges). 90% opacity, because
+     80% let busy or white backgrounds show through so much that teal
+     text dropped below the readable contrast level (WCAG AA). */
+  --surface-opacity: 0.9;
+  --surface: color-mix(in srgb, var(--navy-900) calc(var(--surface-opacity) * 100%), transparent);
+
+  /* Blur is off on purpose. The buddy lives in one see-through window
+     that covers the whole screen. CSS blur only blurs things inside our
+     own page, not the desktop behind it, and the operating system's blur
+     would frost the entire screen. Keep this at 0px unless panels move
+     into their own small windows. */
+  --surface-blur: 0px;
+
+  /* A faint light edge so panels stand out on dark wallpapers. */
+  --surface-border: color-mix(in srgb, var(--white) 12%, transparent);
+  --surface-shadow: 0 4px 16px color-mix(in srgb, var(--black) 30%, transparent);
+
+  /* Text on panels. Contrast measured against --surface over a white page
+     (the worst case): primary about 12:1, secondary about 7:1. AA needs 4.5:1. */
+  --text-primary: var(--grey-100);
+  --text-secondary: var(--grey-300);
+
+  /* Accent: primary buttons ("Yes, help me!") and the active item in the
+     pill. Same teal as the to-do panel, so the whole app looks like one thing. */
+  --accent: var(--teal-400);
+  --accent-hover: var(--teal-300);
+
+  /* Text and icons placed ON the teal accent. Dark navy gives 7.2:1;
+     white would only be 2.3:1 and fail. */
+  --accent-text: var(--teal-950);
+
+  /* Secondary button ("Not now"): quieter than the accent button. */
+  --button-secondary-bg: color-mix(in srgb, var(--white) 12%, transparent);
+  --button-secondary-text: var(--text-primary);
+
+  /* Chat bubbles: the user's messages get a teal tint so they are easy
+     to tell apart from the buddy's messages. */
+  --bubble-buddy-bg: var(--surface);
+  --bubble-user-bg: color-mix(in srgb, var(--teal-400) 25%, var(--surface));
+
+  /* Outline shown around whatever has keyboard focus. */
+  --focus-ring: var(--accent);
+
+  /* Rounded corners. Large and soft to match the friendly frog. */
+  --radius: 16px;
+  --radius-pill: 999px;
+
+  /* Spacing steps, from smallest to largest. Use these for padding,
+     margins and gaps instead of typing pixel values. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+
+  /* Typography: one sans-serif font family, the same as the to-do panel. */
+  --font: system-ui, -apple-system, "Segoe UI", Ubuntu, Cantarell, sans-serif;
+  --font-size-sm: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --line-height: 1.4;
+
+  /* Chat history: how faded the oldest visible message gets. Timings for
+     fading live in the JS config, not here. */
+  --history-fade-min-opacity: 0.25;
+}
+
+/* ============================
+   2. Reset / base styles
+   ============================
+   None yet. Added when components are built (step 2 onward). */
+
+/* ============================
+   3. Layout containers
+   ============================
+   None yet. */
+
+/* ============================
+   4. Components
+   ============================
+   Component styles live in each component's own folder and use the
+   tokens above. */
+
+/* ============================
+   5. Animations / transitions
+   ============================
+   None yet. */
+
+/* ============================
+   6. States
+   ============================
+   None yet. */
