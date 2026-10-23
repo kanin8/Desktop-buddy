@@ -53,6 +53,8 @@ Accessibility checks for every step:
 ### 1. Idle
 - Only the frog sprite, sitting at its laptop, bottom-right of the screen.
 - A small subtle indicator (oval/handle) shows that something can expand on hover.
+- The user can drag the frog anywhere on the screen. The position is remembered between launches (it falls back to bottom-right if it no longer fits, e.g. on a smaller screen).
+- Clicking and hovering still work normally: a drag only starts after the pointer moves a few pixels with the button held.
 
 ### 2. Hover
 - Hovering the frog reveals a small pill with two buttons: **Chat** and **More (…)**.
@@ -113,4 +115,4 @@ One Claude Code session and one commit per step. Screenshot before/after for the
 - Can Electron blur what's behind the overlay window on our OS? (Ask Claude Code in plan mode before step 1.)
 - Exact keyboard shortcut for opening the controls.
 - How long ignored proactive messages stay before fading.
-- Where exactly the frog sits if the user has a dock/taskbar on the right.
+- Where exactly the frog sits if the user has a dock/taskbar on the right. (Partly solved: the user can drag the frog out of the way, and the spot is remembered.)

@@ -1,14 +1,19 @@
-// Overlay renderer: shows the frog in the bottom-right corner, plays its
-// sprite animations, shows speech bubbles, and decides when the overlay
-// should let mouse clicks through to the desktop.
+// Overlay renderer: shows the frog (bottom-right, or where it was dragged),
+// plays its sprite animations, shows speech bubbles, and decides when the
+// overlay should let mouse clicks through to the desktop.
 
 const avatar = document.getElementById('avatar');
 const bubble = document.getElementById('speech-bubble');
+const hoverIndicator = document.getElementById('hover-indicator');
 
 // Plays the sprite sheet onto the child element; #avatar itself stays the
-// 200x200 box the frog is centred in.
+// invisible box the frog is centred in.
 const spriteElement = document.getElementById('avatar-sprite');
 const spriteAnimator = new SpriteAnimator(spriteElement);
+
+// What the user actually sees of the frog. Hover, dragging and placement use
+// these instead of the larger, empty #avatar box.
+const visibleParts = [spriteElement, hoverIndicator];
 
 // The animation shown while the frog is at rest.
 const DEFAULT_IMAGE_ANIMATION = 'idle';
@@ -16,29 +21,20 @@ const DEFAULT_IMAGE_ANIMATION = 'idle';
 // One-shot reaction played on click; hands back to the idle loop when it ends.
 const CLICK_ANIMATION = 'standingClicked';
 
-// --- PLACEMENT ---
-const BOX_SIZE = 200;
-const SCREEN_MARGIN = 30;
-// The frog is centred in its box, so the box is drawn this far below its
-// margin to rest the frog's feet near the bottom of the screen.
-const RENDER_OFFSET_Y = 50;
-// How far above the box the speech bubble sits.
-const BUBBLE_OFFSET_Y = 40;
+// Gap between the top of the frog and the speech bubble, and between the
+// bubble and the screen edge.
+const BUBBLE_GAP = 12;
 
-// Places the frog in the bottom-right corner of the overlay. Called on start
-// and whenever the overlay is resized (e.g. a screen resolution change).
-function placeAvatarBottomRight() {
-  const left = window.innerWidth - BOX_SIZE - SCREEN_MARGIN;
-  const top = window.innerHeight - BOX_SIZE - SCREEN_MARGIN + RENDER_OFFSET_Y;
-  avatar.style.left = left + 'px';
-  avatar.style.top = top + 'px';
-}
+// True while the frog is being dragged (see controls/drag.js).
+let isDragging = false;
 
-// Keeps the speech bubble just above the frog's box.
+// Keeps the speech bubble just above the frog, pulled left if it would
+// otherwise run off the right edge of the screen.
 function positionBubble() {
-  const rect = avatar.getBoundingClientRect();
-  bubble.style.left = rect.left + 'px';
-  bubble.style.top = (rect.top - BUBBLE_OFFSET_Y) + 'px';
+  const frog = spriteElement.getBoundingClientRect();
+  const maxLeft = window.innerWidth - bubble.offsetWidth - BUBBLE_GAP;
+  bubble.style.left = Math.max(BUBBLE_GAP, Math.min(frog.left, maxLeft)) + 'px';
+  bubble.style.top = (frog.top - bubble.offsetHeight - BUBBLE_GAP) + 'px';
 }
 
 // Runs every frame: steps the sprite animation and keeps the bubble in place.
@@ -77,24 +73,37 @@ window.electronAPI.setScreenGrayscale((enabled) => {
   avatar.style.filter = enabled ? 'grayscale(100%)' : 'none';
 });
 
-// The element the pointer should actually be tested against, so hover and
-// clicks land on the visible frog rather than on the empty corners of its
-// 200x200 box.
-function getHitTarget() {
+// The elements the pointer should actually be tested against, so hover and
+// clicks land on the visible frog (or its indicator) rather than on the empty
+// corners of its box.
+function getHitTargets() {
   // Before the sheet has loaded the sprite has no size, so fall back to the
   // full box rather than leaving the avatar briefly unclickable.
-  return spriteElement.offsetWidth > 0 ? spriteElement : avatar;
+  return spriteElement.offsetWidth > 0 ? visibleParts : [avatar];
 }
 
+// True when the pointer is over any visible part of the frog.
+function isPointerOverFrog(e) {
+  return getHitTargets().some((element) => {
+    const rect = element.getBoundingClientRect();
+    return (
+      e.clientX >= rect.left &&
+      e.clientX <= rect.right &&
+      e.clientY >= rect.top &&
+      e.clientY <= rect.bottom
+    );
+  });
+}
+
+// Lets clicks through to the desktop everywhere except on the frog, and lights
+// up the hover indicator while the pointer is on it. Skipped mid-drag: a fast
+// drag can get ahead of the frog, and turning click-through on then would drop it.
 window.addEventListener('mousemove', (e) => {
-  const rect = getHitTarget().getBoundingClientRect();
-  const isOver = (
-    e.clientX >= rect.left &&
-    e.clientX <= rect.right &&
-    e.clientY >= rect.top &&
-    e.clientY <= rect.bottom
-  );
+  if (isDragging) return;
+
+  const isOver = isPointerOverFrog(e);
   window.electronAPI.setIgnoreMouse(!isOver);
+  avatar.classList.toggle('is-hovered', isOver);
 });
 
 // Reacts to a click on the frog by playing the reaction animation once, then
@@ -107,8 +116,15 @@ avatar.addEventListener('click', () => {
   });
 });
 
-window.addEventListener('resize', placeAvatarBottomRight);
+// Re-place on resize (e.g. a resolution change) so the frog can't end up off
+// screen; it keeps its saved spot when that still fits.
+window.addEventListener('resize', () => placeAvatar(avatar, visibleParts));
 
-placeAvatarBottomRight();
+enableAvatarDrag(avatar, visibleParts, (dragging) => {
+  isDragging = dragging;
+});
+
+// The sprite must have its size before placing, since placement measures it.
 spriteAnimator.play(DEFAULT_IMAGE_ANIMATION);
+placeAvatar(avatar, visibleParts);
 update();

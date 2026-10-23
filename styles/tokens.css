@@ -89,6 +89,34 @@
   /* Chat history: how faded the oldest visible message gets. Timings for
      fading live in the JS config, not here. */
   --history-fade-min-opacity: 0.25;
+
+  /* Thin outlines, e.g. around the hover indicator. */
+  --border-width: 1px;
+
+  /* Short fade used for small hover changes. */
+  --transition-fast: 150ms;
+
+  /* Frog placement. The frog is centred in an invisible box: tall enough for
+     the click animation (198px tall) and wide enough for it (84px wide). */
+  --avatar-box-width: 100px;
+  --avatar-box-height: 200px;
+
+  /* How far below the box's centre the frog's feet are: half the idle frame
+     height (126px in avatar/config.js). Update both together. */
+  --avatar-feet-offset: 63px;
+
+  /* Gap between the frog and the screen edges in its default corner spot. */
+  --buddy-screen-margin: var(--space-5);
+
+  /* Hover indicator: the small oval under the frog's feet that hints
+     controls appear on hover. Navy with a light edge so it shows on both
+     white documents and dark wallpapers; teal while the frog is hovered. */
+  --indicator-width: 28px;
+  --indicator-height: 6px;
+  --indicator-gap: var(--space-1);
+  --indicator-bg: var(--surface);
+  --indicator-border: var(--surface-border);
+  --indicator-bg-hover: var(--accent);
 }
 
 /* ============================

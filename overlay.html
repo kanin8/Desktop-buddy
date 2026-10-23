@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>Avatar PoC</title>
   <link rel="stylesheet" href="styles/tokens.css">
+  <link rel="stylesheet" href="controls/controls.css">
   <style>
     body {
       margin: 0;
@@ -15,8 +16,11 @@
     }
     #avatar {
       position: absolute;
-      width: 200px;
-      height: 200px;
+      width: var(--avatar-box-width);
+      height: var(--avatar-box-height);
+      /* Stops a drag from selecting things or scrolling instead of moving. */
+      user-select: none;
+      touch-action: none;
       pointer-events: auto;
       display: flex;
       align-items: center;
@@ -63,10 +67,15 @@
 <body>
   <div id="avatar">
     <div id="avatar-sprite"></div>
+    <!-- Decorative hint for now; step 3 makes it part of the keyboard-reachable controls. -->
+    <div id="hover-indicator" class="hover-indicator" aria-hidden="true"></div>
   </div>
   <div id="speech-bubble"></div>
   <script src="avatar/config.js"></script>
   <script src="avatar/spriteAnimator.js"></script>
+  <script src="controls/config.js"></script>
+  <script src="controls/avatarPosition.js"></script>
+  <script src="controls/drag.js"></script>
   <script src="overlay.js"></script>
 </body>
 </html>

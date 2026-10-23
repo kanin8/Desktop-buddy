@@ -1,0 +1,50 @@
+/* Styles for the buddy's controls around the frog: the hover indicator now,
+   the hover pill and menu from step 3. All values come from styles/tokens.css. */
+
+/* ============================
+   1. Variables
+   ============================
+   None here: every value comes from styles/tokens.css. */
+
+/* ============================
+   4. Components — hover indicator
+   ============================
+   The small oval just under the frog's feet. It is placed from the box's
+   centre (where the frog is centred) so it stays under the feet no matter
+   where the frog is dragged. */
+.hover-indicator {
+  position: absolute;
+  top: calc(50% + var(--avatar-feet-offset) + var(--indicator-gap));
+  left: 50%;
+  transform: translateX(-50%);
+  width: var(--indicator-width);
+  height: var(--indicator-height);
+  border: var(--border-width) solid var(--indicator-border);
+  border-radius: var(--radius-pill);
+  background-color: var(--indicator-bg);
+  pointer-events: none;
+  transition:
+    background-color var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+/* ============================
+   6. States
+   ============================ */
+
+/* Hovering the frog lights the indicator up in the accent colour. */
+#avatar.is-hovered .hover-indicator {
+  background-color: var(--indicator-bg-hover);
+}
+
+/* While the frog is being dragged, show the "grabbing" hand. */
+#avatar.is-dragging {
+  cursor: grabbing;
+}
+
+/* The indicator fades out during a drag. Opacity is used rather than
+   display: none so it keeps its size, which drag.js needs to keep the
+   frog on screen. */
+#avatar.is-dragging .hover-indicator {
+  opacity: 0;
+}
