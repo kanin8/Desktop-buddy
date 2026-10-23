@@ -108,7 +108,9 @@ def send_to_avatar(text):
     Sends a message to the Electron avatar via a local HTTP POST request.
     """
     try:
-        url = "http://127.0.0.1:5000/speak"
+        # Must match the port main.js listens on (see SPELLING_SERVER_PORT there).
+        port = os.environ.get("SPELLING_SERVER_PORT", "5000")
+        url = f"http://127.0.0.1:{port}/speak"
         data = json.dumps({"text": text}).encode('utf-8')
         req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
         with urllib.request.urlopen(req, timeout=1) as response:

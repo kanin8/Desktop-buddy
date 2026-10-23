@@ -131,6 +131,24 @@ setInterval(() => {
 }, 60000);
 
 // --- SPELLING SERVER ---
+// check_spelling.py sends messages here for the avatar to say.
+// The port defaults to 5000. On macOS, AirPlay Receiver already uses 5000,
+// so Mac users can pick another port with an environment variable, e.g.
+//   SPELLING_SERVER_PORT=5001 npm start
+// (or add `export SPELLING_SERVER_PORT=5001` to ~/.zshrc). check_spelling.py
+// reads the same variable, so both sides always agree.
+const DEFAULT_SPELLING_SERVER_PORT = 5000;
+
+// Returns the port from SPELLING_SERVER_PORT, or the default if it is
+// missing or not a valid port number.
+function getSpellingServerPort() {
+  const port = Number(process.env.SPELLING_SERVER_PORT);
+  const isValidPort = Number.isInteger(port) && port > 0 && port < 65536;
+  return isValidPort ? port : DEFAULT_SPELLING_SERVER_PORT;
+}
+
+const spellingServerPort = getSpellingServerPort();
+
 const server = http.createServer((req, res) => {
   if (req.method === 'POST' && req.url === '/speak') {
     let body = '';
@@ -155,8 +173,23 @@ const server = http.createServer((req, res) => {
   }
 });
 
-server.listen(5000, '127.0.0.1');
-console.log('Spelling server listening on port 5000');
+// Without this handler, a taken port crashes the whole app. Logging instead
+// keeps the avatar running; only spelling messages are unavailable.
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(
+      `Spelling server: port ${spellingServerPort} is already in use ` +
+      '(on macOS this is often AirPlay Receiver). ' +
+      'Set SPELLING_SERVER_PORT to another port, e.g. 5001.'
+    );
+  } else {
+    console.error('Spelling server error:', err);
+  }
+});
+
+server.listen(spellingServerPort, '127.0.0.1', () => {
+  console.log(`Spelling server listening on port ${spellingServerPort}`);
+});
 
 // IPC Handlers
 ipcMain.handle('get-avatar-state', () => {
