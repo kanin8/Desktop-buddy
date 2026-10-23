@@ -63,6 +63,8 @@ function createSettingsWindow() {
     height: 520,
     resizable: false,
     skipTaskbar: false,
+    // Hidden at launch so it doesn't pop up every start; opened from the tray.
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -214,27 +216,6 @@ ipcMain.on('toggle-avatar', () => {
   }
 
   ipcMain.emit('avatar-state-changed');
-});
-
-ipcMain.on('set-color', (event, color) => {
-  if (overlayWin && !overlayWin.isDestroyed()) {
-    overlayWin.webContents.send('update-color', color);
-  }
-});
-
-ipcMain.on('set-personality', (event, name) => {
-  // We need to send the actual CONFIG object from a preset to the renderer
-  // But wait, the overlay.js already has the presets.
-  // Let's just send the name and let overlay.js handle the lookup.
-  if (overlayWin && !overlayWin.isDestroyed()) {
-    overlayWin.webContents.send('update-personality', name);
-  }
-});
-
-ipcMain.on('set-avatar-type', (event, type) => {
-  if (overlayWin && !overlayWin.isDestroyed()) {
-    overlayWin.webContents.send('update-avatar-type', type);
-  }
 });
 
 ipcMain.on('set-ignore-mouse', (event, ignore) => {

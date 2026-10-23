@@ -53,62 +53,6 @@
     .btn-start { background-color: #4CAF50; color: white; }
     .btn-stop { background-color: #f44336; color: white; }
 
-    .color-grid {
-      display: flex;
-      gap: 10px;
-      justify-content: center;
-      flex-wrap: wrap;
-      margin-top: 60px;
-    }
-    .swatch {
-      width: 30px;
-      height: 30px;
-      border-radius: 50%;
-      cursor: pointer;
-      border: 2px solid transparent;
-      transition: transform 0.1s, border-color 0.1s;
-    }
-    .swatch:hover { transform: scale(1.2); }
-    .swatch.active { border-color: #333; }
-
-    /* 3D Cube Styles */
-    .cube-scene {
-      width: 100px;
-      height: 100px;
-      perspective: 400px;
-      margin: 0 auto 20px auto;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-    .cube {
-      width: 60px;
-      height: 60px;
-      position: relative;
-      transform-style: preserve-3d;
-      animation: rotateCube 8s infinite linear;
-    }
-    .cube-face {
-      position: absolute;
-      width: 60px;
-      height: 60px;
-      border: 1px solid rgba(0,0,0,0.1);
-      background-color: black;
-      opacity: 0.8;
-    }
-    .face-front  { transform: rotateY(0deg) translateZ(30px); }
-    .face-back   { transform: rotateY(180deg) translateZ(30px); }
-    .face-right  { transform: rotateY(90deg) translateZ(30px); }
-    .face-left   { transform: rotateY(-90deg) translateZ(30px); }
-    .face-top    { transform: rotateX(90deg) translateZ(30px); }
-    .face-bottom { transform: rotateX(-90deg) translateZ(30px); }
-
-    @keyframes rotateCube {
-      from { transform: rotateX(0deg) rotateY(0deg); }
-      to { transform: rotateX(360deg) rotateY(360deg); }
-    }
-
-
     /* ============================
        To-Do List toggle
        ============================ */
@@ -128,20 +72,6 @@
       font-size: 0.75rem;
       color: #888;
     }
-
-    .personality-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .personality-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      cursor: pointer;
-      font-size: 0.9rem;
-    }
-    .personality-item input { cursor: pointer; }
 
     .status-bar {
       margin-top: auto;
@@ -163,41 +93,6 @@
     </div>
 
     <div class="section">
-      <span class="section-title">Avatar Appearance</span>
-      <div class="personality-list">
-        <label class="personality-item">
-          <input type="radio" name="avatarType" value="color" checked> Color
-        </label>
-        <label class="personality-item">
-          <input type="radio" name="avatarType" value="image"> Image (Frog)
-        </label>
-      </div>
-    </div>
-
-    <div class="section">
-      <span class="section-title">Avatar Color</span>
-      <div class="cube-scene">
-        <div class="cube" id="colorCube">
-          <div class="cube-face face-front"></div>
-          <div class="cube-face face-back"></div>
-          <div class="cube-face face-right"></div>
-          <div class="cube-face face-left"></div>
-          <div class="cube-face face-top"></div>
-          <div class="cube-face face-bottom"></div>
-        </div>
-      </div>
-      <div class="color-grid" id="colorGrid">
-
-        <div class="swatch active" style="background-color: black;" data-color="black"></div>
-        <div class="swatch" style="background-color: red;" data-color="red"></div>
-        <div class="swatch" style="background-color: blue;" data-color="blue"></div>
-        <div class="swatch" style="background-color: green;" data-color="green"></div>
-        <div class="swatch" style="background-color: purple;" data-color="purple"></div>
-        <div class="swatch" style="background-color: orange;" data-color="orange"></div>
-      </div>
-    </div>
-
-    <div class="section">
       <span class="section-title">To-Do List</span>
       <label class="toggle-row">
         <input type="checkbox" id="todoToggle">
@@ -206,26 +101,8 @@
       <p class="hint">Pins a small task list to the bottom-right corner.</p>
     </div>
 
-    <div class="section">
-      <span class="section-title">Movement Style</span>
-      <div class="personality-list">
-        <label class="personality-item">
-          <input type="radio" name="personality" value="worm" checked> Worm
-        </label>
-        <label class="personality-item">
-          <input type="radio" name="personality" value="bird"> Bird
-        </label>
-        <label class="personality-item">
-          <input type="radio" name="personality" value="rock"> Rock
-        </label>
-        <label class="personality-item">
-          <input type="radio" name="personality" value="kangaroo"> Kangaroo
-        </label>
-      </div>
-    </div>
-
     <div class="status-bar" id="statusBar">
-      Status: Running | Personality: Balanced | Color: black
+      Status: Running
     </div>
   </div>
   <script src="settings.js"></script>
