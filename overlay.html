@@ -36,31 +36,50 @@
       background-repeat: no-repeat;
       pointer-events: none;
     }
+    /* ============================
+       Speech bubble
+       ============================
+       Navy glass bubble above the frog, used by the spelling and bedtime
+       messages. overlay.js shows/hides it (display) and positions it.
+       All values come from styles/tokens.css. */
     #speech-bubble {
       position: absolute;
-      background: white;
-      border: 2px solid black;
-      border-radius: 10px;
-      padding: 8px 12px;
-      font-family: sans-serif;
-      font-size: 12px;
-      color: black;
-      max-width: 200px;
-      display: none;
       z-index: 100;
-      box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+      display: none;
+      /* Sized by its text alone. Without this the bubble wraps narrower
+         the closer it gets to the right edge, which shifts it again. */
+      width: max-content;
+      max-width: var(--bubble-max-width);
+      padding: var(--space-2) var(--space-3);
+      border: var(--border-width) solid var(--surface-border);
+      border-radius: var(--radius);
+      font-family: var(--font);
+      font-size: var(--font-size-md);
+      line-height: var(--line-height);
+      color: var(--text-primary);
+      background-color: var(--surface);
+      box-shadow: var(--surface-shadow);
+      backdrop-filter: blur(var(--surface-blur));
       pointer-events: none;
     }
+
+    /* The tail: a small square turned 45° so one rounded corner points down
+       at the frog. Only its lower half is drawn (clip-path), so the
+       see-through navy isn't doubled where it overlaps the bubble.
+       overlay.js sets --bubble-tail-x so it sits above the frog's middle. */
     #speech-bubble::after {
       content: '';
       position: absolute;
-      bottom: -10px;
-      left: 20px;
-      border-width: 10px 10px 0;
-      border-style: solid;
-      border-color: white transparent;
-      display: block;
-      width: 0;
+      bottom: calc(var(--bubble-tail-size) / -2);
+      left: var(--bubble-tail-x, var(--space-5));
+      width: var(--bubble-tail-size);
+      height: var(--bubble-tail-size);
+      border-right: var(--border-width) solid var(--surface-border);
+      border-bottom: var(--border-width) solid var(--surface-border);
+      border-bottom-right-radius: var(--bubble-tail-radius);
+      background-color: var(--surface);
+      clip-path: polygon(100% 0, 100% 100%, 0 100%);
+      transform: translateX(-50%) rotate(45deg);
     }
   </style>
 </head>

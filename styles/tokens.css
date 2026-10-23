@@ -117,6 +117,13 @@
   --indicator-bg: var(--surface);
   --indicator-border: var(--surface-border);
   --indicator-bg-hover: var(--accent);
+
+  /* Speech bubble above the frog (spelling tips, bedtime message). */
+  --bubble-max-width: 220px;
+  /* Size of the little tail pointing down at the frog, and how rounded
+     its tip is. */
+  --bubble-tail-size: 12px;
+  --bubble-tail-radius: var(--space-1);
 }
 
 /* ============================

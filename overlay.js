@@ -28,13 +28,23 @@ const BUBBLE_GAP = 12;
 // True while the frog is being dragged (see controls/drag.js).
 let isDragging = false;
 
+// How far the bubble's tail must stay from the bubble's sides, so it never
+// lands on a rounded corner (--radius is 16px).
+const TAIL_EDGE_INSET = 24;
+
 // Keeps the speech bubble just above the frog, pulled left if it would
-// otherwise run off the right edge of the screen.
+// otherwise run off the right edge of the screen, with its tail above the
+// middle of the frog.
 function positionBubble() {
   const frog = spriteElement.getBoundingClientRect();
   const maxLeft = window.innerWidth - bubble.offsetWidth - BUBBLE_GAP;
-  bubble.style.left = Math.max(BUBBLE_GAP, Math.min(frog.left, maxLeft)) + 'px';
+  const left = Math.max(BUBBLE_GAP, Math.min(frog.left, maxLeft));
+  bubble.style.left = left + 'px';
   bubble.style.top = (frog.top - bubble.offsetHeight - BUBBLE_GAP) + 'px';
+
+  const frogCentre = frog.left + frog.width / 2 - left;
+  const tailX = Math.max(TAIL_EDGE_INSET, Math.min(frogCentre, bubble.offsetWidth - TAIL_EDGE_INSET));
+  bubble.style.setProperty('--bubble-tail-x', tailX + 'px');
 }
 
 // Runs every frame: steps the sprite animation and keeps the bubble in place.
