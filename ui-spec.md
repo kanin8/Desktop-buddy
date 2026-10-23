@@ -11,7 +11,7 @@ Built with: Electron
 - Always plan first and show the plan before editing any files. Wait for approval.
 - Build one step at a time (see Build order). Do not start the next step until the current one is tested and committed.
 - All colours, blur, opacity, corner radius, spacing and fonts live in ONE theme file as named variables. Never hardcode style values in components.
-- Any text the buddy shows the user must follow `voice-and-tone.md`.
+- Any text the buddy shows the user must follow `docs/voice-and-behaviour.md`.
 - Do not edit components owned by other group members without asking first (e.g. the to-do component).
 - Comment the code so non-programmers in the group can follow it.
 
@@ -80,7 +80,7 @@ Accessibility checks for every step:
 - The buddy's message appears in the same history column, closest to the frog.
 - Quick-reply buttons: **"Yes, help me!"** (accent) and **"Not now"** (secondary).
 - The message can be dismissed without answering, and fades out after a while if ignored (timing TBD).
-- Wording must follow `voice-and-tone.md` – avoid diagnosing the user ("you seem stuck").
+- Wording must follow `docs/voice-and-behaviour.md` – avoid diagnosing the user ("you seem stuck").
 
 ### 6. To-do overview
 - Styles the existing to-do component (built by another group member) using the theme file.
