@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Activity Detection</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f0f2f5;
+      margin: 0;
+      padding: 20px;
+      color: #333;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+    .current-status {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    .app-name {
+      font-size: 1.5rem;
+      font-weight: bold;
+      margin: 0;
+    }
+    .domain-name {
+      font-size: 1rem;
+      color: #666;
+      margin: 0;
+    }
+    .category-badge {
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+    .cat-productive { background: #e6fffa; color: #2c7a7b; border: 1px solid #81e6d9; }
+    .cat-leisure { background: #fffaf0; color: #b7791f; border: 1px solid #fbd38d; }
+    .cat-uncategorized { background: #edf2f7; color: #4a5568; border: 1px solid #cbd5e0; }
+
+    .event-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .event-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      border-bottom: 1px solid #eee;
+      font-size: 0.9rem;
+    }
+    .event-info {
+      display: flex;
+      flex-direction: column;
+    }
+    .event-time {
+      font-size: 0.75rem;
+      color: #999;
+    }
+    .override-section {
+      margin-top: 20px;
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+    .btn-cat {
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      cursor: pointer;
+      background: white;
+      font-size: 0.8rem;
+    }
+    .btn-cat:hover { background: #f9f9f9; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Activity Monitor</h1>
+
+    <div class="card current-status">
+      <p class="app-name" id="currentApp">Detecting...</p>
+      <p class="domain-name" id="currentDomain">-</p>
+      <div id="currentCategory" class="category-badge cat-uncategorized">Unknown</div>
+
+      <div class="override-section">
+        <button class="btn-cat" onclick="updateCat('productive')">Productive</button>
+        <button class="btn-cat" onclick="updateCat('leisure')">Leisure</button>
+        <button class="btn-cat" onclick="updateCat('uncategorized')">Uncategorized</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Recent Activity</h3>
+      <ul class="event-list" id="eventList"></ul>
+    </div>
+  </div>
+  <script src="activity.js"></script>
+</body>
+</html>

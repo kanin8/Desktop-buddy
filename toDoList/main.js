@@ -8,6 +8,12 @@
 const { app } = require('electron');
 const { createTodoWindow } = require('./todoWindow');
 
+// See the note in the host's main.js: without this the app aborts at startup on
+// machines where Chromium cannot spawn a GPU process. Guarded because Electron
+// throws if it is called once the app is ready.
+if (!app.isReady()) app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('disable-software-rasterizer');
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
