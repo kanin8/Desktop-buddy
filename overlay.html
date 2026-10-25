@@ -6,6 +6,7 @@
   <link rel="stylesheet" href="styles/tokens.css">
   <link rel="stylesheet" href="controls/controls.css">
   <link rel="stylesheet" href="chat/chat.css">
+  <link rel="stylesheet" href="nudge/nudge.css">
   <style>
     body {
       margin: 0;
@@ -152,6 +153,20 @@
     </form>
     <div id="chat-log" role="log" aria-label="Chat history" aria-live="polite" aria-relevant="additions text" tabindex="0"></div>
   </div>
+  <!-- The buddy's proactive message (nudge/nudge.js), placed in the chat
+       history's spot. Only the text is a live region, so screen readers read
+       the message without the buttons, and focus is never moved to it. -->
+  <div id="nudge" class="nudge" role="group" aria-label="Message from your buddy">
+    <div class="nudge-top">
+      <p class="nudge-text" role="status" aria-live="polite"></p>
+      <button class="nudge-close" type="button" aria-label="Dismiss">
+        <svg class="control-icon" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="nudge-replies"></div>
+  </div>
   <script src="avatar/config.js"></script>
   <script src="avatar/spriteAnimator.js"></script>
   <script src="controls/config.js"></script>
@@ -160,6 +175,8 @@
   <script src="controls/controls.js"></script>
   <script src="chat/config.js"></script>
   <script src="chat/chatLayout.js"></script>
+  <script src="nudge/config.js"></script>
+  <script src="nudge/nudge.js"></script>
   <script src="overlay.js"></script>
 </body>
 </html>

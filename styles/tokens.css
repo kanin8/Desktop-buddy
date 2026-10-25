@@ -56,6 +56,8 @@
   /* Secondary button ("Not now"): quieter than the accent button. */
   --button-secondary-bg: color-mix(in srgb, var(--white) 12%, transparent);
   --button-secondary-text: var(--text-primary);
+  /* A little lighter on hover; primary text on it stays about 5.5:1. */
+  --button-secondary-hover-bg: color-mix(in srgb, var(--white) 20%, transparent);
 
   /* Chat bubbles: the user's messages get a teal tint so they are easy
      to tell apart from the buddy's messages. */
@@ -158,6 +160,10 @@
   --disabled-opacity: 0.5;
   /* How long the frog takes to slide up to make room for the input bar. */
   --transition-lift: 200ms;
+
+  /* Proactive message (nudge): the small × in its corner. Timings live in
+     nudge/config.js, not here. */
+  --close-button-size: 24px;
 }
 
 /* ============================

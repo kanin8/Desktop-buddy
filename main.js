@@ -332,6 +332,14 @@ function triggerBedtime() {
   }
 }
 
+// Shows the buddy's default nudge (--test-nudge). With no text the overlay
+// uses the default line from nudge/config.js.
+function triggerTestNudge() {
+  if (overlayWin && !overlayWin.isDestroyed()) {
+    overlayWin.webContents.send('avatar-nudge', {});
+  }
+}
+
 // Bedtime check every minute
 setInterval(() => {
   const now = new Date();
@@ -621,6 +629,13 @@ app.whenReady().then(() => {
   if (process.argv.includes('--test-bedtime')) {
     console.log('Test mode: triggering bedtime...');
     setTimeout(triggerBedtime, 2000); // Give window time to load
+  }
+
+  // Test nudge trigger. Nothing sends real nudges yet: the detection branch
+  // will send the same 'avatar-nudge' message, optionally with its own text.
+  if (process.argv.includes('--test-nudge')) {
+    console.log('Test mode: sending a nudge...');
+    setTimeout(triggerTestNudge, 2000); // Give window time to load
   }
 });
 

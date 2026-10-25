@@ -84,11 +84,18 @@ Accessibility checks for every step:
 - Styles: `chat/chat.css`; placement: `chat/chatLayout.js`; chat logic (sending, streaming, errors, tasks): `overlay.js` (Maike).
 
 ### 5. Proactive message (nudge)
-- Before speaking, the frog's sprite changes (e.g. looks up or waves) so the message doesn't appear abruptly.
-- The buddy's message appears in the same history column, closest to the frog.
-- Quick-reply buttons: **"Yes, help me!"** (accent) and **"Not now"** (secondary).
-- The message can be dismissed without answering, and fades out after a while if ignored (timing TBD).
-- Wording must follow `docs/voice-and-behaviour.md` – avoid diagnosing the user ("you seem stuck").
+- Before speaking, the frog's sprite changes so the message doesn't appear abruptly. For now this reuses the click reaction (`standingClicked`); swap in a "looks up" or "talking" sprite in `nudge/config.js` when the artists make one.
+- The buddy's message appears in the history column's spot, closest to the frog (beside it near the top of the screen), as one bubble with a small × and quick-reply buttons.
+- Quick-reply buttons: **"Yes, help me!"** (accent) and **"Not now"** (secondary). The buttons come from a list in `nudge/config.js`, so more can be added later (e.g. the level 3 routing).
+  - Yes: opens the chat with the nudge and a follow-up line already in the history; focus in the input.
+  - Not now: a short back-off line, then it fades (4 s).
+- The message can be dismissed without answering (× or Escape), and fades out after 60 s if ignored. Hovering or focusing it pauses the timer.
+- It never takes keyboard focus from the app the user is in; screen readers announce the text. **Control + Option + B** jumps to the replies while a nudge is showing.
+- No nudge while the chat or menu is open. Opening the chat or menu, dragging the frog or snoozing closes a showing nudge.
+- While the chat or a nudge is showing, the spelling/bedtime speech bubble sits above it instead of right above the frog.
+- Wording must follow `docs/voice-and-behaviour.md` – avoid diagnosing the user ("you seem stuck"). The lines are in `nudge/config.js`.
+- Nothing sends real nudges yet: the detection branch decides when (triggers, cooldowns) and sends `avatar-nudge` with the text. Try it with `npm start -- --test-nudge`.
+- Files: `nudge/nudge.css`, `nudge/nudge.js`, `nudge/config.js`; placement shared with the chat in `chat/chatLayout.js`.
 
 ### 6. To-do overview
 - Styles the existing to-do component (built by another group member) using the theme file.
@@ -120,5 +127,6 @@ One Claude Code session and one commit per step. Screenshot before/after for the
 
 - ~~Can Electron blur what's behind the overlay window on our OS?~~ Answered: no, not for one full-screen window. The theme uses no blur.
 - ~~Exact keyboard shortcut for opening the controls.~~ Decided: Control + Option + B (see Hover).
-- How long ignored proactive messages stay before fading.
+- How long ignored proactive messages stay before fading. Starting value: 60 s (`nudge/config.js`), to test with users.
+- A proper sprite cue before a nudge ("looks up" or "talking"); the click reaction stands in for now.
 - Where exactly the frog sits if the user has a dock/taskbar on the right. (Partly solved: the user can drag the frog out of the way, and the spot is remembered.)

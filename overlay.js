@@ -16,6 +16,7 @@ const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
 const chatSend = document.getElementById('chat-send');
 const chatClose = document.getElementById('chat-close');
+const nudgeElement = document.getElementById('nudge');
 
 // Plays the sprite sheet onto the child element; #avatar itself stays the
 // invisible box the frog is centred in.
@@ -49,17 +50,26 @@ let isDragging = false;
 
 // Keeps the speech bubble just above the frog, pulled left if it would
 // otherwise run off the right edge of the screen, with its tail above the
-// middle of the frog.
+// middle of the frog. While the chat history or a nudge is showing above the
+// frog, the bubble goes above that instead, so they don't overlap.
 function positionBubble() {
-  const frog = spriteElement.getBoundingClientRect();
+  const anchor = getBubbleAnchorRect();
   const maxLeft = window.innerWidth - bubble.offsetWidth - BUBBLE_GAP;
-  const left = Math.max(BUBBLE_GAP, Math.min(frog.left, maxLeft));
+  const left = Math.max(BUBBLE_GAP, Math.min(anchor.left, maxLeft));
   bubble.style.left = left + 'px';
-  bubble.style.top = (frog.top - bubble.offsetHeight - BUBBLE_GAP) + 'px';
+  bubble.style.top = Math.max(BUBBLE_GAP, anchor.top - bubble.offsetHeight - BUBBLE_GAP) + 'px';
 
-  const frogCentre = frog.left + frog.width / 2 - left;
-  const tailX = Math.max(TAIL_EDGE_INSET, Math.min(frogCentre, bubble.offsetWidth - TAIL_EDGE_INSET));
+  const anchorCentre = anchor.left + anchor.width / 2 - left;
+  const tailX = Math.max(TAIL_EDGE_INSET, Math.min(anchorCentre, bubble.offsetWidth - TAIL_EDGE_INSET));
   bubble.style.setProperty('--bubble-tail-x', tailX + 'px');
+}
+
+// What the speech bubble sits on top of: the chat history, the nudge, or
+// the frog itself.
+function getBubbleAnchorRect() {
+  if (isChatOpen()) return chatLog.getBoundingClientRect();
+  if (nudge.isVisible()) return nudge.getRect();
+  return spriteElement.getBoundingClientRect();
 }
 
 // Runs every frame: steps the sprite animation and keeps everything attached
@@ -68,8 +78,10 @@ function positionBubble() {
 // frame would keep restarting the option's hide timer so it never hides.
 function update() {
   spriteAnimator.update(performance.now());
-  positionBubble();
   chatLayout.update();
+  if (nudge.isVisible()) chatLayout.placeInColumn(nudgeElement);
+  // After the chat and nudge, since the bubble goes above them.
+  positionBubble();
   controls.positionMenu();
   requestAnimationFrame(update);
 }
@@ -167,10 +179,15 @@ const controls = createBuddyControls(
   { avatar, pill, chatButton: pillChatButton, moreButton: pillMoreButton, menu: buddyMenu },
   getFrogRect,
   {
-    onChat: () => (isChatOpen() ? closeChat() : openChat()),
+    onChat: () => {
+      nudge.dismiss();
+      if (isChatOpen()) closeChat();
+      else openChat();
+    },
     onTodo: () => window.electronAPI.showTodoList(),
     onSettings: () => window.electronAPI.showSettings(),
     onSnooze: (choice) => {
+      nudge.dismiss();
       if (isChatOpen()) closeChat();
       window.electronAPI.snooze(choice);
     },
@@ -185,6 +202,68 @@ const chatLayout = createChatLayout(
   getFrogRect,
   isChatOpen
 );
+
+// The buddy's proactive message, in the chat history's spot. See
+// nudge/nudge.js; what each quick reply does is decided here.
+const nudge = createNudge(
+  {
+    nudge: nudgeElement,
+    text: nudgeElement.querySelector('.nudge-text'),
+    replies: nudgeElement.querySelector('.nudge-replies'),
+    close: nudgeElement.querySelector('.nudge-close'),
+  },
+  {
+    onReply: (id, text) => {
+      if (id === 'yes') acceptNudge(text);
+      else if (id === 'notNow') nudge.showBackOff();
+    },
+    // Not mid-drag: the overlay must keep catching the mouse until the drop.
+    onHidden: () => {
+      if (!isDragging) releaseIfIdle();
+    },
+  }
+);
+
+// "Yes, help me!": opens the chat with the nudge and a follow-up already in
+// the history, so the user can answer straight away in the input.
+// The chat opens before the nudge closes, so closing it doesn't hand focus
+// back to the other app (onHidden -> releaseIfIdle).
+function acceptNudge(text) {
+  controls.showPill();
+  openChat();
+  nudge.dismiss();
+  addChatLine(text, 'buddy');
+  addChatLine(window.NUDGE_CONFIG.helpLine, 'buddy');
+}
+
+// A nudge from the main process (detection later, --test-nudge for now).
+// The frog plays its cue first so the message doesn't pop up out of nowhere.
+// Skipped while the chat or menu is open: the user is already busy with the
+// buddy. The message waits for the cue's length rather than its onComplete,
+// because clicking the frog mid-cue restarts the animation with its own
+// callback and the message would be lost.
+function showNudge(message) {
+  if (isChatOpen() || controls.isMenuOpen()) return;
+  const { cueAnimation, defaultText } = window.NUDGE_CONFIG;
+  const text = message.text || defaultText;
+  spriteAnimator.play(cueAnimation, {
+    onComplete: () => spriteAnimator.play(DEFAULT_IMAGE_ANIMATION),
+  });
+  setTimeout(() => {
+    if (!isChatOpen() && !controls.isMenuOpen()) nudge.show(text);
+  }, getAnimationLengthMs(cueAnimation));
+}
+
+// How long one play of a sprite animation takes (avatar/config.js).
+function getAnimationLengthMs(name) {
+  const animation = window.AVATAR_SPRITE_CONFIG.animations[name];
+  return animation.frameCount * animation.frameDurationMs;
+}
+
+window.electronAPI.onNudge(showNudge);
+
+// Opening the menu makes room for it: the nudge would sit right beside it.
+pillMoreButton.addEventListener('click', () => nudge.dismiss());
 
 // Once nothing is open (no pill, menu or chat), hands the mouse and keyboard
 // straight back to the other apps. Without this the overlay stayed focused,
@@ -207,6 +286,7 @@ function isOverInteractiveArea(x, y) {
   if (controls.isMenuOpen() && rectsOverlap(x, y, buddyMenu.getBoundingClientRect())) return true;
   if (isChatOpen() && rectsOverlap(x, y, chatLog.getBoundingClientRect())) return true;
   if (isChatOpen() && rectsOverlap(x, y, chatForm.getBoundingClientRect())) return true;
+  if (nudge.isVisible() && rectsOverlap(x, y, nudge.getRect())) return true;
   return false;
 }
 
@@ -239,6 +319,9 @@ function handlePointerAt(x, y) {
 
   // Lights up the hover indicator under the frog.
   avatar.classList.toggle('is-hovered', isPointerOverFrog(x, y));
+
+  // A nudge doesn't fade away while the pointer is on it.
+  nudge.setPointerOver(nudge.isVisible() && rectsOverlap(x, y, nudge.getRect()));
 
   reevaluateHover();
 }
@@ -377,14 +460,17 @@ window.addEventListener('mousemove', (e) => handlePointerAt(e.clientX, e.clientY
 window.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (controls.handleEscape()) return;
-  if (isChatOpen()) closeChat();
+  if (nudge.isVisible()) nudge.dismiss();
+  else if (isChatOpen()) closeChat();
   else if (controls.isPillVisible()) controls.hidePill();
 });
 
 // The keyboard shortcut (registered in main.js) opens the pill without
-// hovering. main.js has already focused the overlay.
+// hovering, or jumps to the nudge's replies while one is showing. main.js has
+// already focused the overlay.
 window.electronAPI.onOpenControls(() => {
-  controls.openPinned();
+  if (nudge.isVisible()) nudge.focus();
+  else controls.openPinned();
   window.electronAPI.setIgnoreMouse(false);
 });
 
@@ -403,6 +489,8 @@ enableAvatarDrag(avatar, placementParts, (dragging) => {
   isDragging = dragging;
   // Dragging mid-chat: the drop spot wins over sliding back afterwards.
   if (dragging) chatLayout.forgetRestPosition();
+  // Moving the frog away counts as brushing the nudge off.
+  if (dragging) nudge.dismiss();
 });
 
 // The sprite must have its size before placing, since placement measures it.

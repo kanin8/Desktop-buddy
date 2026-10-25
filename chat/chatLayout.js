@@ -1,7 +1,8 @@
 // Places the AI chat around the frog: the input bar under the hover pill and
 // the message history above the frog's head (beside it near the top of the
-// screen). Only handles where things go and how they look; sending and
-// receiving messages is Maike's chat logic in overlay.js.
+// screen). The buddy's nudge uses the same spot. Only handles where things go
+// and how they look; sending and receiving messages is Maike's chat logic in
+// overlay.js.
 
 // Sets up the chat layout and returns the functions the overlay uses.
 // - elements: { avatar, history, form, pill }
@@ -77,46 +78,61 @@ function createChatLayout(elements, getFrogRect, isChatOpen) {
 
   // --- PLACEMENT ---
 
-  // Input bar centred under the pill; history just above the frog's head,
-  // or beside the frog when there's too little room above. Both are kept
-  // inside the screen margins.
+  // Input bar centred under the pill; history in the column spot (see
+  // getColumnSpot). Both are kept inside the screen margins.
   function placeChat() {
     const frog = getFrogRect();
     const margin = getScreenMargin();
     const gap = readLengthToken('--space-2');
-    const width = form.offsetWidth;
 
-    const frogCentre = (frog.left + frog.right) / 2;
-    const left = clamp(frogCentre - width / 2, margin, window.innerWidth - width - margin);
     const formTop = Math.min(
       pill.getBoundingClientRect().bottom + gap,
       window.innerHeight - form.offsetHeight - margin
     );
-    form.style.left = left + 'px';
+    form.style.left = getColumnLeft(frog, margin) + 'px';
     form.style.top = formTop + 'px';
+
+    placeHistory(getColumnSpot(history));
+  }
+
+  // Where something in the history column goes, for the history itself and
+  // the buddy's nudge: just above the frog's head, lined up with the input
+  // bar, or beside the frog when there's too little room above. Returns
+  // { left, bottom, room }: room is the most height available.
+  function getColumnSpot(element) {
+    const frog = getFrogRect();
+    const margin = getScreenMargin();
+    const gap = readLengthToken('--space-2');
 
     const roomAbove = frog.top - gap - margin;
     if (roomAbove >= historyMinHeightPx) {
-      placeHistory(left, frog.top - gap, roomAbove);
-    } else {
-      placeHistoryBesideFrog(frog, margin, gap);
+      return { left: getColumnLeft(frog, margin), bottom: frog.top - gap, room: roomAbove };
     }
+    return getSpotBesideFrog(element, frog, margin, gap);
+  }
+
+  // The column is centred on the frog, as wide as the input bar. Read from
+  // the theme, because the input bar is hidden while only a nudge shows.
+  function getColumnLeft(frog, margin) {
+    const width = readLengthToken('--chat-width');
+    const frogCentre = (frog.left + frog.right) / 2;
+    return clamp(frogCentre - width / 2, margin, window.innerWidth - width - margin);
   }
 
   // Beside the frog (left if it fits, otherwise right), with its bottom
   // level with the frog's feet so the newest message stays close to it.
-  function placeHistoryBesideFrog(frog, margin, gap) {
-    const width = history.offsetWidth;
+  function getSpotBesideFrog(element, frog, margin, gap) {
+    const width = element.offsetWidth;
     let left = frog.left - gap - width;
     if (left < margin) left = frog.right + gap;
     left = clamp(left, margin, window.innerWidth - width - margin);
-    placeHistory(left, frog.bottom, frog.bottom - margin);
+    return { left, bottom: frog.bottom, room: frog.bottom - margin };
   }
 
   // Positions the history by its bottom edge, so it grows upward as
   // messages arrive. The tallest it may get is the room available, capped
   // by the theme's maximum height.
-  function placeHistory(left, bottom, room) {
+  function placeHistory({ left, bottom, room }) {
     const maxHeight = Math.min(room, readLengthToken('--chat-history-max-height')) + 'px';
     if (history.style.maxHeight !== maxHeight) {
       // The column got taller or shorter (frog moved): keep the newest
@@ -126,6 +142,15 @@ function createChatLayout(elements, getFrogRect, isChatOpen) {
     }
     history.style.left = left + 'px';
     history.style.top = (bottom - history.offsetHeight) + 'px';
+  }
+
+  // Puts another element (the nudge) in the history's spot, bottom edge
+  // first, never above the top screen margin.
+  function placeInColumn(element) {
+    const { left, bottom } = getColumnSpot(element);
+    const top = Math.max(getScreenMargin(), bottom - element.offsetHeight);
+    element.style.left = left + 'px';
+    element.style.top = top + 'px';
   }
 
   function clamp(value, min, max) {
@@ -150,5 +175,6 @@ function createChatLayout(elements, getFrogRect, isChatOpen) {
   return {
     update,
     forgetRestPosition,
+    placeInColumn,
   };
 }

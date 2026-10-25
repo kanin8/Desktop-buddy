@@ -41,6 +41,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showTodoList: () => ipcRenderer.send('show-todolist'),
   snooze: (choice) => ipcRenderer.send('snooze', choice),
   onOpenControls: (callback) => ipcRenderer.on('open-controls', () => callback()),
+  // The buddy's proactive message (nudge/nudge.js). message is { text },
+  // and text may be left out to use the default line.
+  onNudge: (callback) => ipcRenderer.on('avatar-nudge', (event, message) => callback(message || {})),
 
   // General purpose (for the mouse-ignore logic)
   setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),
