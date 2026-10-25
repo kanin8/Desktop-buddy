@@ -28,16 +28,16 @@ Built with: Electron
 
 ## Visual style (starting point – expected to change)
 
-Direction: dark navy frosted glass with colourful accents.
+Direction: neutral dark grey glass with a teal accent.
 
 | Token | Starting value | Notes |
 |---|---|---|
-| `--surface` | navy, ~80% opacity | Glass panels. Keep opacity high enough for readability |
-| `--surface-blur` | ~16px | Only if blurring behind the window works in Electron on our OS – check first. Fallback: solid navy |
-| `--text-primary` | near-white | |
-| `--text-secondary` | light grey | Must still pass contrast on `--surface` |
+| `--surface` | dark grey `#1c1c1e`, 90% opacity | Glass panels, with a thin light edge and a soft shadow. Keep opacity high enough for readability |
+| (no blur) | – | Electron can't blur the desktop behind a full-screen see-through window, so there is no blur token |
+| `--text-primary` | near-white `#ededed` | About 10.8:1 on `--surface` over a white page (worst case) |
+| `--text-secondary` | light grey `#b8b8b8` | About 6.4:1 on `--surface`, 4.7:1 on a hovered menu row. Lighter than the mock-up's placeholder grey, which would fail AA |
 | `--accent` | teal | Primary buttons, active states |
-| `--accent-text` | dark navy | Text/icons ON accent buttons (white on light teal fails contrast) |
+| `--accent-text` | dark teal | Text/icons ON accent buttons, 7.2:1 (white on light teal fails contrast) |
 | `--radius` | large, rounded | Matches the soft, friendly frog |
 | `--font` | one sans-serif | |
 
@@ -113,7 +113,7 @@ One Claude Code session and one commit per step. Screenshot before/after for the
 
 ## Open questions
 
-- Can Electron blur what's behind the overlay window on our OS? (Ask Claude Code in plan mode before step 1.)
+- ~~Can Electron blur what's behind the overlay window on our OS?~~ Answered: no, not for one full-screen window. The theme uses no blur.
 - ~~Exact keyboard shortcut for opening the controls.~~ Decided: Control + Option + B (see Hover).
 - How long ignored proactive messages stay before fading.
 - Where exactly the frog sits if the user has a dock/taskbar on the right. (Partly solved: the user can drag the frog out of the way, and the spot is remembered.)

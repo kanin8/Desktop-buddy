@@ -39,7 +39,7 @@
     /* ============================
        Speech bubble
        ============================
-       Navy glass bubble above the frog, used by the spelling and bedtime
+       Dark glass bubble above the frog, used by the spelling and bedtime
        messages. overlay.js shows/hides it (display) and positions it.
        All values come from styles/tokens.css. */
     #speech-bubble {
@@ -59,13 +59,12 @@
       color: var(--text-primary);
       background-color: var(--surface);
       box-shadow: var(--surface-shadow);
-      backdrop-filter: blur(var(--surface-blur));
       pointer-events: none;
     }
 
     /* The tail: a small square turned 45° so one rounded corner points down
        at the frog. Only its lower half is drawn (clip-path), so the
-       see-through navy isn't doubled where it overlaps the bubble.
+       see-through grey isn't doubled where it overlaps the bubble.
        overlay.js sets --bubble-tail-x so it sits above the frog's middle. */
     #speech-bubble::after {
       content: '';

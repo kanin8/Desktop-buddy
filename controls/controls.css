@@ -46,7 +46,6 @@
   border-radius: var(--radius-pill);
   background-color: var(--surface);
   box-shadow: var(--surface-shadow);
-  backdrop-filter: blur(var(--surface-blur));
   visibility: hidden;
   opacity: 0;
   /* Hiding: fade out first, then become hidden (unfocusable). */
@@ -104,7 +103,6 @@
   line-height: var(--line-height);
   background-color: var(--surface);
   box-shadow: var(--surface-shadow);
-  backdrop-filter: blur(var(--surface-blur));
 }
 
 .menu-item {

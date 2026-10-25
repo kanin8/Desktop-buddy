@@ -8,12 +8,12 @@
    use the named tokens further down instead. To change the look, edit
    the values here. */
 :root {
-  --navy-900: #0f1b2d;
+  --grey-900: #1c1c1e;
   --teal-300: #4fd1bc;
   --teal-400: #2fbfa9;
   --teal-950: #06231f;
-  --grey-100: #f2f5f8;
-  --grey-300: #b8c4d0;
+  --grey-100: #ededed;
+  --grey-300: #b8b8b8;
   --white: #ffffff;
   --black: #000000;
 }
@@ -24,25 +24,22 @@
    The names components use (e.g. "the colour of a panel"). A future light
    mode only needs to give these names new values in a second block. */
 :root {
-  /* Glass panels (menu, chat bubbles, nudges). 90% opacity, because
-     80% let busy or white backgrounds show through so much that teal
-     text dropped below the readable contrast level (WCAG AA). */
+  /* Glass panels (menu, chat bubbles, nudges): a neutral dark grey.
+     90% opacity, because 80% let busy or white backgrounds show through
+     so much that text dropped below the readable contrast level (WCAG AA).
+     No blur: the buddy lives in one see-through window covering the whole
+     screen, and CSS blur can't reach the desktop behind it. */
   --surface-opacity: 0.9;
-  --surface: color-mix(in srgb, var(--navy-900) calc(var(--surface-opacity) * 100%), transparent);
-
-  /* Blur is off on purpose. The buddy lives in one see-through window
-     that covers the whole screen. CSS blur only blurs things inside our
-     own page, not the desktop behind it, and the operating system's blur
-     would frost the entire screen. Keep this at 0px unless panels move
-     into their own small windows. */
-  --surface-blur: 0px;
+  --surface: color-mix(in srgb, var(--grey-900) calc(var(--surface-opacity) * 100%), transparent);
 
   /* A faint light edge so panels stand out on dark wallpapers. */
   --surface-border: color-mix(in srgb, var(--white) 12%, transparent);
-  --surface-shadow: 0 4px 16px color-mix(in srgb, var(--black) 30%, transparent);
+  /* Soft, wide shadow that lifts panels off light backgrounds. */
+  --surface-shadow: 0 8px 24px color-mix(in srgb, var(--black) 35%, transparent);
 
   /* Text on panels. Contrast measured against --surface over a white page
-     (the worst case): primary about 12:1, secondary about 7:1. AA needs 4.5:1. */
+     (the worst case): primary about 10.8:1, secondary about 6.4:1, and
+     secondary on a hovered menu row about 4.7:1. AA needs 4.5:1. */
   --text-primary: var(--grey-100);
   --text-secondary: var(--grey-300);
 
@@ -51,7 +48,7 @@
   --accent: var(--teal-400);
   --accent-hover: var(--teal-300);
 
-  /* Text and icons placed ON the teal accent. Dark navy gives 7.2:1;
+  /* Text and icons placed ON the teal accent. Dark teal gives 7.2:1;
      white would only be 2.3:1 and fail. */
   --accent-text: var(--teal-950);
 
@@ -110,7 +107,7 @@
   --buddy-screen-margin: var(--space-5);
 
   /* Hover indicator: the small oval under the frog's feet that hints
-     controls appear on hover. Navy with a light edge so it shows on both
+     controls appear on hover. Dark grey with a light edge so it shows on both
      white documents and dark wallpapers; teal while the frog is hovered. */
   --indicator-width: 28px;
   --indicator-height: 6px;
