@@ -7,7 +7,8 @@
 // them.
 // - elements: { avatar, pill, chatButton, moreButton, menu }
 // - getFrogRect(): the visible frog's rectangle, used to place the menu
-// - actions: { onChat, onTodo, onSettings, onSnooze(choice) }
+// - actions: { onChat, onTodo, onSettings, onSnooze(choice), onHidden }
+//   onHidden runs every time the pill hides, however it was closed.
 function createBuddyControls(elements, getFrogRect, actions) {
   const { avatar, pill, chatButton, moreButton, menu } = elements;
   const { pillHideDelayMs } = window.CONTROLS_CONFIG;
@@ -42,6 +43,7 @@ function createBuddyControls(elements, getFrogRect, actions) {
     isPinned = false;
     pill.classList.remove('is-visible');
     avatar.classList.remove('is-pill-visible');
+    actions.onHidden();
   }
 
   // Hides the pill after a short delay, unless shouldStayOpen() says otherwise

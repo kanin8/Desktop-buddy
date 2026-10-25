@@ -207,6 +207,10 @@ function createOverlayWindow() {
     skipTaskbar: true,
     resizable: false,
     movable: false,
+    // macOS: a panel can take keyboard focus (the chat input, the shortcut)
+    // without making the buddy the active app, so the app the user was in
+    // keeps its menu bar and Copy/Paste. Other platforms ignore this.
+    type: process.platform === 'darwin' ? 'panel' : undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -217,7 +221,9 @@ function createOverlayWindow() {
   overlayWin.setAlwaysOnTop(true, 'screen-saver');
   overlayWin.setIgnoreMouseEvents(true, { forward: true });
   overlayWin.loadFile('overlay.html');
-  overlayWin.show();
+  // Inactive, so starting the buddy doesn't take the keyboard from the app
+  // the user is typing in.
+  overlayWin.showInactive();
 
   // Push cursor positions to the overlay so the hover affordance works without
   // depending on forwarded DOM mouse events.
@@ -527,7 +533,7 @@ ipcMain.on('toggle-avatar', () => {
     if (!overlayWin.isDestroyed() && overlayWin.isVisible()) {
       overlayWin.hide();
     } else {
-      overlayWin.show();
+      overlayWin.showInactive();
     }
   }
 
@@ -537,6 +543,14 @@ ipcMain.on('toggle-avatar', () => {
 ipcMain.on('set-ignore-mouse', (event, ignore) => {
   if (overlayWin && !overlayWin.isDestroyed()) {
     overlayWin.setIgnoreMouseEvents(ignore, { forward: true });
+  }
+});
+
+// Sent when the pill, menu and chat have all closed: the overlay stops
+// holding keyboard focus, so typing goes back to the app the user was in.
+ipcMain.on('release-focus', () => {
+  if (overlayWin && !overlayWin.isDestroyed() && overlayWin.isFocused()) {
+    overlayWin.blur();
   }
 });
 

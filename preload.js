@@ -44,6 +44,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // General purpose (for the mouse-ignore logic)
   setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),
+  // Gives keyboard focus back to the app the user was in.
+  releaseFocus: () => ipcRenderer.send('release-focus'),
 
   // The main process polls the global cursor and pushes its position here.
   // This is the reliable hover signal for a click-through overlay, which cannot

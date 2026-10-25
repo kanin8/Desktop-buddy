@@ -190,8 +190,20 @@ const controls = createBuddyControls(
       if (isChatOpen()) closeChat();
       window.electronAPI.snooze(choice);
     },
+    onHidden: () => releaseIfIdle(),
   }
 );
+
+// Once nothing is open (no pill, menu or chat), hands the mouse and keyboard
+// straight back to the other apps. Without this the overlay stayed focused,
+// and stayed in the way of clicks until the pointer happened to move.
+// Doesn't check the pointer: if it's on the frog, the next move makes the frog
+// clickable again (handlePointerAt).
+function releaseIfIdle() {
+  if (controls.isPillVisible() || controls.isMenuOpen() || isChatOpen()) return;
+  window.electronAPI.setIgnoreMouse(true);
+  window.electronAPI.releaseFocus();
+}
 
 function rectsOverlap(x, y, rect) {
   return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
@@ -302,6 +314,7 @@ function closeChat() {
   controls.setChatActive(false);
   chatPanel.style.display = 'none';
   chatInput.value = '';
+  releaseIfIdle();
 }
 
 function submitChat(e) {
@@ -366,19 +379,13 @@ window.electronAPI.onCursorMove((pos) => handlePointerAt(pos.x - window.screenX,
 // Feeding both through one handler keeps the interaction consistent everywhere.
 window.addEventListener('mousemove', (e) => handlePointerAt(e.clientX, e.clientY));
 
-// Hides the pill and lets the overlay go click-through again wherever the
-// pointer now is.
-function closeControls() {
-  controls.hidePill();
-  handlePointerAt(lastX, lastY);
-}
-
 // Escape closes one level at a time: snooze choices -> menu -> chat -> pill.
+// Hiding the pill releases the mouse and keyboard (onHidden -> releaseIfIdle).
 window.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (controls.handleEscape()) return;
   if (isChatOpen()) closeChat();
-  else if (controls.isPillVisible()) closeControls();
+  else if (controls.isPillVisible()) controls.hidePill();
 });
 
 // The keyboard shortcut (registered in main.js) opens the pill without
@@ -392,7 +399,7 @@ window.electronAPI.onOpenControls(() => {
 // pill that was opened by the shortcut. An open chat stays, as before.
 window.addEventListener('blur', () => {
   controls.closeMenu();
-  if (controls.isPinned() && !isChatOpen()) closeControls();
+  if (controls.isPinned() && !isChatOpen()) controls.hidePill();
 });
 
 // Re-place on resize (e.g. a resolution change) so the frog can't end up off
