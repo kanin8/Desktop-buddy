@@ -18,6 +18,9 @@ function enableAvatarDrag(avatar, visibleParts, onDragStateChange) {
 
   avatar.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
+    // The hover pill lives inside the frog's box; pressing its buttons must
+    // not start a drag.
+    if (event.target.closest('[data-no-drag]')) return;
 
     // Capturing keeps the move events coming even when a fast drag gets ahead
     // of the frog and the pointer is briefly outside it.

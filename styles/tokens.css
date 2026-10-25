@@ -66,6 +66,7 @@
 
   /* Outline shown around whatever has keyboard focus. */
   --focus-ring: var(--accent);
+  --focus-ring-width: 2px;
 
   /* Rounded corners. Large and soft to match the friendly frog. */
   --radius: 16px;
@@ -124,6 +125,18 @@
      its tip is. */
   --bubble-tail-size: 12px;
   --bubble-tail-radius: var(--space-1);
+
+  /* Hover pill (Chat + More) that takes the indicator's place on hover. */
+  --pill-button-width: 40px;
+  --pill-button-height: 28px;
+  --icon-size: 16px;
+
+  /* The More menu beside the frog. */
+  --menu-width: 200px;
+  /* Soft light tint behind a hovered or focused menu item. */
+  --surface-hover: color-mix(in srgb, var(--white) 10%, transparent);
+  /* Thin line between groups of menu items. */
+  --divider: color-mix(in srgb, var(--white) 12%, transparent);
 }
 
 /* ============================

@@ -57,15 +57,16 @@ Accessibility checks for every step:
 - Clicking and hovering still work normally: a drag only starts after the pointer moves a few pixels with the button held.
 
 ### 2. Hover
-- Hovering the frog reveals a small pill with two buttons: **Chat** and **More (…)**.
-- Pill disappears shortly after the mouse leaves.
-- Keyboard shortcut opens the same controls (shortcut TBD).
+- Hovering the frog reveals a small pill with two buttons: **Chat** and **More (…)**. The pill appears in the indicator's place under the frog's feet, so the indicator "expands" into it.
+- The pill replaces the earlier "Ask the buddy" option; Chat opens the same AI chat.
+- Pill disappears shortly after the mouse leaves (400 ms), but stays while the chat or menu is open.
+- Keyboard shortcut opens the same controls: **Control + Option + B** on macOS, **Ctrl + Alt + B** on Windows/Linux (set in `config.js`). Cmd+Option+B was avoided because it is "bookmarks" in Safari and Chrome. Inside the controls: Tab between buttons, ↑/↓ in the menu, → / ← into and out of the snooze choices, Escape closes one level at a time.
 
 ### 3. Menu (More …)
 - Small glass panel with:
   - To-do
   - Settings
-  - Snooze → 30 min / 1 hour / until tomorrow
+  - Snooze → 30 min / 1 hour / until tomorrow ("until tomorrow" = 08:00 the next day, set in `config.js`). The tray's Start Avatar or the shortcut ends a snooze early. A snooze is not remembered if the app restarts.
 - No "Close buddy" here. Full quit lives in Settings.
 - The active function is highlighted in the pill (accent colour).
 
@@ -113,6 +114,6 @@ One Claude Code session and one commit per step. Screenshot before/after for the
 ## Open questions
 
 - Can Electron blur what's behind the overlay window on our OS? (Ask Claude Code in plan mode before step 1.)
-- Exact keyboard shortcut for opening the controls.
+- ~~Exact keyboard shortcut for opening the controls.~~ Decided: Control + Option + B (see Hover).
 - How long ignored proactive messages stay before fading.
 - Where exactly the frog sits if the user has a dock/taskbar on the right. (Partly solved: the user can drag the frog out of the way, and the spot is remembered.)

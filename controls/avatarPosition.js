@@ -19,10 +19,16 @@ function getVisibleOffsets(avatar, visibleParts) {
   };
 }
 
+// Reads a length token (e.g. '--space-2') from the theme file as a number of
+// pixels, so JS placement uses the same values as the stylesheets.
+function readLengthToken(name) {
+  const rootStyles = getComputedStyle(document.documentElement);
+  return parseFloat(rootStyles.getPropertyValue(name));
+}
+
 // Reads the corner margin from the theme file, so the gap is set in one place.
 function getScreenMargin() {
-  const rootStyles = getComputedStyle(document.documentElement);
-  return parseFloat(rootStyles.getPropertyValue('--buddy-screen-margin'));
+  return readLengthToken('--buddy-screen-margin');
 }
 
 // The box position that puts the visible frog in the bottom-right corner.

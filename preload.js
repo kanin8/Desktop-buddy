@@ -36,6 +36,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAISettings: () => ipcRenderer.invoke('ai-get-settings'),
   setAISettings: (patch) => ipcRenderer.invoke('ai-set-settings', patch),
 
+  // Hover pill and More menu (controls/controls.js).
+  showSettings: () => ipcRenderer.send('show-settings'),
+  showTodoList: () => ipcRenderer.send('show-todolist'),
+  snooze: (choice) => ipcRenderer.send('snooze', choice),
+  onOpenControls: (callback) => ipcRenderer.on('open-controls', () => callback()),
+
   // General purpose (for the mouse-ignore logic)
   setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),
 

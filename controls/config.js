@@ -9,4 +9,8 @@ window.CONTROLS_CONFIG = {
 
   // Name under which the dragged position is saved between launches.
   positionStorageKey: 'buddy.avatarPosition',
+
+  // How long the hover pill stays after the pointer leaves the frog, so the
+  // pointer can travel to it (or to the menu) without it vanishing.
+  pillHideDelayMs: 400,
 };

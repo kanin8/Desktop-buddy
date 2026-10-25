@@ -1,4 +1,4 @@
-const { app, BrowserWindow, screen, Tray, Menu, nativeImage, ipcMain } = require('electron');
+const { app, BrowserWindow, screen, Tray, Menu, nativeImage, ipcMain, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -432,7 +432,94 @@ ipcMain.handle('save-ai-config', async (event, config) => {
   return { success: true };
 });
 
+// --- SNOOZE ---
+// "Snooze" in the buddy's More menu hides it for a while. Only one snooze runs
+// at a time, and bringing the buddy back any other way (tray, shortcut)
+// cancels it.
+let snoozeTimer = null;
+
+// Milliseconds until the chosen snooze ends, or undefined for an unknown
+// choice. 'tomorrow' means the next day at CONFIG.SNOOZE_TOMORROW_HOUR.
+function getSnoozeDurationMs(choice, now = new Date()) {
+  if (choice === 'tomorrow') {
+    const wakeAt = new Date(now);
+    wakeAt.setDate(wakeAt.getDate() + 1);
+    wakeAt.setHours(CONFIG.SNOOZE_TOMORROW_HOUR, 0, 0, 0);
+    return wakeAt - now;
+  }
+  return CONFIG.SNOOZE_DURATIONS_MS[choice];
+}
+
+function cancelSnooze() {
+  if (snoozeTimer) {
+    clearTimeout(snoozeTimer);
+    snoozeTimer = null;
+  }
+}
+
+// Ends a snooze. showInactive() so the buddy reappearing never steals focus
+// from whatever the user is typing in.
+function wakeFromSnooze() {
+  snoozeTimer = null;
+  if (overlayWin && !overlayWin.isDestroyed()) overlayWin.showInactive();
+  ipcMain.emit('avatar-state-changed');
+}
+
+ipcMain.on('snooze', (event, choice) => {
+  const durationMs = getSnoozeDurationMs(choice);
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return;
+  if (!overlayWin || overlayWin.isDestroyed()) return;
+
+  cancelSnooze();
+  overlayWin.hide();
+  snoozeTimer = setTimeout(wakeFromSnooze, durationMs);
+  ipcMain.emit('avatar-state-changed');
+});
+
+// --- MORE MENU ACTIONS ---
+ipcMain.on('show-settings', () => {
+  if (!settingsWin || settingsWin.isDestroyed()) return;
+  settingsWin.show();
+  settingsWin.focus();
+});
+
+// Opens the to-do panel, but never closes it: unlike the tray's toggle, the
+// menu item always means "show me my to-do list".
+ipcMain.on('show-todolist', () => {
+  if (isTodoWindowVisible()) return;
+  createTodoWindow({ onClose: closeTodoPanel });
+  ipcMain.emit('todolist-state-changed');
+});
+
+// --- CONTROLS SHORTCUT ---
+// The overlay is click-through and never has focus, so a global shortcut is
+// the keyboard way in. It wakes a snoozed buddy (the user stays in control),
+// focuses the overlay and asks it to open the controls.
+function openControlsFromShortcut() {
+  if (!overlayWin || overlayWin.isDestroyed()) return;
+
+  cancelSnooze();
+  if (!overlayWin.isVisible()) {
+    overlayWin.show();
+    ipcMain.emit('avatar-state-changed');
+  }
+  overlayWin.setIgnoreMouseEvents(false);
+  overlayWin.focus();
+  overlayWin.webContents.send('open-controls');
+}
+
+// Registration fails when another app already owns the shortcut. Hover still
+// works then, so this only warns.
+function registerControlsShortcut() {
+  const isRegistered = globalShortcut.register(CONFIG.CONTROLS_SHORTCUT, openControlsFromShortcut);
+  if (!isRegistered) {
+    console.warn(`Controls shortcut ${CONFIG.CONTROLS_SHORTCUT} is taken by another app; hover the buddy instead.`);
+  }
+}
+
 ipcMain.on('toggle-avatar', () => {
+  // Showing or hiding the buddy by hand overrides any snooze in progress.
+  cancelSnooze();
 
   if (!overlayWin) {
     createOverlayWindow();
@@ -488,7 +575,7 @@ ipcMain.on('todolist-state-changed', broadcastTodoState);
 
 // --- AI TASK BREAKDOWN ---
 // Requests run in the main process so the API key never reaches a renderer.
-// The overlay chat (hover the avatar, click "Ask the buddy") is the only
+// The overlay chat (hover the avatar, click Chat in the pill) is the only
 // consumer.
 registerAiIpc();
 
@@ -504,6 +591,7 @@ app.whenReady().then(() => {
 
   // Start the avatar by default
   createOverlayWindow();
+  registerControlsShortcut();
 
   // Initialize Activity Detection
   const activityHandlers = new ActivityIPCHandlers();
@@ -520,6 +608,11 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   isQuitting = true;
+});
+
+// Global shortcuts outlive the app on some systems unless released.
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });
 
 app.on('window-all-closed', () => {

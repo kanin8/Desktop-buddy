@@ -6,7 +6,10 @@
 const avatar = document.getElementById('avatar');
 const bubble = document.getElementById('speech-bubble');
 const hoverIndicator = document.getElementById('hover-indicator');
-const bubbleOption = document.getElementById('bubble-option');
+const pill = document.getElementById('buddy-pill');
+const pillChatButton = document.getElementById('pill-chat');
+const pillMoreButton = document.getElementById('pill-more');
+const buddyMenu = document.getElementById('buddy-menu');
 const chatPanel = document.getElementById('chat-panel');
 const chatLog = document.getElementById('chat-log');
 const chatForm = document.getElementById('chat-form');
@@ -19,9 +22,13 @@ const chatClose = document.getElementById('chat-close');
 const spriteElement = document.getElementById('avatar-sprite');
 const spriteAnimator = new SpriteAnimator(spriteElement);
 
-// What the user actually sees of the frog. Hover, dragging and placement use
-// these instead of the larger, empty #avatar box.
+// What the user actually sees of the frog. Hover uses these instead of the
+// larger, empty #avatar box.
 const visibleParts = [spriteElement, hoverIndicator];
+
+// Placement and dragging also count the hover pill, even while it's hidden,
+// so the frog is kept far enough from the screen edge for the pill to fit.
+const placementParts = [spriteElement, hoverIndicator, pill];
 
 // The animation shown while the frog is at rest.
 const DEFAULT_IMAGE_ANIMATION = 'idle';
@@ -55,14 +62,6 @@ function positionBubble() {
   bubble.style.setProperty('--bubble-tail-x', tailX + 'px');
 }
 
-// Keeps the "Ask the buddy" option just above the frog's head, on screen.
-function positionOption() {
-  const frog = spriteElement.getBoundingClientRect();
-  const maxLeft = window.innerWidth - bubbleOption.offsetWidth - BUBBLE_GAP;
-  bubbleOption.style.left = Math.max(BUBBLE_GAP, Math.min(frog.left, maxLeft)) + 'px';
-  bubbleOption.style.top = (frog.top - bubbleOption.offsetHeight - BUBBLE_GAP) + 'px';
-}
-
 // Keeps the chat panel above the frog, flipping below it when there is no
 // room above, and clamped to the screen.
 function positionChat() {
@@ -86,8 +85,8 @@ function positionChat() {
 function update() {
   spriteAnimator.update(performance.now());
   positionBubble();
-  positionOption();
   positionChat();
+  controls.positionMenu();
   requestAnimationFrame(update);
 }
 
@@ -129,6 +128,12 @@ function getHitTargets() {
   return spriteElement.offsetWidth > 0 ? visibleParts : [avatar];
 }
 
+// True for clicks that land on the hover pill, which sits inside the frog's
+// box but isn't the frog.
+function isFromControls(event) {
+  return Boolean(event.target.closest('[data-no-drag]'));
+}
+
 // True when the point is over any visible part of the frog.
 function isPointerOverFrog(x, y) {
   return getHitTargets().some((element) => rectsOverlap(x, y, element.getBoundingClientRect()));
@@ -149,7 +154,8 @@ function getFrogRect() {
 // returning to the idle loop. Clicking again mid-reaction restarts it from the
 // top, which feels more responsive than queueing or ignoring it.
 // The listener sits on #avatar because #avatar-sprite is pointer-events: none.
-avatar.addEventListener('click', () => {
+avatar.addEventListener('click', (event) => {
+  if (isFromControls(event)) return;
   spriteAnimator.play(CLICK_ANIMATION, {
     onComplete: () => spriteAnimator.play(DEFAULT_IMAGE_ANIMATION),
   });
@@ -160,9 +166,9 @@ avatar.addEventListener('click', () => {
 // only interactive region is the frog plus whatever is attached to it: the
 // hover affordance, and the chat panel once it is open.
 //
-// Flow: hover the frog -> a clickable option appears -> click it -> the chat
-// opens. Clicking the frog also reveals the option (not the chat), so the
-// feature is reachable even when the pointer never triggers the hover.
+// Flow: hover the frog -> the pill (Chat + More) appears in the indicator's
+// place -> Chat opens the chat, More opens the menu. Clicking the frog also
+// reveals the pill, and so does the keyboard shortcut (see main.js).
 // Everything else passes clicks through.
 //
 // The hover signal comes from the main process (see `onCursorMove`), not from
@@ -170,51 +176,39 @@ avatar.addEventListener('click', () => {
 // moves on some platforms, so relying on them left this flow dead on Linux.
 
 const isChatOpen = () => chatPanel.style.display === 'flex';
-// Compared against 'flex' rather than "not none": the hidden state comes from
-// the stylesheet, so a never-toggled element has an empty inline display and
-// would otherwise look visible.
-const isOptionVisible = () => bubbleOption.style.display === 'flex';
 
-// The pointer needs a moment to travel from the frog up to the option, so the
-// option is given a short grace period before it disappears.
-const OPTION_GRACE_MS = 400;
-let optionHideTimer = null;
+// The pill and menu. Chat toggles Maike's chat panel; the menu items call the
+// main process. See controls/controls.js.
+const controls = createBuddyControls(
+  { avatar, pill, chatButton: pillChatButton, moreButton: pillMoreButton, menu: buddyMenu },
+  getFrogRect,
+  {
+    onChat: () => (isChatOpen() ? closeChat() : openChat()),
+    onTodo: () => window.electronAPI.showTodoList(),
+    onSettings: () => window.electronAPI.showSettings(),
+    onSnooze: (choice) => {
+      if (isChatOpen()) closeChat();
+      window.electronAPI.snooze(choice);
+    },
+  }
+);
 
 function rectsOverlap(x, y, rect) {
   return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
 }
 
-// The option sits just above the frog's head. Without treating the strip
-// between them as interactive, the pointer crosses dead space on its way up and
-// the option vanishes before it can be clicked.
-function isInBridge(x, y) {
-  if (isChatOpen() || !isOptionVisible()) return false;
-  const frogRect = getFrogRect();
-  const optionRect = bubbleOption.getBoundingClientRect();
-  if (!optionRect.height) return false;
-  const left = Math.min(frogRect.left, optionRect.left);
-  const right = Math.max(frogRect.right, optionRect.right);
-  return x >= left && x <= right && y >= optionRect.bottom && y <= frogRect.top;
-}
-
 function isOverInteractiveArea(x, y) {
   if (isPointerOverFrog(x, y)) return true;
-  if (isOptionVisible() && rectsOverlap(x, y, bubbleOption.getBoundingClientRect())) return true;
+  if (controls.isPillVisible() && rectsOverlap(x, y, pill.getBoundingClientRect())) return true;
+  if (controls.isMenuOpen() && rectsOverlap(x, y, buddyMenu.getBoundingClientRect())) return true;
   if (isChatOpen() && rectsOverlap(x, y, chatPanel.getBoundingClientRect())) return true;
   return false;
 }
 
-function showOption() {
-  if (optionHideTimer) { clearTimeout(optionHideTimer); optionHideTimer = null; }
-  if (!isChatOpen() && !isOptionVisible()) bubbleOption.style.display = 'flex';
-}
-
-function hideOptionSoon() {
-  if (optionHideTimer) clearTimeout(optionHideTimer);
-  optionHideTimer = setTimeout(() => {
-    optionHideTimer = null;
-    if (!isChatOpen() && !isOverInteractiveArea(lastX, lastY)) bubbleOption.style.display = 'none';
-  }, OPTION_GRACE_MS);
+// The pill stays while a function is in use (chat or menu open), or while the
+// pointer is on something clickable.
+function shouldKeepPillOpen() {
+  return isChatOpen() || controls.isMenuOpen() || isOverInteractiveArea(lastX, lastY);
 }
 
 // Last known pointer position, so the grace timer can re-check where the pointer
@@ -232,7 +226,7 @@ function handlePointerAt(x, y) {
   // ahead of the frog, and turning click-through on then would drop it.
   if (isDragging) return;
 
-  const over = isOverInteractiveArea(x, y) || isInBridge(x, y);
+  const over = isOverInteractiveArea(x, y);
   // Keep the overlay interactive only while the pointer is over something the
   // user can actually click; everywhere else stays click-through. Only sent
   // here (not on every animation frame) so a still pointer does not spam IPC.
@@ -244,19 +238,15 @@ function handlePointerAt(x, y) {
   reevaluateHover();
 }
 
-// Recomputes the hover affordance from the last known pointer position. Safe to
-// call every frame: it only touches the option's visibility, never IPC.
+// Shows the pill while the pointer is on the frog, and starts the delayed hide
+// once it's on nothing clickable. Never touches IPC.
 function reevaluateHover() {
-  if (isChatOpen() || isDragging) return;
+  if (isDragging) return;
 
-  const over = isOverInteractiveArea(lastX, lastY) || isInBridge(lastX, lastY);
-  const overFrog = isPointerOverFrog(lastX, lastY);
-
-  if (over) {
-    if (optionHideTimer) { clearTimeout(optionHideTimer); optionHideTimer = null; }
-    if (overFrog) showOption();
-  } else if (isOptionVisible()) {
-    hideOptionSoon();
+  if (isPointerOverFrog(lastX, lastY)) {
+    controls.showPill();
+  } else if (!isOverInteractiveArea(lastX, lastY)) {
+    controls.hidePillSoon(shouldKeepPillOpen);
   }
 }
 
@@ -298,8 +288,7 @@ function endExchange() {
 }
 
 function openChat() {
-  bubbleOption.style.display = 'none';
-  if (optionHideTimer) { clearTimeout(optionHideTimer); optionHideTimer = null; }
+  controls.setChatActive(true);
   chatPanel.style.display = 'flex';
   chatInput.focus();
   // The chat is open, so the overlay must stay interactive even before the
@@ -310,6 +299,7 @@ function openChat() {
 function closeChat() {
   window.electronAPI.cancelAI();
   endExchange();
+  controls.setChatActive(false);
   chatPanel.style.display = 'none';
   chatInput.value = '';
 }
@@ -358,11 +348,11 @@ window.electronAPI.onAITasksFailed((message) => {
   addChatLine('Could not break that down: ' + message, 'error');
 });
 
-bubbleOption.addEventListener('click', openChat);
-// Clicking the frog is a hover-independent way to reveal the affordance, not
-// to open the chat directly, so an accidental click doesn't pop the chat open.
-// The deliberate second click is on the option.
-avatar.addEventListener('click', showOption);
+// Clicking the frog is a hover-independent way to reveal the pill, not to open
+// the chat directly, so an accidental click doesn't pop the chat open.
+avatar.addEventListener('click', (event) => {
+  if (!isFromControls(event)) controls.showPill();
+});
 chatClose.addEventListener('click', closeChat);
 chatForm.addEventListener('submit', submitChat);
 
@@ -376,20 +366,44 @@ window.electronAPI.onCursorMove((pos) => handlePointerAt(pos.x - window.screenX,
 // Feeding both through one handler keeps the interaction consistent everywhere.
 window.addEventListener('mousemove', (e) => handlePointerAt(e.clientX, e.clientY));
 
-// Escape closes the chat from anywhere in the overlay.
+// Hides the pill and lets the overlay go click-through again wherever the
+// pointer now is.
+function closeControls() {
+  controls.hidePill();
+  handlePointerAt(lastX, lastY);
+}
+
+// Escape closes one level at a time: snooze choices -> menu -> chat -> pill.
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && isChatOpen()) closeChat();
+  if (e.key !== 'Escape') return;
+  if (controls.handleEscape()) return;
+  if (isChatOpen()) closeChat();
+  else if (controls.isPillVisible()) closeControls();
+});
+
+// The keyboard shortcut (registered in main.js) opens the pill without
+// hovering. main.js has already focused the overlay.
+window.electronAPI.onOpenControls(() => {
+  controls.openPinned();
+  window.electronAPI.setIgnoreMouse(false);
+});
+
+// Clicking anywhere outside the overlay moves focus away: close the menu and a
+// pill that was opened by the shortcut. An open chat stays, as before.
+window.addEventListener('blur', () => {
+  controls.closeMenu();
+  if (controls.isPinned() && !isChatOpen()) closeControls();
 });
 
 // Re-place on resize (e.g. a resolution change) so the frog can't end up off
 // screen; it keeps its saved spot when that still fits.
-window.addEventListener('resize', () => placeAvatar(avatar, visibleParts));
+window.addEventListener('resize', () => placeAvatar(avatar, placementParts));
 
-enableAvatarDrag(avatar, visibleParts, (dragging) => {
+enableAvatarDrag(avatar, placementParts, (dragging) => {
   isDragging = dragging;
 });
 
 // The sprite must have its size before placing, since placement measures it.
 spriteAnimator.play(DEFAULT_IMAGE_ANIMATION);
-placeAvatar(avatar, visibleParts);
+placeAvatar(avatar, placementParts);
 update();

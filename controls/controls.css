@@ -29,8 +29,176 @@
 }
 
 /* ============================
+   4. Components — hover pill
+   ============================
+   Chat + More, in the indicator's spot under the frog's feet. It is always
+   laid out but invisible until shown, so placement can reserve room for it
+   near the screen edge. */
+.buddy-pill {
+  position: absolute;
+  top: calc(50% + var(--avatar-feet-offset) + var(--indicator-gap));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: var(--border-width) solid var(--surface-border);
+  border-radius: var(--radius-pill);
+  background-color: var(--surface);
+  box-shadow: var(--surface-shadow);
+  backdrop-filter: blur(var(--surface-blur));
+  visibility: hidden;
+  opacity: 0;
+  /* Hiding: fade out first, then become hidden (unfocusable). */
+  transition:
+    opacity var(--transition-fast),
+    visibility 0s linear var(--transition-fast);
+}
+
+/* ============================
+   4. Components — pill and menu buttons
+   ============================ */
+.pill-button {
+  display: grid;
+  place-items: center;
+  width: var(--pill-button-width);
+  height: var(--pill-button-height);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: var(--text-primary);
+  background-color: transparent;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.pill-button:hover {
+  background-color: var(--surface-hover);
+}
+
+/* Icons are drawn with the button's text colour, so the active state only
+   needs to change `color`. */
+.control-icon {
+  width: var(--icon-size);
+  height: var(--icon-size);
+  fill: none;
+  stroke: currentColor;
+  pointer-events: none;
+}
+
+/* ============================
+   4. Components — More menu
+   ============================
+   Small glass panel beside the frog. controls.js sets its position. */
+.buddy-menu {
+  position: absolute;
+  z-index: 102;
+  display: none;
+  flex-direction: column;
+  width: var(--menu-width);
+  padding: var(--space-1);
+  border: var(--border-width) solid var(--surface-border);
+  border-radius: var(--radius);
+  font-family: var(--font);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height);
+  background-color: var(--surface);
+  box-shadow: var(--surface-shadow);
+  backdrop-filter: blur(var(--surface-blur));
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: calc(var(--radius) - var(--space-1));
+  font: inherit;
+  text-align: left;
+  color: var(--text-primary);
+  background-color: transparent;
+  cursor: pointer;
+}
+
+.menu-item:hover,
+.menu-item:focus-visible {
+  background-color: var(--surface-hover);
+}
+
+/* The little arrow after "Snooze" hinting at the choices. */
+.menu-item-arrow {
+  margin-left: auto;
+  color: var(--text-secondary);
+}
+
+.menu-divider {
+  height: var(--border-width);
+  margin: var(--space-1) var(--space-2);
+  background-color: var(--divider);
+}
+
+/* ============================
+   4. Components — snooze choices
+   ============================
+   Indented under "Snooze" so they read as its options. */
+.snooze-choices {
+  display: flex;
+  flex-direction: column;
+  padding-left: calc(var(--icon-size) + var(--space-3));
+}
+
+.snooze-choices[hidden] {
+  display: none;
+}
+
+.snooze-choices .menu-item {
+  color: var(--text-secondary);
+}
+
+.snooze-choices .menu-item:hover,
+.snooze-choices .menu-item:focus-visible {
+  color: var(--text-primary);
+}
+
+/* ============================
    6. States
    ============================ */
+
+/* Pill shown (hover, frog click or keyboard shortcut). Becomes visible
+   immediately so the shortcut can focus Chat right away; only the fade-in
+   is animated. */
+.buddy-pill.is-visible {
+  visibility: visible;
+  opacity: 1;
+  transition:
+    opacity var(--transition-fast),
+    visibility 0s;
+}
+
+/* The indicator fades out while the pill takes its place. */
+#avatar.is-pill-visible .hover-indicator {
+  opacity: 0;
+}
+
+/* The function in use (chat open, or menu open) in the accent colour. */
+.pill-button.is-active,
+.pill-button.is-active:hover {
+  color: var(--accent-text);
+  background-color: var(--accent);
+}
+
+.buddy-menu.is-open {
+  display: flex;
+}
+
+/* Keyboard focus ring on the dark glass. */
+.pill-button:focus-visible,
+.menu-item:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--border-width);
+}
 
 /* Hovering the frog lights the indicator up in the accent colour. */
 #avatar.is-hovered .hover-indicator {
