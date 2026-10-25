@@ -211,6 +211,10 @@ function createOverlayWindow() {
     // without making the buddy the active app, so the app the user was in
     // keeps its menu bar and Copy/Paste. Other platforms ignore this.
     type: process.platform === 'darwin' ? 'panel' : undefined,
+    // The window is see-through and covers the whole screen, so the macOS
+    // window shadow would trace the frog and pill as a grey outline. Panels
+    // get their soft shadow from CSS (--surface-shadow) instead.
+    hasShadow: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
