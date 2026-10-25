@@ -1,0 +1,221 @@
+/* Styles for the AI chat: the input bar under the frog and the message
+   history above it. chat/chatLayout.js places both; Maike's chat logic in
+   overlay.js fills them. All values come from styles/tokens.css. */
+
+/* ============================
+   1. Variables
+   ============================
+   None here: every value comes from styles/tokens.css. */
+
+/* ============================
+   3. Layout containers — chat layer
+   ============================
+   An invisible full-screen layer. Maike's code shows and hides it
+   (display: flex / none); only the history and input bar inside it catch
+   the mouse, so the rest of the screen stays clickable. */
+#chat-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 101;
+  display: none;
+  font-family: var(--font);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height);
+  color: var(--text-primary);
+  pointer-events: none;
+}
+
+/* ============================
+   4. Components — message history
+   ============================
+   A narrow column of bubbles, newest at the bottom (closest to the frog).
+   The bottom part is always fully visible; above it, older messages fade
+   (see --history-clear-height and --history-fade-height). */
+#chat-log {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  box-sizing: border-box;
+  width: var(--chat-width);
+  padding: var(--space-1);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  border-radius: var(--radius);
+  pointer-events: auto;
+  mask-image: linear-gradient(
+    to top,
+    var(--history-fade-solid) var(--history-clear-height),
+    var(--history-fade-faded) calc(var(--history-clear-height) + var(--history-fade-height))
+  );
+}
+
+/* Shown before the first message. The wording is Maike's. */
+#chat-log:empty::before {
+  content: 'Describe a goal and I will break it into steps.';
+  align-self: flex-start;
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-width) solid var(--surface-border);
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  background-color: var(--bubble-buddy-bg);
+}
+
+/* ============================
+   4. Components — message bubbles
+   ============================
+   Buddy messages sit on the left in the panel grey; the user's sit on the
+   right with a teal tint, so the two are easy to tell apart. */
+.chat-entry {
+  max-width: 85%;
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-width) solid var(--surface-border);
+  border-radius: var(--radius);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-entry.buddy {
+  align-self: flex-start;
+  background-color: var(--bubble-buddy-bg);
+}
+
+.chat-entry.user {
+  align-self: flex-end;
+  background-color: var(--bubble-user-bg);
+}
+
+.chat-entry.error {
+  align-self: flex-start;
+  background-color: var(--bubble-error-bg);
+}
+
+/* The "..." shown while the buddy is thinking. */
+.chat-entry.pending {
+  align-self: flex-start;
+  color: var(--text-secondary);
+  background-color: var(--bubble-buddy-bg);
+}
+
+/* ============================
+   4. Components — input bar
+   ============================
+   Under the frog: close (×), the text field and the round send button,
+   in one glass pill. */
+#chat-form {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  width: var(--chat-width);
+  margin: 0;
+  padding: var(--space-1);
+  border: var(--border-width) solid var(--surface-border);
+  border-radius: var(--radius-pill);
+  background-color: var(--surface);
+  box-shadow: var(--surface-shadow);
+  pointer-events: auto;
+}
+
+/* The bar itself shows the focus ring while typing (see States), so the
+   field doesn't draw its own. */
+#chat-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0 var(--space-1);
+  border: 0;
+  font: inherit;
+  color: var(--text-primary);
+  background-color: transparent;
+  outline: none;
+}
+
+#chat-input::placeholder {
+  color: var(--text-secondary);
+}
+
+/* Close (×): quiet, so the send button stays the obvious action. */
+#chat-close {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: var(--send-button-size);
+  height: var(--send-button-size);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  background-color: transparent;
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+#chat-close:hover {
+  color: var(--text-primary);
+  background-color: var(--surface-hover);
+}
+
+#chat-send {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: var(--send-button-size);
+  height: var(--send-button-size);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: var(--accent-text);
+  background-color: var(--accent);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+#chat-send:hover {
+  background-color: var(--accent-hover);
+}
+
+/* ============================
+   5. Animations / transitions
+   ============================
+   The frog slides up to make room for the input bar near the bottom of the
+   screen, and back down when the chat closes (chat/chatLayout.js). */
+#avatar.is-sliding {
+  transition: top var(--transition-lift) ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #avatar.is-sliding {
+    transition: none;
+  }
+}
+
+/* ============================
+   6. States
+   ============================ */
+
+/* Older messages become fully readable while the user is looking at them:
+   hovering, keyboard focus, or just after scrolling. */
+#chat-log:hover,
+#chat-log:focus-within,
+#chat-log.is-revealed {
+  mask-image: none;
+}
+
+/* Disabled while a reply is on its way (Maike's code sets this). */
+#chat-send:disabled {
+  opacity: var(--disabled-opacity);
+  cursor: default;
+}
+
+/* Keyboard focus ring on the dark glass. */
+#chat-log:focus-visible,
+#chat-close:focus-visible,
+#chat-send:focus-visible,
+#chat-form:has(#chat-input:focus) {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--border-width);
+}

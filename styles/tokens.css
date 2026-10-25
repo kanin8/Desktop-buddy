@@ -14,6 +14,7 @@
   --teal-950: #06231f;
   --grey-100: #ededed;
   --grey-300: #b8b8b8;
+  --red-500: #e5484d;
   --white: #ffffff;
   --black: #000000;
 }
@@ -60,6 +61,9 @@
      to tell apart from the buddy's messages. */
   --bubble-buddy-bg: var(--surface);
   --bubble-user-bg: color-mix(in srgb, var(--teal-400) 25%, var(--surface));
+  /* Error messages: a red tint, so they stand out without shouting.
+     Primary text on it is about 8.4:1. */
+  --bubble-error-bg: color-mix(in srgb, var(--red-500) 25%, var(--surface));
 
   /* Outline shown around whatever has keyboard focus. */
   --focus-ring: var(--accent);
@@ -82,11 +86,19 @@
   --font-size-sm: 12px;
   --font-size-md: 14px;
   --font-size-lg: 16px;
-  --line-height: 1.4;
+  --line-height: 1.5;
 
-  /* Chat history: how faded the oldest visible message gets. Timings for
-     fading live in the JS config, not here. */
-  --history-fade-min-opacity: 0.25;
+  /* Chat history fading. The bottom --history-clear-height (the newest
+     messages) is always fully visible; over the next --history-fade-height
+     older messages fade down to --history-fade-min-opacity. Faded text is
+     below AA on purpose and becomes fully visible on hover, focus or
+     scroll. Timings for this live in chat/config.js, not here. */
+  --history-fade-min-opacity: 0.45;
+  --history-clear-height: 160px;
+  --history-fade-height: 160px;
+  /* Mask colours: only their opacity matters, the colour itself is unused. */
+  --history-fade-solid: var(--black);
+  --history-fade-faded: color-mix(in srgb, var(--black) calc(var(--history-fade-min-opacity) * 100%), transparent);
 
   /* Thin outlines, e.g. around the hover indicator. */
   --border-width: 1px;
@@ -134,6 +146,18 @@
   --surface-hover: color-mix(in srgb, var(--white) 10%, transparent);
   /* Thin line between groups of menu items. */
   --divider: color-mix(in srgb, var(--white) 12%, transparent);
+
+  /* Chat: the input bar under the frog and the history column above it. */
+  --chat-width: 280px;
+  --chat-history-max-height: 320px;
+  /* Round send and close buttons in the input bar. */
+  --send-button-size: 32px;
+  /* Thin scrollbar in the history, light so it shows on the grey. */
+  --scrollbar-thumb: color-mix(in srgb, var(--white) 25%, transparent);
+  /* Buttons that can't be used right now (send while a reply streams). */
+  --disabled-opacity: 0.5;
+  /* How long the frog takes to slide up to make room for the input bar. */
+  --transition-lift: 200ms;
 }
 
 /* ============================

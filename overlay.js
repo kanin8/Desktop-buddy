@@ -62,22 +62,6 @@ function positionBubble() {
   bubble.style.setProperty('--bubble-tail-x', tailX + 'px');
 }
 
-// Keeps the chat panel above the frog, flipping below it when there is no
-// room above, and clamped to the screen.
-function positionChat() {
-  const frog = spriteElement.getBoundingClientRect();
-  const margin = getScreenMargin();
-  const panelH = chatPanel.offsetHeight || 0;
-  const panelW = chatPanel.offsetWidth || 0;
-  const above = frog.top - panelH - BUBBLE_GAP;
-  const below = frog.bottom + BUBBLE_GAP;
-  const top = above < margin ? Math.min(below, window.innerHeight - panelH - margin) : above;
-  const left = Math.max(margin, Math.min(frog.left, window.innerWidth - panelW - margin));
-
-  chatPanel.style.left = left + 'px';
-  chatPanel.style.top = top + 'px';
-}
-
 // Runs every frame: steps the sprite animation and keeps everything attached
 // to the frog in place. Hover is not re-checked here: the frog only moves
 // when dragged, and pointer moves already re-check it. Re-checking every
@@ -85,7 +69,7 @@ function positionChat() {
 function update() {
   spriteAnimator.update(performance.now());
   positionBubble();
-  positionChat();
+  chatLayout.update();
   controls.positionMenu();
   requestAnimationFrame(update);
 }
@@ -194,6 +178,14 @@ const controls = createBuddyControls(
   }
 );
 
+// Places the chat around the frog: the input bar under the pill and the
+// history above the frog. See chat/chatLayout.js.
+const chatLayout = createChatLayout(
+  { avatar, history: chatLog, form: chatForm, pill },
+  getFrogRect,
+  isChatOpen
+);
+
 // Once nothing is open (no pill, menu or chat), hands the mouse and keyboard
 // straight back to the other apps. Without this the overlay stayed focused,
 // and stayed in the way of clicks until the pointer happened to move.
@@ -213,7 +205,8 @@ function isOverInteractiveArea(x, y) {
   if (isPointerOverFrog(x, y)) return true;
   if (controls.isPillVisible() && rectsOverlap(x, y, pill.getBoundingClientRect())) return true;
   if (controls.isMenuOpen() && rectsOverlap(x, y, buddyMenu.getBoundingClientRect())) return true;
-  if (isChatOpen() && rectsOverlap(x, y, chatPanel.getBoundingClientRect())) return true;
+  if (isChatOpen() && rectsOverlap(x, y, chatLog.getBoundingClientRect())) return true;
+  if (isChatOpen() && rectsOverlap(x, y, chatForm.getBoundingClientRect())) return true;
   return false;
 }
 
@@ -408,6 +401,8 @@ window.addEventListener('resize', () => placeAvatar(avatar, placementParts));
 
 enableAvatarDrag(avatar, placementParts, (dragging) => {
   isDragging = dragging;
+  // Dragging mid-chat: the drop spot wins over sliding back afterwards.
+  if (dragging) chatLayout.forgetRestPosition();
 });
 
 // The sprite must have its size before placing, since placement measures it.

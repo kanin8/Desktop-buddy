@@ -71,12 +71,17 @@ Accessibility checks for every step:
 - The active function is highlighted in the pill (accent colour).
 
 ### 4. Chat
-- Text input sits **below** the frog ("Start new chat…" + send button).
-- Message history stacks **upward** from the frog, in a narrow column on the right side of the screen.
+- Text input sits **below** the frog ("Start new chat…" + round teal send button), under the hover pill. The pill stays under the frog's feet so it doesn't jump away from the pointer right after clicking Chat.
+- If there's no room below the frog (e.g. its default bottom-right spot), the frog slides up just enough while chatting and slides back when the chat closes. The lifted spot is never saved; dragging mid-chat keeps the drop spot.
+- No title row. Close with the small × at the left of the input bar, the highlighted Chat button, or Escape.
+- Message history stacks **upward** from the frog, in a narrow column (`--chat-width`).
   - Newest message: closest to the frog, fully visible.
-  - Older messages: fade the further up they are.
-  - On hover/scroll, the history becomes fully visible (fading must not make anything unreadable when the user is actually looking at it).
-- User and buddy messages are visually distinct.
+  - Older messages: fade the further up they are (`--history-clear-height`, `--history-fade-height`, down to `--history-fade-min-opacity`).
+  - On hover, keyboard focus or scroll, the history becomes fully visible (fading must not make anything unreadable when the user is actually looking at it). Faded text is below AA contrast on purpose for that reason; the newest messages always meet AA.
+  - Near the top of the screen the history moves beside the frog (left if it fits, otherwise right), bottom level with the frog's feet.
+- User and buddy messages are visually distinct: buddy on the left in the panel grey, user on the right with a teal tint, errors with a red tint.
+- Keyboard: focus starts in the input; Tab goes input → send → history (arrow keys scroll it); Shift+Tab reaches ×.
+- Styles: `chat/chat.css`; placement: `chat/chatLayout.js`; chat logic (sending, streaming, errors, tasks): `overlay.js` (Maike).
 
 ### 5. Proactive message (nudge)
 - Before speaking, the frog's sprite changes (e.g. looks up or waves) so the message doesn't appear abruptly.
