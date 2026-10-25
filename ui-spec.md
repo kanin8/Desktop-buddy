@@ -99,7 +99,10 @@ Accessibility checks for every step:
 
 ### 6. To-do overview
 - Styles the existing to-do component (built by another group member) using the theme file.
-- Coordinate with that group member before editing.
+- Coordinate with that group member before editing. Agreed with Maike: styles only. Her logic, markup and classes are unchanged.
+- `toDoList/index.html` links `styles/tokens.css`; its own short variable names (`--ink`, `--muted`, `--panel`, …) now point at the theme tokens, and every other value in its styles uses a token.
+- Always dark grey, like the buddy (the panel's own light version was removed). It is its own solid window, so it uses `--panel-bg` (no transparency). The window's colour before the page paints (`backgroundColor` in `toDoList/todoWindow.js`) must match `--grey-900`.
+- Contrast on the panel grey: primary text 14.5:1, secondary 8.6:1, placeholder in the field 6.8:1, "Add" 7.2:1, the red delete × on hover 4.3:1 (icon, 3:1 needed).
 
 ### If time
 - First-launch flow: short tutorial + data consent (coordinate with the group member responsible for GDPR/privacy).
