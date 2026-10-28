@@ -60,8 +60,6 @@ app.post('/config', (req, res) => {
 app.post('/classify', async (req, res) => {
   const { appName, title, url } = req.body;
 
-  const { appName, title, url } = req.body;
-
   console.log(`[AI Server] Classifying: ${appName} | ${title} | ${url || 'No URL'}`);
 
   if (!AI_CONFIG.apiKey && AI_CONFIG.provider !== 'ollama') {

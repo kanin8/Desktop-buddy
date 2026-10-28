@@ -82,6 +82,12 @@ personal style preference.
   it's needed.
 
 ## Notes for Claude specifically
+- Linux launch requirement: Electron 44's Chromium sandbox crashes the renderer
+  processes on some Linux systems (shared-memory creation fails with ESRCH),
+  and `appendSwitch('no-sandbox')` no longer takes effect there. Launch with
+  the CLI flag BEFORE the app path: `npm run start:linux` (or
+  `electron --no-sandbox .`). Plain `electron .` shows blank windows on those
+  systems. Windows/macOS keep the sandbox and use plain `npm start`.
 - When generating or editing CSS, always follow the section structure and
   commenting rules above — don't just append new rules at the end of a file.
 - When editing existing code, match the surrounding style rather than

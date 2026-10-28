@@ -1,4 +1,5 @@
 import { IDetector } from './types';
+import { BaseDetector } from './platform/base';
 import { MacOSDetector } from './platform/macos';
 import { WindowsDetector } from './platform/windows';
 import os from 'os';
@@ -15,6 +16,10 @@ export function createDetector(): IDetector {
     return new WindowsDetector();
   }
 
-  // Fallback for other platforms (though only Win/Mac are targets)
-  throw new Error(`Unsupported platform: ${platform}`);
+  // Linux (and any other platform) falls back to the cross-platform base
+  // detector. It relies on `active-win`, which works on Linux through
+  // xdotool/xprop, so window detection still functions - only the extra
+  // browser URL lookup of the platform-specific detectors is unavailable.
+  // Throwing here used to abort startup of the whole app.
+  return new BaseDetector();
 }
