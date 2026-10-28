@@ -73,7 +73,9 @@ function createTodoWindow({ onClose } = {}) {
     skipTaskbar: true,
     alwaysOnTop: true,
     fullscreenable: false,
-    backgroundColor: '#16232f',
+    // Shown before the page paints, so it can't read the CSS theme yet: the
+    // same grey as --grey-900 in styles/tokens.css. Update both together.
+    backgroundColor: '#1c1c1e',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

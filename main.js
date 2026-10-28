@@ -1,4 +1,4 @@
-const { app, BrowserWindow, screen, Tray, Menu, nativeImage, ipcMain } = require('electron');
+const { app, BrowserWindow, screen, Tray, Menu, nativeImage, ipcMain, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -45,6 +45,9 @@ if (!gotTheLock) {
 let overlayWin = null;
 let settingsWin = null;
 let tray = null;
+// True once the app is really quitting, so the settings window knows to
+// close for real instead of just hiding (see createSettingsWindow).
+let isQuitting = false;
 
 // --- CURSOR TRACKING ---
 // The overlay is a click-through window, so it cannot rely on DOM mousemove
@@ -204,6 +207,14 @@ function createOverlayWindow() {
     skipTaskbar: true,
     resizable: false,
     movable: false,
+    // macOS: a panel can take keyboard focus (the chat input, the shortcut)
+    // without making the buddy the active app, so the app the user was in
+    // keeps its menu bar and Copy/Paste. Other platforms ignore this.
+    type: process.platform === 'darwin' ? 'panel' : undefined,
+    // The window is see-through and covers the whole screen, so the macOS
+    // window shadow would trace the frog and pill as a grey outline. Panels
+    // get their soft shadow from CSS (--surface-shadow) instead.
+    hasShadow: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -214,7 +225,9 @@ function createOverlayWindow() {
   overlayWin.setAlwaysOnTop(true, 'screen-saver');
   overlayWin.setIgnoreMouseEvents(true, { forward: true });
   overlayWin.loadFile('overlay.html');
-  overlayWin.show();
+  // Inactive, so starting the buddy doesn't take the keyboard from the app
+  // the user is typing in.
+  overlayWin.showInactive();
 
   // Push cursor positions to the overlay so the hover affordance works without
   // depending on forwarded DOM mouse events.
@@ -237,6 +250,8 @@ function createSettingsWindow() {
     height: 520,
     resizable: false,
     skipTaskbar: false,
+    // Hidden at launch so it doesn't pop up every start; opened from the tray.
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -246,8 +261,11 @@ function createSettingsWindow() {
 
   settingsWin.loadFile('settings.html');
 
-  // Prevent the app from quitting when settings window is closed
+  // Closing the settings window only hides it, so it can be reopened.
+  // While the app is quitting it must close for real; otherwise blocking
+  // the close also cancels the quit and leaves the app running unseen.
   settingsWin.on('close', (event) => {
+    if (isQuitting) return;
     event.preventDefault();
     settingsWin.hide();
   });
@@ -314,6 +332,14 @@ function triggerBedtime() {
   }
 }
 
+// Shows the buddy's default nudge (--test-nudge). With no text the overlay
+// uses the default line from nudge/config.js.
+function triggerTestNudge() {
+  if (overlayWin && !overlayWin.isDestroyed()) {
+    overlayWin.webContents.send('avatar-nudge', {});
+  }
+}
+
 // Bedtime check every minute
 setInterval(() => {
   const now = new Date();
@@ -332,6 +358,24 @@ setInterval(() => {
 //     uncaught 'EADDRINUSE' exception that aborts the whole main process.
 //
 // The helper is auxiliary, so failing to bind only costs the spell-checker.
+//
+// The port defaults to CONFIG.SPELLING_SERVER_PORT (5000). On macOS, AirPlay
+// Receiver already uses 5000, so Mac users can pick another port with an
+// environment variable, e.g.
+//   SPELLING_SERVER_PORT=5001 npm start
+// (or add `export SPELLING_SERVER_PORT=5001` to ~/.zshrc). check_spelling.py
+// reads the same variable, so both sides always agree.
+
+// Returns the port from SPELLING_SERVER_PORT, or the configured default if it
+// is missing or not a valid port number.
+function getSpellingServerPort() {
+  const port = Number(process.env.SPELLING_SERVER_PORT);
+  const isValidPort = Number.isInteger(port) && port > 0 && port < 65536;
+  return isValidPort ? port : CONFIG.SPELLING_SERVER_PORT;
+}
+
+const spellingServerPort = getSpellingServerPort();
+
 const spellingServer = http.createServer((req, res) => {
   if (req.method === 'POST' && req.url === '/speak') {
     let body = '';
@@ -360,16 +404,17 @@ if (gotTheLock) {
   spellingServer.on('error', (err) => {
     if (err && err.code === 'EADDRINUSE') {
       console.warn(
-        `Spelling helper not started: port ${CONFIG.SPELLING_SERVER_PORT} is already in use ` +
-        '(another copy of the app may already be running). Everything else still works.'
+        `Spelling helper not started: port ${spellingServerPort} is already in use ` +
+        '(another copy of the app may already be running, or on macOS AirPlay Receiver). ' +
+        'Set SPELLING_SERVER_PORT to another port, e.g. 5001. Everything else still works.'
       );
     } else {
       console.warn('Spelling helper failed to start:', err && err.message);
     }
   });
 
-  spellingServer.listen(CONFIG.SPELLING_SERVER_PORT, CONFIG.SPELLING_SERVER_HOST, () => {
-    console.log(`Spelling server listening on port ${CONFIG.SPELLING_SERVER_PORT}`);
+  spellingServer.listen(spellingServerPort, CONFIG.SPELLING_SERVER_HOST, () => {
+    console.log(`Spelling server listening on port ${spellingServerPort}`);
   });
 }
 
@@ -405,7 +450,94 @@ ipcMain.handle('save-ai-config', async (event, config) => {
   return { success: true };
 });
 
+// --- SNOOZE ---
+// "Snooze" in the buddy's More menu hides it for a while. Only one snooze runs
+// at a time, and bringing the buddy back any other way (tray, shortcut)
+// cancels it.
+let snoozeTimer = null;
+
+// Milliseconds until the chosen snooze ends, or undefined for an unknown
+// choice. 'tomorrow' means the next day at CONFIG.SNOOZE_TOMORROW_HOUR.
+function getSnoozeDurationMs(choice, now = new Date()) {
+  if (choice === 'tomorrow') {
+    const wakeAt = new Date(now);
+    wakeAt.setDate(wakeAt.getDate() + 1);
+    wakeAt.setHours(CONFIG.SNOOZE_TOMORROW_HOUR, 0, 0, 0);
+    return wakeAt - now;
+  }
+  return CONFIG.SNOOZE_DURATIONS_MS[choice];
+}
+
+function cancelSnooze() {
+  if (snoozeTimer) {
+    clearTimeout(snoozeTimer);
+    snoozeTimer = null;
+  }
+}
+
+// Ends a snooze. showInactive() so the buddy reappearing never steals focus
+// from whatever the user is typing in.
+function wakeFromSnooze() {
+  snoozeTimer = null;
+  if (overlayWin && !overlayWin.isDestroyed()) overlayWin.showInactive();
+  ipcMain.emit('avatar-state-changed');
+}
+
+ipcMain.on('snooze', (event, choice) => {
+  const durationMs = getSnoozeDurationMs(choice);
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return;
+  if (!overlayWin || overlayWin.isDestroyed()) return;
+
+  cancelSnooze();
+  overlayWin.hide();
+  snoozeTimer = setTimeout(wakeFromSnooze, durationMs);
+  ipcMain.emit('avatar-state-changed');
+});
+
+// --- MORE MENU ACTIONS ---
+ipcMain.on('show-settings', () => {
+  if (!settingsWin || settingsWin.isDestroyed()) return;
+  settingsWin.show();
+  settingsWin.focus();
+});
+
+// Opens the to-do panel, but never closes it: unlike the tray's toggle, the
+// menu item always means "show me my to-do list".
+ipcMain.on('show-todolist', () => {
+  if (isTodoWindowVisible()) return;
+  createTodoWindow({ onClose: closeTodoPanel });
+  ipcMain.emit('todolist-state-changed');
+});
+
+// --- CONTROLS SHORTCUT ---
+// The overlay is click-through and never has focus, so a global shortcut is
+// the keyboard way in. It wakes a snoozed buddy (the user stays in control),
+// focuses the overlay and asks it to open the controls.
+function openControlsFromShortcut() {
+  if (!overlayWin || overlayWin.isDestroyed()) return;
+
+  cancelSnooze();
+  if (!overlayWin.isVisible()) {
+    overlayWin.show();
+    ipcMain.emit('avatar-state-changed');
+  }
+  overlayWin.setIgnoreMouseEvents(false);
+  overlayWin.focus();
+  overlayWin.webContents.send('open-controls');
+}
+
+// Registration fails when another app already owns the shortcut. Hover still
+// works then, so this only warns.
+function registerControlsShortcut() {
+  const isRegistered = globalShortcut.register(CONFIG.CONTROLS_SHORTCUT, openControlsFromShortcut);
+  if (!isRegistered) {
+    console.warn(`Controls shortcut ${CONFIG.CONTROLS_SHORTCUT} is taken by another app; hover the buddy instead.`);
+  }
+}
+
 ipcMain.on('toggle-avatar', () => {
+  // Showing or hiding the buddy by hand overrides any snooze in progress.
+  cancelSnooze();
 
   if (!overlayWin) {
     createOverlayWindow();
@@ -413,37 +545,24 @@ ipcMain.on('toggle-avatar', () => {
     if (!overlayWin.isDestroyed() && overlayWin.isVisible()) {
       overlayWin.hide();
     } else {
-      overlayWin.show();
+      overlayWin.showInactive();
     }
   }
 
   ipcMain.emit('avatar-state-changed');
 });
 
-ipcMain.on('set-color', (event, color) => {
-  if (overlayWin && !overlayWin.isDestroyed()) {
-    overlayWin.webContents.send('update-color', color);
-  }
-});
-
-ipcMain.on('set-personality', (event, name) => {
-  // We need to send the actual CONFIG object from a preset to the renderer
-  // But wait, the overlay.js already has the presets.
-  // Let's just send the name and let overlay.js handle the lookup.
-  if (overlayWin && !overlayWin.isDestroyed()) {
-    overlayWin.webContents.send('update-personality', name);
-  }
-});
-
-ipcMain.on('set-avatar-type', (event, type) => {
-  if (overlayWin && !overlayWin.isDestroyed()) {
-    overlayWin.webContents.send('update-avatar-type', type);
-  }
-});
-
 ipcMain.on('set-ignore-mouse', (event, ignore) => {
   if (overlayWin && !overlayWin.isDestroyed()) {
     overlayWin.setIgnoreMouseEvents(ignore, { forward: true });
+  }
+});
+
+// Sent when the pill, menu and chat have all closed: the overlay stops
+// holding keyboard focus, so typing goes back to the app the user was in.
+ipcMain.on('release-focus', () => {
+  if (overlayWin && !overlayWin.isDestroyed() && overlayWin.isFocused()) {
+    overlayWin.blur();
   }
 });
 
@@ -482,7 +601,7 @@ ipcMain.on('todolist-state-changed', broadcastTodoState);
 
 // --- AI TASK BREAKDOWN ---
 // Requests run in the main process so the API key never reaches a renderer.
-// The overlay chat (hover the avatar, click "Ask the buddy") is the only
+// The overlay chat (hover the avatar, click Chat in the pill) is the only
 // consumer.
 registerAiIpc();
 
@@ -498,6 +617,7 @@ app.whenReady().then(() => {
 
   // Start the avatar by default
   createOverlayWindow();
+  registerControlsShortcut();
 
   // Initialize Activity Detection
   const activityHandlers = new ActivityIPCHandlers();
@@ -510,6 +630,22 @@ app.whenReady().then(() => {
     console.log('Test mode: triggering bedtime...');
     setTimeout(triggerBedtime, 2000); // Give window time to load
   }
+
+  // Test nudge trigger. Nothing sends real nudges yet: the detection branch
+  // will send the same 'avatar-nudge' message, optionally with its own text.
+  if (process.argv.includes('--test-nudge')) {
+    console.log('Test mode: sending a nudge...');
+    setTimeout(triggerTestNudge, 2000); // Give window time to load
+  }
+});
+
+app.on('before-quit', () => {
+  isQuitting = true;
+});
+
+// Global shortcuts outlive the app on some systems unless released.
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });
 
 app.on('window-all-closed', () => {

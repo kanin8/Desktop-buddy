@@ -24,4 +24,18 @@ module.exports = {
   // Overridable so the path can be tuned without a code change; an empty value
   // disables the stream and forces the getCursorScreenPoint fallback poll.
   XINPUT_BIN: '/usr/bin/xinput',
+
+  // Global shortcut that opens the buddy's controls without hovering
+  // (Electron accelerator syntax). Control rather than Command on macOS:
+  // Cmd+Option+B is already "bookmarks" in Safari and Chrome.
+  CONTROLS_SHORTCUT: 'Control+Alt+B',
+
+  // Snooze choices offered in the buddy's More menu, in milliseconds.
+  SNOOZE_DURATIONS_MS: {
+    '30min': 30 * 60 * 1000,
+    '1h': 60 * 60 * 1000,
+  },
+  // "Until tomorrow" wakes the buddy at this hour the next day (local time,
+  // 24-hour clock).
+  SNOOZE_TOMORROW_HOUR: 8,
 };

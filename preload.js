@@ -4,9 +4,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Settings Window API
   toggleRunning: () => ipcRenderer.send('toggle-avatar'),
   getAvatarState: () => ipcRenderer.invoke('get-avatar-state'),
-  setColor: (color) => ipcRenderer.send('set-color', color),
-  setPersonality: (name) => ipcRenderer.send('set-personality', name),
-  setAvatarType: (type) => ipcRenderer.send('set-avatar-type', type),
 
   // To-Do List panel API
   toggleTodoList: () => ipcRenderer.send('toggle-todolist'),
@@ -24,9 +21,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveAIConfig: (config) => ipcRenderer.invoke('save-ai-config', config),
 
   // Overlay Window API
-  updateColor: (callback) => ipcRenderer.on('update-color', (event, color) => callback(color)),
-  updatePersonality: (callback) => ipcRenderer.on('update-personality', (event, config) => callback(config)),
-  updateAvatarType: (callback) => ipcRenderer.on('update-avatar-type', (event, type) => callback(type)),
   speak: (callback) => ipcRenderer.on('avatar-speak', (event, text) => callback(text)),
   setScreenGrayscale: (callback) => ipcRenderer.on('set-screen-grayscale', (event, enabled) => callback(enabled)),
 
@@ -42,8 +36,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAISettings: () => ipcRenderer.invoke('ai-get-settings'),
   setAISettings: (patch) => ipcRenderer.invoke('ai-set-settings', patch),
 
+  // Hover pill and More menu (controls/controls.js).
+  showSettings: () => ipcRenderer.send('show-settings'),
+  showTodoList: () => ipcRenderer.send('show-todolist'),
+  snooze: (choice) => ipcRenderer.send('snooze', choice),
+  onOpenControls: (callback) => ipcRenderer.on('open-controls', () => callback()),
+  // The buddy's proactive message (nudge/nudge.js). message is { text },
+  // and text may be left out to use the default line.
+  onNudge: (callback) => ipcRenderer.on('avatar-nudge', (event, message) => callback(message || {})),
+
   // General purpose (for the mouse-ignore logic)
   setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),
+  // Gives keyboard focus back to the app the user was in.
+  releaseFocus: () => ipcRenderer.send('release-focus'),
 
   // The main process polls the global cursor and pushes its position here.
   // This is the reliable hover signal for a click-through overlay, which cannot

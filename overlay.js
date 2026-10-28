@@ -1,436 +1,90 @@
-// Avatar overlay: movement animation, the speech bubble, and the hover-to-chat
-// interaction that drives the AI task-breakdown chat.
+// Overlay renderer: shows the frog (bottom-right, or where it was dragged),
+// plays its sprite animations, shows speech bubbles, runs the hover-to-chat
+// interaction for the AI task breakdown, and decides when the overlay should
+// let mouse clicks through to the desktop.
+
 const avatar = document.getElementById('avatar');
 const bubble = document.getElementById('speech-bubble');
-const bubbleOption = document.getElementById('bubble-option');
+const hoverIndicator = document.getElementById('hover-indicator');
+const pill = document.getElementById('buddy-pill');
+const pillChatButton = document.getElementById('pill-chat');
+const pillMoreButton = document.getElementById('pill-more');
+const buddyMenu = document.getElementById('buddy-menu');
 const chatPanel = document.getElementById('chat-panel');
 const chatLog = document.getElementById('chat-log');
 const chatForm = document.getElementById('chat-form');
 const chatInput = document.getElementById('chat-input');
 const chatSend = document.getElementById('chat-send');
 const chatClose = document.getElementById('chat-close');
+const nudgeElement = document.getElementById('nudge');
 
 // Plays the sprite sheet onto the child element; #avatar itself stays the
-// 200x200 movement box and keeps carrying the plain colour avatar.
+// invisible box the frog is centred in.
 const spriteElement = document.getElementById('avatar-sprite');
 const spriteAnimator = new SpriteAnimator(spriteElement);
 
-// The animation shown whenever the image avatar is selected. Swap this for a
-// lookup against currentMode once more behaviour sheets exist.
+// What the user actually sees of the frog. Hover uses these instead of the
+// larger, empty #avatar box.
+const visibleParts = [spriteElement, hoverIndicator];
+
+// Placement and dragging also count the hover pill, even while it's hidden,
+// so the frog is kept far enough from the screen edge for the pill to fit.
+const placementParts = [spriteElement, hoverIndicator, pill];
+
+// The animation shown while the frog is at rest.
 const DEFAULT_IMAGE_ANIMATION = 'idle';
 
 // One-shot reaction played on click; hands back to the idle loop when it ends.
 const CLICK_ANIMATION = 'standingClicked';
 
-// --- GLOBAL CONSTANTS ---
-const BOX_SIZE = 200;
-const SCREEN_MARGIN = 30;
+// Gap between the top of the frog and the speech bubble, and between the
+// bubble and the screen edge.
+const BUBBLE_GAP = 12;
 
-// --- MOVEMENT PARAMETERS ---
-const BIRD = {
-  horizontalSpeed: 1.2,
-  launchStrength: 2.0,
-  nudgeStrength: 0.6,
-  floatFallSpeed: 0.4,
-  longGlideSpeed: 1.0,
-  highThreshold: 80,
-  lowThreshold: 0.6, // Percentage of screen height
-  launchDuration: 15,
-  nudgeCount: 3,
-  nudgeDuration: 10,
-  fallDuration: 40,
-  glideChance: 0.002,
-  glideDuration: 120,
-  turnChance: 0.001,
-  smoothing: 0.05, // For a floaty, eased feel
-};
+// How far the bubble's tail must stay from the bubble's sides, so it never
+// lands on a rounded corner (--radius is 16px).
+const TAIL_EDGE_INSET = 24;
 
-const ROCK = {
-  joltChance: 0.001,
-  joltMax: 10,
-  fallSpeed: 3.0,
-};
+// True while the frog is being dragged (see controls/drag.js).
+let isDragging = false;
 
-const GROUND_WALK_SPEED = 0.6;
+// Keeps the speech bubble just above the frog, pulled left if it would
+// otherwise run off the right edge of the screen, with its tail above the
+// middle of the frog. While the chat history or a nudge is showing above the
+// frog, the bubble goes above that instead, so they don't overlap.
+function positionBubble() {
+  const anchor = getBubbleAnchorRect();
+  const maxLeft = window.innerWidth - bubble.offsetWidth - BUBBLE_GAP;
+  const left = Math.max(BUBBLE_GAP, Math.min(anchor.left, maxLeft));
+  bubble.style.left = left + 'px';
+  bubble.style.top = Math.max(BUBBLE_GAP, anchor.top - bubble.offsetHeight - BUBBLE_GAP) + 'px';
 
-const WORM = {
-  baseSpeed: GROUND_WALK_SPEED,
-  pulseFreq: 0.002,
-  wiggleAmp: 0.2,
-  wiggleFreq: 0.005,
-  pauseChance: 0.001,
-  pauseDuration: 1000,
-  fallSpeed: 1.0,
-};
+  const anchorCentre = anchor.left + anchor.width / 2 - left;
+  const tailX = Math.max(TAIL_EDGE_INSET, Math.min(anchorCentre, bubble.offsetWidth - TAIL_EDGE_INSET));
+  bubble.style.setProperty('--bubble-tail-x', tailX + 'px');
+}
 
-const KANGAROO = {
-  hopSpeed: 3,
-  hopHeight: 50,
-  hopDuration: 60, // frames
-  pauseDuration: 20, // frames
-  fallSpeed: 2.0,
-};
+// What the speech bubble sits on top of: the chat history, the nudge, or
+// the frog itself.
+function getBubbleAnchorRect() {
+  if (isChatOpen()) return chatLog.getBoundingClientRect();
+  if (nudge.isVisible()) return nudge.getRect();
+  return spriteElement.getBoundingClientRect();
+}
 
-// --- STATE ---
-let currentAvatarType = 'color';
-let currentMode = 'worm';
-let posX = SCREEN_MARGIN + Math.random() * (window.innerWidth - BOX_SIZE - 2 * SCREEN_MARGIN);
-let posY = SCREEN_MARGIN + Math.random() * (window.innerHeight - BOX_SIZE - 2 * SCREEN_MARGIN);
-let velX = 0;
-let velY = 0;
-// True while the chat panel is open, so the avatar stops crawling and the
-// panel stays under the user's cursor.
-let movementPaused = false;
-
-// Mode-specific state
-let modeState = {
-  worm: { pausedUntil: 0 },
-  bird: {
-    phase: 0,
-    subPhase: 0,
-    glideUntil: 0,
-    currentDirection: 1,
-    targetDirection: 1,
-    isLongGliding: false
-  },
-  rock: {},
-  kangaroo: { phase: 0, direction: 1, isPausing: false },
-};
-
+// Runs every frame: steps the sprite animation and keeps everything attached
+// to the frog in place. Hover is not re-checked here: the frog only moves
+// when dragged, and pointer moves already re-check it. Re-checking every
+// frame would keep restarting the option's hide timer so it never hides.
 function update() {
-  const now = performance.now();
-
-  // The chat panel is anchored to the avatar, so it drifts while you type and
-  // can slide out from under the cursor. Freezing movement while it is open
-  // keeps the text box still.
-  if (!movementPaused) {
-    switch (currentMode) {
-      case 'worm':
-        updateWorm(now);
-        break;
-      case 'bird':
-        updateBird();
-        break;
-      case 'rock':
-        updateRock();
-        break;
-      case 'kangaroo':
-        updateKangaroo();
-        break;
-    }
-
-    // Boundary Handling
-    const minX = SCREEN_MARGIN;
-    const maxX = window.innerWidth - BOX_SIZE - SCREEN_MARGIN;
-    const minY = SCREEN_MARGIN;
-    const maxY = window.innerHeight - BOX_SIZE - SCREEN_MARGIN;
-
-    if (posX <= minX || posX >= maxX) {
-      if (currentMode === 'bird') {
-        modeState.bird.targetDirection *= -1;
-      }
-      if (currentMode === 'kangaroo') {
-        modeState.kangaroo.direction *= -1;
-      }
-      if (currentMode !== 'worm') {
-        velX *= -1;
-      }
-    }
-    if (posY <= minY) {
-      velY *= -1;
-    } else if (posY >= maxY) {
-      if (currentMode === 'bird') {
-        velY *= -1;
-      } else if (currentMode === 'kangaroo') {
-        if (velY > 0) velY = 0;
-      } else {
-        velY = 0;
-      }
-    }
-
-    posX += velX;
-    posY += velY;
-
-    // Constrain to screen
-    posX = Math.max(minX, Math.min(posX, maxX));
-    posY = Math.max(minY, Math.min(posY, maxY));
-  }
-
-  // Apply a 50px downward offset for rendering
-  const renderY = posY + 50;
-
-  avatar.style.left = posX + 'px';
-  avatar.style.top = renderY + 'px';
-
-  // Position bubble relative to avatar
-  bubble.style.left = posX + 'px';
-  bubble.style.top = (renderY - 40) + 'px';
-  bubbleOption.style.left = posX + 'px';
-  bubbleOption.style.top = (renderY - 48) + 'px';
-  positionChat(renderY);
-
-  // The avatar crawls under a possibly stationary cursor, so re-evaluate the
-  // hover state each frame using the last known pointer position. Without this
-  // the option would only appear once the pointer itself moved.
-  if (lastX >= 0 && lastY >= 0) reevaluateHover();
-
-  // Step the sprite sheet from the same loop that moves the avatar, so both
-  // share one clock.
-  spriteAnimator.update(now);
-
+  spriteAnimator.update(performance.now());
+  chatLayout.update();
+  if (nudge.isVisible()) chatLayout.placeInColumn(nudgeElement);
+  // After the chat and nudge, since the bubble goes above them.
+  positionBubble();
+  controls.positionMenu();
   requestAnimationFrame(update);
 }
-
-// Keeps the chat panel above the avatar, flipping below it and clamping to the
-// viewport when the avatar is too close to an edge to fit it there.
-function positionChat(renderY) {
-  const panelH = chatPanel.offsetHeight || 0;
-  const panelW = chatPanel.offsetWidth || 280;
-  const above = renderY - 48 - panelH - 12;
-  const below = renderY + BOX_SIZE + 12;
-  const top = above < SCREEN_MARGIN ? Math.min(below, window.innerHeight - panelH - SCREEN_MARGIN) : above;
-  const left = Math.max(SCREEN_MARGIN,
-    Math.min(posX, window.innerWidth - panelW - SCREEN_MARGIN));
-
-  chatPanel.style.left = left + 'px';
-  chatPanel.style.top = top + 'px';
-}
-
-function updateWorm(now) {
-  const minX = SCREEN_MARGIN;
-  const maxX = window.innerWidth - BOX_SIZE - SCREEN_MARGIN;
-  const minY = SCREEN_MARGIN;
-  const maxY = window.innerHeight - BOX_SIZE - SCREEN_MARGIN;
-
-  const isOnRoof = posY <= minY;
-  const isOnBottom = posY >= maxY;
-  const isOnLeft = posX <= minX;
-  const isOnRight = posX >= maxX;
-
-  if (isOnRoof || isOnBottom || isOnLeft || isOnRight) {
-    if (now < modeState.worm.pausedUntil) {
-      velX = 0;
-      velY = 0;
-      return;
-    }
-
-    if (Math.random() < WORM.pauseChance) {
-      modeState.worm.pausedUntil = now + WORM.pauseDuration;
-      return;
-    }
-
-    const pulse = 1 + 0.5 * Math.sin(now * WORM.pulseFreq);
-    const speed = WORM.baseSpeed * pulse;
-
-    // Circuit Logic: Bottom -> Right -> Top -> Left -> Bottom
-    if (isOnRight && isOnRoof) {
-      velX = -speed;
-      velY = 0;
-    } else if (isOnLeft && isOnRoof) {
-      velX = 0;
-      velY = speed;
-    } else if (isOnLeft && isOnBottom) {
-      velX = speed;
-      velY = 0;
-    } else if (isOnRight && isOnBottom) {
-      velX = 0;
-      velY = -speed;
-    } else if (isOnRight && velX >= 0) {
-      velX = 0;
-      velY = -speed; // Turn Up
-    } else if (isOnRoof && velY <= 0) {
-      velX = -speed;
-      velY = 0; // Turn Left
-    } else if (isOnLeft && velX <= 0) {
-      velX = 0;
-      velY = speed; // Turn Down
-    } else if (isOnBottom && velY >= 0) {
-      velX = speed;
-      velY = 0; // Turn Right
-    } else {
-      if (Math.abs(velX) > 0) {
-        velY = 0;
-        velX = (velX > 0 ? 1 : -1) * speed;
-      } else if (Math.abs(velY) > 0) {
-        velX = 0;
-        velY = (velY > 0 ? 1 : -1) * speed;
-      } else {
-        if (isOnBottom) { velX = speed; velY = 0; }
-        else if (isOnRight) { velX = 0; velY = -speed; }
-        else if (isOnRoof) { velX = -speed; velY = 0; }
-        else { velX = 0; velY = speed; }
-      }
-    }
-    return;
-  } else {
-    velX = 0;
-    velY = WORM.fallSpeed;
-  }
-}
-
-function updateBird() {
-  const s = modeState.bird;
-  const now = performance.now();
-
-  s.currentDirection += (s.targetDirection - s.currentDirection) * BIRD.smoothing;
-  velX = BIRD.horizontalSpeed * s.currentDirection;
-
-  if (!s.isLongGliding && posY < BIRD.highThreshold) {
-    s.isLongGliding = true;
-  }
-
-  if (s.isLongGliding && posY > window.innerHeight * BIRD.lowThreshold) {
-    s.isLongGliding = false;
-    s.phase = 0;
-    s.subPhase = 0;
-  }
-
-  let targetVelY = BIRD.floatFallSpeed;
-
-  if (s.isLongGliding) {
-    targetVelY = BIRD.longGlideSpeed;
-  } else if (now < s.glideUntil) {
-    targetVelY = BIRD.floatFallSpeed;
-    s.phase = 0;
-    s.subPhase = 0;
-  } else {
-    s.subPhase++;
-
-    if (s.phase === 0) {
-      if (s.subPhase < BIRD.launchDuration) {
-        const progress = s.subPhase / BIRD.launchDuration;
-        targetVelY = -BIRD.launchStrength * (1 - progress);
-      } else {
-        s.phase = 1;
-        s.subPhase = 0;
-      }
-    }
-    else if (s.phase === 1) {
-      const nudgeIdx = Math.floor(s.subPhase / BIRD.nudgeDuration);
-      if (nudgeIdx < BIRD.nudgeCount) {
-        const nudgeProgress = (s.subPhase % BIRD.nudgeDuration) / BIRD.nudgeDuration;
-        targetVelY = -BIRD.nudgeStrength * Math.sin(nudgeProgress * Math.PI);
-      } else {
-        s.phase = 2;
-        s.subPhase = 0;
-      }
-    }
-    else if (s.phase === 2) {
-      if (s.subPhase < BIRD.fallDuration) {
-        const progress = s.subPhase / BIRD.fallDuration;
-        targetVelY = BIRD.floatFallSpeed * progress;
-      } else {
-        s.phase = 0;
-        s.subPhase = 0;
-      }
-    }
-  }
-
-  velY += (targetVelY - velY) * BIRD.smoothing;
-
-  if (!s.isLongGliding && Math.random() < BIRD.glideChance) {
-    s.glideUntil = now + BIRD.glideDuration;
-  }
-  if (Math.random() < BIRD.turnChance) {
-    s.targetDirection *= -1;
-  }
-}
-
-function updateRock() {
-  const maxY = window.innerHeight - BOX_SIZE - SCREEN_MARGIN;
-  if (posY < maxY) {
-    velX = 0;
-    velY = ROCK.fallSpeed;
-  } else {
-    velY = 0;
-    velX = 0;
-  }
-
-  if (Math.random() < ROCK.joltChance) {
-    posX += (Math.random() - 0.5) * 2 * ROCK.joltMax;
-    posY += (Math.random() - 0.5) * 2 * ROCK.joltMax;
-  }
-}
-
-function updateKangaroo() {
-  const s = modeState.kangaroo;
-  const maxY = window.innerHeight - BOX_SIZE - SCREEN_MARGIN;
-  const isOnGround = posY >= maxY;
-
-  if (!isOnGround && s.phase === 0 && !s.isPausing) {
-    velX = 0;
-    velY = KANGAROO.fallSpeed;
-    return;
-  }
-
-  if (s.isPausing) {
-    velX = 0;
-    velY = 0;
-    s.phase++;
-    if (s.phase >= KANGAROO.pauseDuration) {
-      s.isPausing = false;
-      s.phase = 0;
-    }
-    return;
-  }
-
-  s.phase++;
-  if (s.phase < KANGAROO.hopDuration) {
-    velX = KANGAROO.hopSpeed * s.direction;
-    const t = s.phase / KANGAROO.hopDuration;
-    const vFactor = (0.5 - t);
-    velY = -vFactor * 15;
-  } else {
-    s.isPausing = true;
-    s.phase = 0;
-  }
-}
-
-window.electronAPI.updateColor((color) => {
-  if (currentAvatarType === 'color') {
-    avatar.style.backgroundColor = color;
-    avatar.style.backgroundImage = 'none';
-  }
-});
-
-window.electronAPI.updatePersonality((name) => {
-  currentMode = name;
-  modeState.bird.phase = 0;
-  modeState.bird.subPhase = 0;
-  modeState.bird.glideUntil = 0;
-  modeState.bird.currentDirection = 1;
-  modeState.bird.targetDirection = 1;
-  modeState.bird.isLongGliding = false;
-  modeState.kangaroo.phase = 0;
-  modeState.kangaroo.isPausing = false;
-
-  if (currentMode === 'worm') {
-    velX = 0;
-    velY = WORM.fallSpeed;
-  } else if (currentMode === 'bird') {
-    velX = BIRD.horizontalSpeed;
-    velY = 0;
-  } else if (currentMode === 'rock') {
-    velX = 0;
-    velY = ROCK.fallSpeed;
-  } else if (currentMode === 'kangaroo') {
-    velX = 0;
-    velY = KANGAROO.fallSpeed;
-  }
-});
-
-window.electronAPI.updateAvatarType((type) => {
-  currentAvatarType = type;
-  if (type === 'image') {
-    spriteAnimator.play(DEFAULT_IMAGE_ANIMATION);
-    avatar.style.backgroundColor = 'transparent';
-  } else {
-    // Clearing the sprite matters as much as restoring the colour: #avatar's
-    // background colour shows through the sprite element otherwise.
-    spriteAnimator.stop();
-    avatar.style.backgroundImage = 'none';
-  }
-});
 
 // --- MESSAGE QUEUE SYSTEM ---
 const messageQueue = [];
@@ -461,15 +115,56 @@ window.electronAPI.setScreenGrayscale((enabled) => {
   avatar.style.filter = enabled ? 'grayscale(100%)' : 'none';
 });
 
-<<<<<<< HEAD
+// The elements the pointer should actually be tested against, so hover and
+// clicks land on the visible frog (or its indicator) rather than on the empty
+// corners of its box.
+function getHitTargets() {
+  // Before the sheet has loaded the sprite has no size, so fall back to the
+  // full box rather than leaving the avatar briefly unclickable.
+  return spriteElement.offsetWidth > 0 ? visibleParts : [avatar];
+}
+
+// True for clicks that land on the hover pill, which sits inside the frog's
+// box but isn't the frog.
+function isFromControls(event) {
+  return Boolean(event.target.closest('[data-no-drag]'));
+}
+
+// True when the point is over any visible part of the frog.
+function isPointerOverFrog(x, y) {
+  return getHitTargets().some((element) => rectsOverlap(x, y, element.getBoundingClientRect()));
+}
+
+// The smallest rectangle around the visible frog.
+function getFrogRect() {
+  const rects = getHitTargets().map((element) => element.getBoundingClientRect());
+  return {
+    left: Math.min(...rects.map((rect) => rect.left)),
+    top: Math.min(...rects.map((rect) => rect.top)),
+    right: Math.max(...rects.map((rect) => rect.right)),
+    bottom: Math.max(...rects.map((rect) => rect.bottom)),
+  };
+}
+
+// Reacts to a click on the frog by playing the reaction animation once, then
+// returning to the idle loop. Clicking again mid-reaction restarts it from the
+// top, which feels more responsive than queueing or ignoring it.
+// The listener sits on #avatar because #avatar-sprite is pointer-events: none.
+avatar.addEventListener('click', (event) => {
+  if (isFromControls(event)) return;
+  spriteAnimator.play(CLICK_ANIMATION, {
+    onComplete: () => spriteAnimator.play(DEFAULT_IMAGE_ANIMATION),
+  });
+});
+
 // --- AVATAR INTERACTION ---
 // The overlay covers the whole screen and is click-through by default, so the
-// only interactive region is the avatar plus whatever is attached to it: the
+// only interactive region is the frog plus whatever is attached to it: the
 // hover affordance, and the chat panel once it is open.
 //
-// Flow: hover the avatar -> a clickable option appears -> click it -> the chat
-// opens. Clicking the avatar also reveals the option (not the chat), so the
-// feature is reachable even when the pointer never triggers the hover.
+// Flow: hover the frog -> the pill (Chat + More) appears in the indicator's
+// place -> Chat opens the chat, More opens the menu. Clicking the frog also
+// reveals the pill, and so does the keyboard shortcut (see main.js).
 // Everything else passes clicks through.
 //
 // The hover signal comes from the main process (see `onCursorMove`), not from
@@ -477,51 +172,128 @@ window.electronAPI.setScreenGrayscale((enabled) => {
 // moves on some platforms, so relying on them left this flow dead on Linux.
 
 const isChatOpen = () => chatPanel.style.display === 'flex';
-// Compared against 'flex' rather than "not none": the hidden state comes from
-// the stylesheet, so a never-toggled element has an empty inline display and
-// would otherwise look visible.
-const isOptionVisible = () => bubbleOption.style.display === 'flex';
 
-// The avatar keeps crawling while you reach for the option, so the option is
-// given a short grace period before it disappears.
-const OPTION_GRACE_MS = 400;
-let optionHideTimer = null;
+// The pill and menu. Chat toggles Maike's chat panel; the menu items call the
+// main process. See controls/controls.js.
+const controls = createBuddyControls(
+  { avatar, pill, chatButton: pillChatButton, moreButton: pillMoreButton, menu: buddyMenu },
+  getFrogRect,
+  {
+    onChat: () => {
+      nudge.dismiss();
+      if (isChatOpen()) closeChat();
+      else openChat();
+    },
+    onTodo: () => window.electronAPI.showTodoList(),
+    onSettings: () => window.electronAPI.showSettings(),
+    onSnooze: (choice) => {
+      nudge.dismiss();
+      if (isChatOpen()) closeChat();
+      window.electronAPI.snooze(choice);
+    },
+    onHidden: () => releaseIfIdle(),
+  }
+);
+
+// Places the chat around the frog: the input bar under the pill and the
+// history above the frog. See chat/chatLayout.js.
+const chatLayout = createChatLayout(
+  { avatar, history: chatLog, form: chatForm, pill },
+  getFrogRect,
+  isChatOpen
+);
+
+// The buddy's proactive message, in the chat history's spot. See
+// nudge/nudge.js; what each quick reply does is decided here.
+const nudge = createNudge(
+  {
+    nudge: nudgeElement,
+    text: nudgeElement.querySelector('.nudge-text'),
+    replies: nudgeElement.querySelector('.nudge-replies'),
+    close: nudgeElement.querySelector('.nudge-close'),
+  },
+  {
+    onReply: (id, text) => {
+      if (id === 'yes') acceptNudge(text);
+      else if (id === 'notNow') nudge.showBackOff();
+    },
+    // Not mid-drag: the overlay must keep catching the mouse until the drop.
+    onHidden: () => {
+      if (!isDragging) releaseIfIdle();
+    },
+  }
+);
+
+// "Yes, help me!": opens the chat with the nudge and a follow-up already in
+// the history, so the user can answer straight away in the input.
+// The chat opens before the nudge closes, so closing it doesn't hand focus
+// back to the other app (onHidden -> releaseIfIdle).
+function acceptNudge(text) {
+  controls.showPill();
+  openChat();
+  nudge.dismiss();
+  addChatLine(text, 'buddy');
+  addChatLine(window.NUDGE_CONFIG.helpLine, 'buddy');
+}
+
+// A nudge from the main process (detection later, --test-nudge for now).
+// The frog plays its cue first so the message doesn't pop up out of nowhere.
+// Skipped while the chat or menu is open: the user is already busy with the
+// buddy. The message waits for the cue's length rather than its onComplete,
+// because clicking the frog mid-cue restarts the animation with its own
+// callback and the message would be lost.
+function showNudge(message) {
+  if (isChatOpen() || controls.isMenuOpen()) return;
+  const { cueAnimation, defaultText } = window.NUDGE_CONFIG;
+  const text = message.text || defaultText;
+  spriteAnimator.play(cueAnimation, {
+    onComplete: () => spriteAnimator.play(DEFAULT_IMAGE_ANIMATION),
+  });
+  setTimeout(() => {
+    if (!isChatOpen() && !controls.isMenuOpen()) nudge.show(text);
+  }, getAnimationLengthMs(cueAnimation));
+}
+
+// How long one play of a sprite animation takes (avatar/config.js).
+function getAnimationLengthMs(name) {
+  const animation = window.AVATAR_SPRITE_CONFIG.animations[name];
+  return animation.frameCount * animation.frameDurationMs;
+}
+
+window.electronAPI.onNudge(showNudge);
+
+// Opening the menu makes room for it: the nudge would sit right beside it.
+pillMoreButton.addEventListener('click', () => nudge.dismiss());
+
+// Once nothing is open (no pill, menu or chat), hands the mouse and keyboard
+// straight back to the other apps. Without this the overlay stayed focused,
+// and stayed in the way of clicks until the pointer happened to move.
+// Doesn't check the pointer: if it's on the frog, the next move makes the frog
+// clickable again (handlePointerAt).
+function releaseIfIdle() {
+  if (controls.isPillVisible() || controls.isMenuOpen() || isChatOpen()) return;
+  window.electronAPI.setIgnoreMouse(true);
+  window.electronAPI.releaseFocus();
+}
 
 function rectsOverlap(x, y, rect) {
   return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
 }
 
-// The option sits just above the avatar's top edge. Without treating the strip
-// between them as interactive, the pointer crosses dead space on its way up and
-// the option vanishes before it can be clicked.
-function isInBridge(x, y) {
-  if (isChatOpen() || !isOptionVisible()) return false;
-  const avatarRect = avatar.getBoundingClientRect();
-  const optionRect = bubbleOption.getBoundingClientRect();
-  if (!optionRect.height) return false;
-  const left = Math.min(avatarRect.left, optionRect.left);
-  const right = Math.max(avatarRect.right, optionRect.right);
-  return x >= left && x <= right && y >= optionRect.bottom && y <= avatarRect.top;
-}
-
 function isOverInteractiveArea(x, y) {
-  if (rectsOverlap(x, y, avatar.getBoundingClientRect())) return true;
-  if (isOptionVisible() && rectsOverlap(x, y, bubbleOption.getBoundingClientRect())) return true;
-  if (isChatOpen() && rectsOverlap(x, y, chatPanel.getBoundingClientRect())) return true;
+  if (isPointerOverFrog(x, y)) return true;
+  if (controls.isPillVisible() && rectsOverlap(x, y, pill.getBoundingClientRect())) return true;
+  if (controls.isMenuOpen() && rectsOverlap(x, y, buddyMenu.getBoundingClientRect())) return true;
+  if (isChatOpen() && rectsOverlap(x, y, chatLog.getBoundingClientRect())) return true;
+  if (isChatOpen() && rectsOverlap(x, y, chatForm.getBoundingClientRect())) return true;
+  if (nudge.isVisible() && rectsOverlap(x, y, nudge.getRect())) return true;
   return false;
 }
 
-function showOption() {
-  if (optionHideTimer) { clearTimeout(optionHideTimer); optionHideTimer = null; }
-  if (!isChatOpen() && !isOptionVisible()) bubbleOption.style.display = 'flex';
-}
-
-function hideOptionSoon() {
-  if (optionHideTimer) clearTimeout(optionHideTimer);
-  optionHideTimer = setTimeout(() => {
-    optionHideTimer = null;
-    if (!isChatOpen() && !isOverInteractiveArea(lastX, lastY)) bubbleOption.style.display = 'none';
-  }, OPTION_GRACE_MS);
+// The pill stays while a function is in use (chat or menu open), or while the
+// pointer is on something clickable.
+function shouldKeepPillOpen() {
+  return isChatOpen() || controls.isMenuOpen() || isOverInteractiveArea(lastX, lastY);
 }
 
 // Last known pointer position, so the grace timer can re-check where the pointer
@@ -535,28 +307,34 @@ function handlePointerAt(x, y) {
   lastX = x;
   lastY = y;
 
-  const over = isOverInteractiveArea(x, y) || isInBridge(x, y);
+  // Mid-drag the overlay must keep catching the mouse: a fast drag can get
+  // ahead of the frog, and turning click-through on then would drop it.
+  if (isDragging) return;
+
+  const over = isOverInteractiveArea(x, y);
   // Keep the overlay interactive only while the pointer is over something the
   // user can actually click; everywhere else stays click-through. Only sent
   // here (not on every animation frame) so a still pointer does not spam IPC.
   window.electronAPI.setIgnoreMouse(!over);
 
+  // Lights up the hover indicator under the frog.
+  avatar.classList.toggle('is-hovered', isPointerOverFrog(x, y));
+
+  // A nudge doesn't fade away while the pointer is on it.
+  nudge.setPointerOver(nudge.isVisible() && rectsOverlap(x, y, nudge.getRect()));
+
   reevaluateHover();
 }
 
-// Recomputes the hover affordance from the last known pointer position. Safe to
-// call every frame: it only touches the option's visibility, never IPC.
+// Shows the pill while the pointer is on the frog, and starts the delayed hide
+// once it's on nothing clickable. Never touches IPC.
 function reevaluateHover() {
-  if (isChatOpen()) return;
+  if (isDragging) return;
 
-  const over = isOverInteractiveArea(lastX, lastY) || isInBridge(lastX, lastY);
-  const overAvatar = rectsOverlap(lastX, lastY, avatar.getBoundingClientRect());
-
-  if (over) {
-    if (optionHideTimer) { clearTimeout(optionHideTimer); optionHideTimer = null; }
-    if (overAvatar) showOption();
-  } else if (isOptionVisible()) {
-    hideOptionSoon();
+  if (isPointerOverFrog(lastX, lastY)) {
+    controls.showPill();
+  } else if (!isOverInteractiveArea(lastX, lastY)) {
+    controls.hidePillSoon(shouldKeepPillOpen);
   }
 }
 
@@ -598,10 +376,8 @@ function endExchange() {
 }
 
 function openChat() {
-  bubbleOption.style.display = 'none';
-  if (optionHideTimer) { clearTimeout(optionHideTimer); optionHideTimer = null; }
+  controls.setChatActive(true);
   chatPanel.style.display = 'flex';
-  movementPaused = true;
   chatInput.focus();
   // The chat is open, so the overlay must stay interactive even before the
   // pointer moves again.
@@ -611,9 +387,10 @@ function openChat() {
 function closeChat() {
   window.electronAPI.cancelAI();
   endExchange();
-  movementPaused = false;
+  controls.setChatActive(false);
   chatPanel.style.display = 'none';
   chatInput.value = '';
+  releaseIfIdle();
 }
 
 function submitChat(e) {
@@ -653,26 +430,6 @@ window.electronAPI.onAITasksAdded((info) => {
       ? 'Added ' + info.count + ' subtask' + (info.count === 1 ? '' : 's') + ' to your list.'
       : 'Added it to your list.',
     'buddy'
-=======
-// The element the pointer should actually be tested against, so hover and
-// clicks land on the visible avatar rather than on the empty corners of the
-// 200x200 movement box.
-function getHitTarget() {
-  if (currentAvatarType !== 'image') return avatar;
-
-  // Before the sheet has loaded the sprite has no size, so fall back to the
-  // full box rather than leaving the avatar briefly unclickable.
-  return spriteElement.offsetWidth > 0 ? spriteElement : avatar;
-}
-
-window.addEventListener('mousemove', (e) => {
-  const rect = getHitTarget().getBoundingClientRect();
-  const isOver = (
-    e.clientX >= rect.left &&
-    e.clientX <= rect.right &&
-    e.clientY >= rect.top &&
-    e.clientY <= rect.bottom
->>>>>>> main
   );
 });
 
@@ -680,37 +437,63 @@ window.electronAPI.onAITasksFailed((message) => {
   addChatLine('Could not break that down: ' + message, 'error');
 });
 
-bubbleOption.addEventListener('click', openChat);
-// Clicking the avatar is a hover-independent way to reveal the affordance, not
-// to open the chat directly: the avatar crawls constantly, so an immediate open
-// would fire on accidental clicks. The deliberate second click is on the pill.
-avatar.addEventListener('click', showOption);
+// Clicking the frog is a hover-independent way to reveal the pill, not to open
+// the chat directly, so an accidental click doesn't pop the chat open.
+avatar.addEventListener('click', (event) => {
+  if (!isFromControls(event)) controls.showPill();
+});
 chatClose.addEventListener('click', closeChat);
 chatForm.addEventListener('submit', submitChat);
 
 // Primary hover source: the cursor position polled by the main process. This is
-// the only signal guaranteed to arrive on a click-through overlay.
-window.electronAPI.onCursorMove((pos) => handlePointerAt(pos.x, pos.y));
+// the only signal guaranteed to arrive on a click-through overlay. It arrives in
+// screen coordinates, so it is shifted by the window's own position: on macOS
+// the overlay starts below the menu bar, not at the top of the screen.
+window.electronAPI.onCursorMove((pos) => handlePointerAt(pos.x - window.screenX, pos.y - window.screenY));
 
 // Secondary source: forwarded DOM mouse moves, when the platform provides them.
 // Feeding both through one handler keeps the interaction consistent everywhere.
 window.addEventListener('mousemove', (e) => handlePointerAt(e.clientX, e.clientY));
 
-// Escape closes the chat from anywhere in the overlay.
+// Escape closes one level at a time: snooze choices -> menu -> chat -> pill.
+// Hiding the pill releases the mouse and keyboard (onHidden -> releaseIfIdle).
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && isChatOpen()) closeChat();
+  if (e.key !== 'Escape') return;
+  if (controls.handleEscape()) return;
+  if (nudge.isVisible()) nudge.dismiss();
+  else if (isChatOpen()) closeChat();
+  else if (controls.isPillVisible()) controls.hidePill();
 });
 
-// Reacts to a click on the sprite avatar by playing the reaction animation
-// once, then returning to the idle loop. Clicking again mid-reaction restarts
-// it from the top, which feels more responsive than queueing or ignoring it.
-// The listener sits on #avatar because #avatar-sprite is pointer-events: none.
-avatar.addEventListener('click', () => {
-  if (currentAvatarType !== 'image') return;
-
-  spriteAnimator.play(CLICK_ANIMATION, {
-    onComplete: () => spriteAnimator.play(DEFAULT_IMAGE_ANIMATION),
-  });
+// The keyboard shortcut (registered in main.js) opens the pill without
+// hovering, or jumps to the nudge's replies while one is showing. main.js has
+// already focused the overlay.
+window.electronAPI.onOpenControls(() => {
+  if (nudge.isVisible()) nudge.focus();
+  else controls.openPinned();
+  window.electronAPI.setIgnoreMouse(false);
 });
 
+// Clicking anywhere outside the overlay moves focus away: close the menu and a
+// pill that was opened by the shortcut. An open chat stays, as before.
+window.addEventListener('blur', () => {
+  controls.closeMenu();
+  if (controls.isPinned() && !isChatOpen()) controls.hidePill();
+});
+
+// Re-place on resize (e.g. a resolution change) so the frog can't end up off
+// screen; it keeps its saved spot when that still fits.
+window.addEventListener('resize', () => placeAvatar(avatar, placementParts));
+
+enableAvatarDrag(avatar, placementParts, (dragging) => {
+  isDragging = dragging;
+  // Dragging mid-chat: the drop spot wins over sliding back afterwards.
+  if (dragging) chatLayout.forgetRestPosition();
+  // Moving the frog away counts as brushing the nudge off.
+  if (dragging) nudge.dismiss();
+});
+
+// The sprite must have its size before placing, since placement measures it.
+spriteAnimator.play(DEFAULT_IMAGE_ANIMATION);
+placeAvatar(avatar, placementParts);
 update();

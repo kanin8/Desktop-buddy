@@ -1,0 +1,141 @@
+/* Styles for the buddy's proactive message (nudge): one bubble above the
+   frog with the text, a × and quick-reply buttons. chat/chatLayout.js places
+   it; nudge/nudge.js fills it. All values come from styles/tokens.css. */
+
+/* ============================
+   1. Variables
+   ============================
+   None here: every value comes from styles/tokens.css. */
+
+/* ============================
+   4. Components — nudge bubble
+   ============================
+   Looks like a buddy message in the chat history, since it sits in the same
+   spot. Always laid out but invisible until shown (like the hover pill), so
+   it can be measured and placed before it fades in. */
+.nudge {
+  position: absolute;
+  z-index: 101;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  box-sizing: border-box;
+  width: max-content;
+  max-width: var(--chat-width);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  border: var(--border-width) solid var(--surface-border);
+  border-radius: var(--radius);
+  font-family: var(--font);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height);
+  color: var(--text-primary);
+  background-color: var(--bubble-buddy-bg);
+  box-shadow: var(--surface-shadow);
+  visibility: hidden;
+  opacity: 0;
+  /* Hiding: fade out first, then become hidden (unfocusable). */
+  transition:
+    opacity var(--transition-fast),
+    visibility 0s linear var(--transition-fast);
+}
+
+/* The text with the × beside it, top-right. */
+.nudge-top {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.nudge-text {
+  flex: 1;
+  margin: 0;
+}
+
+/* ============================
+   4. Components — close button
+   ============================
+   Quiet, so the replies stay the obvious choice. */
+.nudge-close {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: var(--close-button-size);
+  height: var(--close-button-size);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  background-color: transparent;
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.nudge-close:hover {
+  color: var(--text-primary);
+  background-color: var(--surface-hover);
+}
+
+/* ============================
+   4. Components — quick replies
+   ============================
+   "Yes, help me!" in the accent, "Not now" quieter. They wrap onto a second
+   line rather than squeezing if the labels get longer. */
+.nudge-replies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.nudge-reply {
+  padding: var(--space-1) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-pill);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.nudge-reply.is-accent {
+  color: var(--accent-text);
+  background-color: var(--accent);
+}
+
+.nudge-reply.is-accent:hover {
+  background-color: var(--accent-hover);
+}
+
+.nudge-reply.is-secondary {
+  color: var(--button-secondary-text);
+  background-color: var(--button-secondary-bg);
+}
+
+.nudge-reply.is-secondary:hover {
+  background-color: var(--button-secondary-hover-bg);
+}
+
+/* ============================
+   6. States
+   ============================ */
+
+/* Showing: visible straight away, then fades in. */
+.nudge.is-visible {
+  visibility: visible;
+  opacity: 1;
+  transition:
+    opacity var(--transition-fast),
+    visibility 0s;
+}
+
+/* No buttons after "Not now". */
+.nudge-replies[hidden] {
+  display: none;
+}
+
+/* Keyboard focus ring on the dark glass. */
+.nudge-close:focus-visible,
+.nudge-reply:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--border-width);
+}

@@ -5,36 +5,65 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
 <title>To-do</title>
+<!-- The buddy's theme (colours, fonts, spacing), shared with the avatar. -->
+<link rel="stylesheet" href="../styles/tokens.css">
 <style>
-:root{--bg:#e6ecf1;--panel:#f8fafb;--ink:#14263a;--muted:#6b7c8d;--line:#d3dce4;--accent:#0f8b7a;--accent-ink:#fff;--danger:#b4423a;--indent:16px}
-@media (prefers-color-scheme:dark){:root{--bg:#0e1822;--panel:#16232f;--ink:#e6eef5;--muted:#8a9bab;--line:#263646;--accent:#2fbfa9;--accent-ink:#06231f;--danger:#e0776e}}
+/* ============================
+   To-do list — variables
+   ============================
+   The panel's own short names, pointing at the buddy's theme tokens in
+   styles/tokens.css so the panel matches the rest of the app. Change the
+   look there, not here. Always dark for now, like the buddy; a light mode
+   only needs a second set of theme values. */
+:root{--bg:var(--field-bg);--panel:var(--panel-bg);--ink:var(--text-primary);--muted:var(--text-secondary);--line:var(--divider);--accent-ink:var(--accent-text);--indent:var(--space-4)}
+
+/* ============================
+   To-do list — base and layout
+   ============================ */
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--panel);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Ubuntu,Cantarell,sans-serif;font-size:14px;overflow:hidden}
-#app{border:1px solid var(--accent);padding:10px 14px 12px}
-header{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}
-h1{font-size:16px;margin:0;font-weight:700}
+html,body{margin:0;background:var(--panel);color:var(--ink);font-family:var(--font);font-size:var(--font-size-md);overflow:hidden}
+#app{border:var(--border-width) solid var(--surface-border);padding:var(--space-3) var(--space-4) var(--space-3)}
+header{display:flex;align-items:baseline;gap:var(--space-2);margin-bottom:var(--space-2)}
+h1{font-size:var(--font-size-lg);margin:0;font-weight:700}
 #count{color:var(--muted);flex:1}
+
+/* ============================
+   To-do list — buttons and add form
+   ============================ */
 button{font:inherit;cursor:pointer}
-.icon{background:none;border:0;color:var(--muted);font-size:18px;line-height:1;padding:2px 6px;border-radius:6px}
+.icon{background:none;border:0;color:var(--muted);font-size:var(--icon-glyph-size);line-height:1;padding:var(--space-half) var(--space-2);border-radius:var(--radius-sm)}
 .icon:hover{color:var(--ink)}
-form{display:flex;gap:6px;margin-bottom:8px}
-input[type=text]{flex:1;min-width:0;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+form{display:flex;gap:var(--space-2);margin-bottom:var(--space-2)}
+input[type=text]{flex:1;min-width:0;font:inherit;color:var(--ink);background:var(--bg);border:var(--border-width) solid var(--line);border-radius:var(--radius-pill);padding:var(--space-2) var(--space-3)}
 input[type=text]::placeholder{color:var(--muted)}
-.add{background:var(--accent);color:var(--accent-ink);border:0;border-radius:8px;padding:0 14px;font-weight:600}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-#list{list-style:none;margin:0;padding:0;max-height:300px;overflow-y:auto}
-li{display:flex;align-items:center;gap:10px;padding:8px 2px;border-top:1px solid var(--line)}
+.add{background:var(--accent);color:var(--accent-ink);border:0;border-radius:var(--radius-pill);padding:0 var(--space-4);font-weight:600}
+.add:hover{background:var(--accent-hover)}
+:focus-visible{outline:var(--focus-ring-width) solid var(--focus-ring);outline-offset:var(--space-half)}
+
+/* ============================
+   To-do list — task rows
+   ============================ */
+#list{list-style:none;margin:0;padding:0;max-height:var(--todo-list-max-height);overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--scrollbar-thumb) transparent}
+li{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-half);border-top:var(--border-width) solid var(--line)}
 li:first-child{border-top:0}
-li input[type=checkbox]{appearance:none;-webkit-appearance:none;flex:none;width:20px;height:20px;margin:0;border:2px solid var(--muted);border-radius:6px;cursor:pointer;display:grid;place-content:center}
+li input[type=checkbox]{appearance:none;-webkit-appearance:none;flex:none;width:var(--checkbox-size);height:var(--checkbox-size);margin:0;border:var(--space-half) solid var(--muted);border-radius:var(--radius-sm);cursor:pointer;display:grid;place-content:center}
 li input[type=checkbox]:checked{background:var(--accent);border-color:var(--accent)}
-li input[type=checkbox]:checked::after{content:"";width:5px;height:10px;border:solid var(--accent-ink);border-width:0 2px 2px 0;transform:rotate(45deg) translate(-1px,-1px)}
-.t{flex:1;overflow-wrap:anywhere;line-height:1.35}
+/* The tick: an L shape (two borders) turned 45°. Its size is drawn to fit
+   the checkbox, so it stays in px. */
+li input[type=checkbox]:checked::after{content:"";width:5px;height:10px;border:solid var(--accent-ink);border-width:0 var(--space-half) var(--space-half) 0;transform:rotate(45deg) translate(-1px,-1px)}
+.t{flex:1;overflow-wrap:anywhere;line-height:var(--line-height)}
 li.done .t{color:var(--muted);text-decoration:line-through}
 .del:hover{color:var(--danger)}
-.empty{color:var(--muted);padding:10px 2px;display:block}
-.foot{display:flex;gap:6px;justify-content:flex-end;margin-top:6px}
-.clear{background:none;border:0;color:var(--muted);font-size:13px;padding:2px 6px;border-radius:6px}
+.empty{color:var(--muted);padding:var(--space-3) var(--space-half);display:block}
+
+/* ============================
+   To-do list — footer
+   ============================ */
+.foot{display:flex;gap:var(--space-2);justify-content:flex-end;margin-top:var(--space-2)}
+.clear{background:none;border:0;color:var(--muted);font-size:var(--font-size-sm);padding:var(--space-half) var(--space-2);border-radius:var(--radius-sm)}
 .clear:hover{color:var(--ink)}
+/* !important so [hidden] always wins over a display set by a class (e.g.
+   .empty's display:block); otherwise hidden elements would still show. */
 [hidden]{display:none!important}
 
 /* ============================
@@ -44,14 +73,14 @@ li.done .t{color:var(--muted);text-decoration:line-through}
 .progress{
   flex:none;
   color:var(--muted);
-  font-size:11px;
+  font-size:var(--font-size-sm);
   font-variant-numeric:tabular-nums;
-  padding:1px 6px;
-  border:1px solid var(--line);
-  border-radius:999px;
+  padding:var(--border-width) var(--space-2);
+  border:var(--border-width) solid var(--line);
+  border-radius:var(--radius-pill);
 }
 li.done .progress{
-  opacity:0.6;
+  opacity:var(--done-opacity);
 }
 
 /* ============================
@@ -60,8 +89,8 @@ li.done .progress{
 
 /* Subtasks are indented by --depth, which render.js writes on each row. */
 li.item{
-  padding-left:calc(2px + var(--depth,0) * var(--indent));
-  transition:background-color 120ms ease,opacity 120ms ease;
+  padding-left:calc(var(--space-half) + var(--depth,0) * var(--indent));
+  transition:background-color var(--transition-fast) ease,opacity var(--transition-fast) ease;
 }
 li.item[draggable=true]{
   cursor:grab;
@@ -74,15 +103,15 @@ li.item[draggable=true]{
 
 .twisty{
   flex:none;
-  width:16px;
-  height:20px;
+  width:var(--icon-size);
+  height:var(--checkbox-size);
   padding:0;
   background:none;
   border:0;
   color:var(--muted);
-  font-size:11px;
+  font-size:var(--font-size-sm);
   line-height:1;
-  border-radius:4px;
+  border-radius:var(--radius-sm);
 }
 .twisty:hover{
   color:var(--ink);
@@ -93,24 +122,24 @@ li.item[draggable=true]{
    ============================ */
 
 li.item.is-dragging{
-  opacity:0.4;
+  opacity:var(--dragging-opacity);
   cursor:grabbing;
 }
 li.item.drag-over{
-  background:rgba(15,139,122,0.08);
+  background:var(--accent-tint);
 }
 /* The extra padding keeps the row height steady when the marker is added. */
 li.item.drag-over[data-insert-mode=before]{
-  border-top:2px solid var(--accent);
-  padding-top:7px;
+  border-top:var(--focus-ring-width) solid var(--accent);
+  padding-top:calc(var(--space-2) - var(--border-width));
 }
 li.item.drag-over[data-insert-mode=after]{
-  border-bottom:2px solid var(--accent);
-  padding-bottom:7px;
+  border-bottom:var(--focus-ring-width) solid var(--accent);
+  padding-bottom:calc(var(--space-2) - var(--border-width));
 }
 /* Middle-zone drop: the task becomes the last subtask of the highlighted row. */
 li.item.drag-over[data-insert-mode=childLast]{
-  box-shadow:inset 2px 0 0 var(--accent);
+  box-shadow:inset var(--focus-ring-width) 0 0 var(--accent);
 }
 
 /* ============================
@@ -118,19 +147,21 @@ li.item.drag-over[data-insert-mode=childLast]{
    ============================ */
 
 li.item:focus-visible{
-  outline:2px solid var(--accent);
-  outline-offset:-2px;
-  border-radius:4px;
+  outline:var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset:calc(-1 * var(--focus-ring-width));
+  border-radius:var(--radius-sm);
 }
 li.item.is-grabbed{
-  outline:2px dashed var(--accent);
-  outline-offset:-2px;
-  background:rgba(15,139,122,0.08);
+  outline:var(--focus-ring-width) dashed var(--accent);
+  outline-offset:calc(-1 * var(--focus-ring-width));
+  background:var(--accent-tint);
 }
 
 /* ============================
    To-do list — screen reader announcements
-   ============================ */
+   ============================
+   The standard "visually hidden" pattern: the 1px values are what keeps it
+   readable by screen readers while invisible, so they stay as they are. */
 
 .sr-only{
   position:absolute;

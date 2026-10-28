@@ -1,0 +1,218 @@
+/* Theme tokens for the study buddy UI: every colour, opacity, blur, radius,
+   spacing and font value lives here, so components never hardcode styles. */
+
+/* ============================
+   1. Variables — raw palette
+   ============================
+   The actual colour values. Components should NOT use these directly;
+   use the named tokens further down instead. To change the look, edit
+   the values here. */
+:root {
+  --grey-900: #1c1c1e;
+  --teal-300: #4fd1bc;
+  --teal-400: #2fbfa9;
+  --teal-950: #06231f;
+  --grey-100: #ededed;
+  --grey-300: #b8b8b8;
+  --red-500: #e5484d;
+  --white: #ffffff;
+  --black: #000000;
+}
+
+/* ============================
+   1. Variables — theme tokens
+   ============================
+   The names components use (e.g. "the colour of a panel"). A future light
+   mode only needs to give these names new values in a second block. */
+:root {
+  /* Glass panels (menu, chat bubbles, nudges): a neutral dark grey.
+     90% opacity, because 80% let busy or white backgrounds show through
+     so much that text dropped below the readable contrast level (WCAG AA).
+     No blur: the buddy lives in one see-through window covering the whole
+     screen, and CSS blur can't reach the desktop behind it. */
+  --surface-opacity: 0.9;
+  --surface: color-mix(in srgb, var(--grey-900) calc(var(--surface-opacity) * 100%), transparent);
+
+  /* A faint light edge so panels stand out on dark wallpapers. */
+  --surface-border: color-mix(in srgb, var(--white) 12%, transparent);
+  /* Soft, wide shadow that lifts panels off light backgrounds. */
+  --surface-shadow: 0 8px 24px color-mix(in srgb, var(--black) 35%, transparent);
+
+  /* Text on panels. Contrast measured against --surface over a white page
+     (the worst case): primary about 10.8:1, secondary about 6.4:1, and
+     secondary on a hovered menu row about 4.7:1. AA needs 4.5:1. */
+  --text-primary: var(--grey-100);
+  --text-secondary: var(--grey-300);
+
+  /* Accent: primary buttons ("Yes, help me!") and the active item in the
+     pill. Same teal as the to-do panel, so the whole app looks like one thing. */
+  --accent: var(--teal-400);
+  --accent-hover: var(--teal-300);
+
+  /* Text and icons placed ON the teal accent. Dark teal gives 7.2:1;
+     white would only be 2.3:1 and fail. */
+  --accent-text: var(--teal-950);
+
+  /* Secondary button ("Not now"): quieter than the accent button. */
+  --button-secondary-bg: color-mix(in srgb, var(--white) 12%, transparent);
+  --button-secondary-text: var(--text-primary);
+  /* A little lighter on hover; primary text on it stays about 5.5:1. */
+  --button-secondary-hover-bg: color-mix(in srgb, var(--white) 20%, transparent);
+
+  /* Chat bubbles: the user's messages get a teal tint so they are easy
+     to tell apart from the buddy's messages. */
+  --bubble-buddy-bg: var(--surface);
+  --bubble-user-bg: color-mix(in srgb, var(--teal-400) 25%, var(--surface));
+  /* Error messages: a red tint, so they stand out without shouting.
+     Primary text on it is about 8.4:1. */
+  --bubble-error-bg: color-mix(in srgb, var(--red-500) 25%, var(--surface));
+
+  /* Outline shown around whatever has keyboard focus. */
+  --focus-ring: var(--accent);
+  --focus-ring-width: 2px;
+
+  /* Rounded corners. Large and soft to match the friendly frog. */
+  --radius: 16px;
+  --radius-pill: 999px;
+
+  /* Spacing steps, from smallest to largest. Use these for padding,
+     margins and gaps instead of typing pixel values. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+
+  /* Typography: one sans-serif font family, the same as the to-do panel. */
+  --font: system-ui, -apple-system, "Segoe UI", Ubuntu, Cantarell, sans-serif;
+  --font-size-sm: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --line-height: 1.5;
+
+  /* Chat history fading. The bottom --history-clear-height (the newest
+     messages) is always fully visible; over the next --history-fade-height
+     older messages fade down to --history-fade-min-opacity. Faded text is
+     below AA on purpose and becomes fully visible on hover, focus or
+     scroll. Timings for this live in chat/config.js, not here. */
+  --history-fade-min-opacity: 0.45;
+  --history-clear-height: 160px;
+  --history-fade-height: 160px;
+  /* Mask colours: only their opacity matters, the colour itself is unused. */
+  --history-fade-solid: var(--black);
+  --history-fade-faded: color-mix(in srgb, var(--black) calc(var(--history-fade-min-opacity) * 100%), transparent);
+
+  /* Thin outlines, e.g. around the hover indicator. */
+  --border-width: 1px;
+
+  /* Short fade used for small hover changes. */
+  --transition-fast: 150ms;
+
+  /* Frog placement. The frog is centred in an invisible box: tall enough for
+     the click animation (198px tall) and wide enough for it (84px wide). */
+  --avatar-box-width: 100px;
+  --avatar-box-height: 200px;
+
+  /* How far below the box's centre the frog's feet are: half the idle frame
+     height (126px in avatar/config.js). Update both together. */
+  --avatar-feet-offset: 63px;
+
+  /* Gap between the frog and the screen edges in its default corner spot. */
+  --buddy-screen-margin: var(--space-5);
+
+  /* Hover indicator: the small oval under the frog's feet that hints
+     controls appear on hover. Dark grey with a light edge so it shows on both
+     white documents and dark wallpapers; teal while the frog is hovered. */
+  --indicator-width: 28px;
+  --indicator-height: 6px;
+  --indicator-gap: var(--space-1);
+  --indicator-bg: var(--surface);
+  --indicator-border: var(--surface-border);
+  --indicator-bg-hover: var(--accent);
+
+  /* Speech bubble above the frog (spelling tips, bedtime message). */
+  --bubble-max-width: 220px;
+  /* Size of the little tail pointing down at the frog, and how rounded
+     its tip is. */
+  --bubble-tail-size: 12px;
+  --bubble-tail-radius: var(--space-1);
+
+  /* Hover pill (Chat + More) that takes the indicator's place on hover. */
+  --pill-button-width: 40px;
+  --pill-button-height: 28px;
+  --icon-size: 16px;
+
+  /* The More menu beside the frog. */
+  --menu-width: 200px;
+  /* Soft light tint behind a hovered or focused menu item. */
+  --surface-hover: color-mix(in srgb, var(--white) 10%, transparent);
+  /* Thin line between groups of menu items. */
+  --divider: color-mix(in srgb, var(--white) 12%, transparent);
+
+  /* Chat: the input bar under the frog and the history column above it. */
+  --chat-width: 280px;
+  --chat-history-max-height: 320px;
+  /* Round send and close buttons in the input bar. */
+  --send-button-size: 32px;
+  /* Thin scrollbar in the history, light so it shows on the grey. */
+  --scrollbar-thumb: color-mix(in srgb, var(--white) 25%, transparent);
+  /* Buttons that can't be used right now (send while a reply streams). */
+  --disabled-opacity: 0.5;
+  /* How long the frog takes to slide up to make room for the input bar. */
+  --transition-lift: 200ms;
+
+  /* Proactive message (nudge): the small × in its corner. Timings live in
+     nudge/config.js, not here. */
+  --close-button-size: 24px;
+
+  /* To-do panel (Maike's component in toDoList/). It is its own solid
+     window, not a layer over the desktop, so it uses the panel grey without
+     transparency. If --grey-900 changes, update backgroundColor in
+     toDoList/todoWindow.js too (shown before the page has painted). */
+  --panel-bg: var(--grey-900);
+  /* The "Add a task" field: a light tint on the panel grey. */
+  --field-bg: color-mix(in srgb, var(--white) 8%, transparent);
+  /* Delete (×) on hover. */
+  --danger: var(--red-500);
+  /* Background of a row while a task is dragged over it. */
+  --accent-tint: color-mix(in srgb, var(--accent) 15%, transparent);
+  /* Small corners: checkboxes, icon buttons and rows. */
+  --radius-sm: 6px;
+  /* Half a spacing step, for small nudges in tight rows. */
+  --space-half: 2px;
+  /* The × and – glyphs in the panel header. */
+  --icon-glyph-size: 18px;
+  --checkbox-size: 20px;
+  /* The list scrolls beyond this height. */
+  --todo-list-max-height: 300px;
+  /* Subtask count ("1/3") on a finished task: quieter, but still readable. */
+  --done-opacity: 0.7;
+  /* The row being dragged, so the drop marker stands out. */
+  --dragging-opacity: 0.4;
+}
+
+/* ============================
+   2. Reset / base styles
+   ============================
+   None yet. Added when components are built (step 2 onward). */
+
+/* ============================
+   3. Layout containers
+   ============================
+   None yet. */
+
+/* ============================
+   4. Components
+   ============================
+   Component styles live in each component's own folder and use the
+   tokens above. */
+
+/* ============================
+   5. Animations / transitions
+   ============================
+   None yet. */
+
+/* ============================
+   6. States
+   ============================
+   None yet. */

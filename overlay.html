@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <title>Avatar PoC</title>
+  <link rel="stylesheet" href="styles/tokens.css">
+  <link rel="stylesheet" href="controls/controls.css">
+  <link rel="stylesheet" href="chat/chat.css">
+  <link rel="stylesheet" href="nudge/nudge.css">
   <style>
     body {
       margin: 0;
@@ -14,8 +18,11 @@
     }
     #avatar {
       position: absolute;
-      width: 200px;
-      height: 200px;
+      width: var(--avatar-box-width);
+      height: var(--avatar-box-height);
+      /* Stops a drag from selecting things or scrolling instead of moving. */
+      user-select: none;
+      touch-action: none;
       pointer-events: auto;
       display: flex;
       align-items: center;
@@ -31,210 +38,145 @@
       background-repeat: no-repeat;
       pointer-events: none;
     }
+    /* ============================
+       Speech bubble
+       ============================
+       Dark glass bubble above the frog, used by the spelling and bedtime
+       messages. overlay.js shows/hides it (display) and positions it.
+       All values come from styles/tokens.css. */
     #speech-bubble {
       position: absolute;
-      background: white;
-      border: 2px solid black;
-      border-radius: 10px;
-      padding: 8px 12px;
-      font-family: sans-serif;
-      font-size: 12px;
-      color: black;
-      max-width: 200px;
-      display: none;
       z-index: 100;
-      box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+      display: none;
+      /* Sized by its text alone. Without this the bubble wraps narrower
+         the closer it gets to the right edge, which shifts it again. */
+      width: max-content;
+      max-width: var(--bubble-max-width);
+      padding: var(--space-2) var(--space-3);
+      border: var(--border-width) solid var(--surface-border);
+      border-radius: var(--radius);
+      font-family: var(--font);
+      font-size: var(--font-size-md);
+      line-height: var(--line-height);
+      color: var(--text-primary);
+      background-color: var(--surface);
+      box-shadow: var(--surface-shadow);
       pointer-events: none;
     }
+
+    /* The tail: a small square turned 45° so one rounded corner points down
+       at the frog. Only its lower half is drawn (clip-path), so the
+       see-through grey isn't doubled where it overlaps the bubble.
+       overlay.js sets --bubble-tail-x so it sits above the frog's middle. */
     #speech-bubble::after {
       content: '';
       position: absolute;
-      bottom: -10px;
-      left: 20px;
-      border-width: 10px 10px 0;
-      border-style: solid;
-      border-color: white transparent;
-      display: block;
-      width: 0;
-    }
-
-    /* ============================
-       Avatar — hover affordance
-       ============================ */
-
-    /* The affordance that appears above the avatar on hover. It is the only
-       clickable thing on the overlay besides the chat itself, so it opts back
-       into pointer events while the pointer is over the avatar. */
-    #bubble-option {
-      position: absolute;
-      background: white;
-      border: 2px solid black;
-      border-radius: 999px;
-      padding: 6px 14px;
-      font-family: sans-serif;
-      font-size: 12px;
-      color: black;
-      white-space: nowrap;
-      display: none;
-      align-items: center;
-      gap: 6px;
-      z-index: 100;
-      box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
-      cursor: pointer;
-    }
-    #bubble-option::after {
-      content: '';
-      position: absolute;
-      bottom: -9px;
-      left: 24px;
-      border-width: 9px 9px 0;
-      border-style: solid;
-      border-color: white transparent;
-      display: block;
-      width: 0;
-    }
-    #bubble-option:hover,
-    #bubble-option:focus-visible {
-      background: #f0f4f7;
-    }
-
-    /* ============================
-       Avatar — AI chat panel
-       ============================ */
-
-    #chat-panel {
-      position: absolute;
-      width: 280px;
-      background: white;
-      border: 2px solid black;
-      border-radius: 12px;
-      font-family: sans-serif;
-      font-size: 12px;
-      color: black;
-      display: none;
-      flex-direction: column;
-      z-index: 101;
-      box-shadow: 2px 2px 8px rgba(0,0,0,0.25);
-    }
-    #chat-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      padding: 8px 10px;
-      border-bottom: 1px solid #e2e8ee;
-      font-weight: 700;
-    }
-    #chat-close {
-      background: none;
-      border: 0;
-      font: inherit;
-      cursor: pointer;
-      color: #6b7c8d;
-      padding: 0 4px;
-      border-radius: 4px;
-    }
-    #chat-close:hover {
-      color: black;
-    }
-    #chat-log {
-      padding: 8px 10px;
-      max-height: 180px;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    #chat-log:empty::before {
-      content: 'Describe a goal and I will break it into steps.';
-      color: #6b7c8d;
-    }
-    .chat-entry {
-      border-radius: 8px;
-      padding: 6px 8px;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-    }
-    .chat-entry.user {
-      background: #eef2f6;
-      align-self: flex-end;
-      max-width: 85%;
-    }
-    .chat-entry.buddy {
-      background: #f6fbf9;
-      align-self: flex-start;
-      max-width: 92%;
-    }
-    .chat-entry.error {
-      background: #fdecea;
-      color: #8d2f28;
-      align-self: flex-start;
-    }
-    .chat-entry.pending {
-      color: #6b7c8d;
-      font-style: italic;
-    }
-    #chat-form {
-      display: flex;
-      gap: 6px;
-      padding: 8px;
-      border-top: 1px solid #e2e8ee;
-    }
-    #chat-input {
-      flex: 1;
-      min-width: 0;
-      font: inherit;
-      padding: 6px 8px;
-      border: 1px solid #cbd5dd;
-      border-radius: 8px;
-    }
-    #chat-send {
-      background: #0f8b7a;
-      color: #fff;
-      border: 0;
-      border-radius: 8px;
-      padding: 0 12px;
-      font: inherit;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    #chat-send:disabled {
-      opacity: 0.5;
-      cursor: default;
-    }
-    .bird-svg {
-      width: 100%;
-      height: 100%;
-      overflow: visible;
-    }
-    .wing {
-      transition: transform 0.1s ease-in-out;
-      transform-origin: center;
+      bottom: calc(var(--bubble-tail-size) / -2);
+      left: var(--bubble-tail-x, var(--space-5));
+      width: var(--bubble-tail-size);
+      height: var(--bubble-tail-size);
+      border-right: var(--border-width) solid var(--surface-border);
+      border-bottom: var(--border-width) solid var(--surface-border);
+      border-bottom-right-radius: var(--bubble-tail-radius);
+      background-color: var(--surface);
+      clip-path: polygon(100% 0, 100% 100%, 0 100%);
+      transform: translateX(-50%) rotate(45deg);
     }
   </style>
 </head>
 <body>
   <div id="avatar">
     <div id="avatar-sprite"></div>
+    <!-- Decorative hint for now; step 3 makes it part of the keyboard-reachable controls. -->
+    <div id="hover-indicator" class="hover-indicator" aria-hidden="true"></div>
+    <!-- Hover pill: replaces the indicator on hover (controls/controls.js). -->
+    <div id="buddy-pill" class="buddy-pill" role="toolbar" aria-label="Buddy controls" data-no-drag>
+      <button id="pill-chat" class="pill-button" type="button" aria-label="Chat" aria-pressed="false">
+        <svg class="control-icon" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M11 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-6"/>
+          <path d="M17.5 3.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/>
+        </svg>
+      </button>
+      <button id="pill-more" class="pill-button" type="button" aria-label="More" aria-haspopup="menu" aria-expanded="false" aria-controls="buddy-menu">
+        <svg class="control-icon" viewBox="0 0 24 24" stroke-width="3" stroke-linecap="round" aria-hidden="true">
+          <path d="M5 12h.01M12 12h.01M19 12h.01"/>
+        </svg>
+      </button>
+    </div>
   </div>
   <div id="speech-bubble"></div>
-<<<<<<< HEAD
-  <button id="bubble-option" type="button">Ask the buddy</button>
-  <div id="chat-panel" role="dialog" aria-label="Ask the buddy to break down a task">
-    <div id="chat-head">
-      <span>Ask the buddy</span>
-      <button id="chat-close" type="button" aria-label="Close chat">&times;</button>
+  <!-- More menu, placed beside the frog by controls/controls.js. -->
+  <div id="buddy-menu" class="buddy-menu" role="menu" aria-label="More">
+    <button class="menu-item" type="button" role="menuitem" data-action="todo">
+      <svg class="control-icon" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="5" y="4" width="14" height="17" rx="2"/>
+        <path d="M9 4V3h6v1M9 12l2 2 4-4"/>
+      </svg>
+      To-do
+    </button>
+    <button class="menu-item" type="button" role="menuitem" data-action="settings">
+      <svg class="control-icon" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>
+      </svg>
+      Settings
+    </button>
+    <div class="menu-divider" role="separator"></div>
+    <button class="menu-item" type="button" role="menuitem" data-action="snooze" aria-haspopup="true" aria-expanded="false">
+      <svg class="control-icon" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>
+      </svg>
+      Snooze
+      <span class="menu-item-arrow" aria-hidden="true">›</span>
+    </button>
+    <div class="snooze-choices" role="group" aria-label="Snooze for" hidden>
+      <button class="menu-item" type="button" role="menuitem" data-snooze="30min">30 min</button>
+      <button class="menu-item" type="button" role="menuitem" data-snooze="1h">1 hour</button>
+      <button class="menu-item" type="button" role="menuitem" data-snooze="tomorrow">Until tomorrow</button>
     </div>
-    <div id="chat-log" role="log" aria-live="polite" aria-relevant="additions text"></div>
-    <form id="chat-form">
-      <input type="text" id="chat-input" aria-label="Describe a goal" placeholder="I need to write my thesis" maxlength="200" autocomplete="off">
-      <button id="chat-send" type="submit">Send</button>
-    </form>
   </div>
-=======
+  <!-- AI chat (logic: overlay.js; placement: chat/chatLayout.js). The input
+       bar comes first so Tab goes input -> send -> history. -->
+  <div id="chat-panel" role="dialog" aria-label="Ask the buddy to break down a task">
+    <form id="chat-form">
+      <button id="chat-close" type="button" aria-label="Close chat">
+        <svg class="control-icon" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+      <input type="text" id="chat-input" aria-label="Describe a goal" placeholder="Start new chat…" maxlength="200" autocomplete="off">
+      <button id="chat-send" type="submit" aria-label="Send">
+        <svg class="control-icon" viewBox="0 0 24 24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 19V5M6 11l6-6 6 6"/>
+        </svg>
+      </button>
+    </form>
+    <div id="chat-log" role="log" aria-label="Chat history" aria-live="polite" aria-relevant="additions text" tabindex="0"></div>
+  </div>
+  <!-- The buddy's proactive message (nudge/nudge.js), placed in the chat
+       history's spot. Only the text is a live region, so screen readers read
+       the message without the buttons, and focus is never moved to it. -->
+  <div id="nudge" class="nudge" role="group" aria-label="Message from your buddy">
+    <div class="nudge-top">
+      <p class="nudge-text" role="status" aria-live="polite"></p>
+      <button class="nudge-close" type="button" aria-label="Dismiss">
+        <svg class="control-icon" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="nudge-replies"></div>
+  </div>
   <script src="avatar/config.js"></script>
   <script src="avatar/spriteAnimator.js"></script>
->>>>>>> main
+  <script src="controls/config.js"></script>
+  <script src="controls/avatarPosition.js"></script>
+  <script src="controls/drag.js"></script>
+  <script src="controls/controls.js"></script>
+  <script src="chat/config.js"></script>
+  <script src="chat/chatLayout.js"></script>
+  <script src="nudge/config.js"></script>
+  <script src="nudge/nudge.js"></script>
   <script src="overlay.js"></script>
 </body>
 </html>
