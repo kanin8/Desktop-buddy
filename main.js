@@ -13,17 +13,17 @@ const { flushStore } = require('./toDoList/todoService');
 const CONFIG = require('./config');
 
 // --- HARDWARE ACCELERATION ---
-// Must be set before the app becomes ready. On machines where Chromium cannot
-// start a GPU process it aborts the whole app with
-// "GPU process isn't usable. Goodbye." and SIGTRAP, so `npm start` appears to do
-// nothing. This app only draws simple DOM and transparent windows, which render
-// fine without the GPU, so opting out keeps startup reliable everywhere.
-// --disable-gpu on its own is not enough: the software rasterizer then takes
-// over and fails too, hence app.commandLine.appendSwitch as well.
-// Guarded because Electron throws if this is called once the app is ready (for
-// example when a test harness requires this module after app-ready).
-if (!app.isReady()) app.disableHardwareAcceleration();
-app.commandLine.appendSwitch('disable-software-rasterizer');
+// Keep the default GPU path. Disabling hardware acceleration and the software
+// rasterizer left Chromium with no renderer at all on Linux: windows opened
+// but rendered nothing (blank settings window, invisible overlay). On machines
+// that genuinely cannot start a GPU process, falling back to SwiftShader is
+// the correct failure mode — removing the flags restores it.
+//
+// The Chromium sandbox also fails on some Linux systems (renderer processes
+// abort on shared-memory creation with ESRCH), and Electron 44 no longer
+// honors appendSwitch('no-sandbox') for it. Those launches must pass
+// `--no-sandbox` on the CLI BEFORE the app path — see the "start:linux"
+// script in package.json. Other platforms keep the sandbox.
 
 // --- SINGLE INSTANCE LOCK ---
 const gotTheLock = app.requestSingleInstanceLock();
@@ -117,7 +117,10 @@ function startCursorPolling() {
   if (process.platform === 'linux' && CONFIG.XINPUT_BIN) {
     const { spawn } = require('child_process');
     try {
-      cursorStream = spawn(CONFIG.XINPUT_BIN, ['test-xi2', '--root'], {
+      // stdbuf -oL is required: xinput's stdout is fully buffered when piped,
+      // so motion events would sit in the child's stdio buffer and the app
+      // would never see them (hover would silently die).
+      cursorStream = spawn('stdbuf', ['-oL', CONFIG.XINPUT_BIN, 'test-xi2', '--root'], {
         stdio: ['ignore', 'pipe', 'ignore'],
       });
     } catch {

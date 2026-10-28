@@ -5,6 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "npx concurrently \"npm run start:server\" \"electron .\"",
+    "start:linux": "npx concurrently \"npm run start:server\" \"electron --no-sandbox .\"",
     "start:server": "node ./ai-server/index.js",
     "test:bedtime": "electron . --test-bedtime",
     "test": "echo \"Error: no test specified\" && exit 1"
