@@ -3,7 +3,11 @@ const { createDetector } = require('../detector/index.js');
 const { ActivityClassifier } = require('../classifier/index.js');
 
 class ActivityIPCHandlers {
-  constructor() {
+  // `aiClassify(info)` resolves a category for windows the rule list does not
+  // know. It is passed in so this feature does not depend on a specific AI
+  // backend.
+  constructor({ aiClassify } = {}) {
+    this.aiClassify = aiClassify || (async () => 'uncategorized');
     this.detector = createDetector();
     this.classifier = new ActivityClassifier();
     this.currentActivity = null;
@@ -46,9 +50,12 @@ class ActivityIPCHandlers {
         category = await this.aiClassify(info);
       }
 
+      // For a browser on a known site, the site is the activity
+      // ("YouTube"), and the browser is kept separately.
       const event = {
-        app: info.appName,
-        domain: info.url ? new URL(info.url).hostname : null,
+        app: info.site || info.appName,
+        browser: info.site ? info.appName : null,
+        domain: info.url ? new URL(info.url).hostname : (info.domain || null),
         title: info.title,
         category: category,
         source: info.source,
@@ -64,51 +71,6 @@ class ActivityIPCHandlers {
       this.trackProcrastination(event);
     } catch (e) {
       console.error('[Activity] CRITICAL ERROR in updateLoop:', e);
-    }
-  }
-
-  /**
-   * ACTUAL AI CLASSIFICATION
-   * This function now acts as a client to an AI server.
-   */
-  async aiClassify(info) {
-    console.log(`[AI] Requesting remote analysis for: ${info.appName} - ${info.title}`);
-
-    try {
-      // Fetch the current endpoint from the settings
-      const settings = await ipcMain.invoke('get-ai-config'); // This is tricky as it's an internal call
-      // Since we are in the main process, we can just access the settings variable if it's global,
-      // but here we should use a proper way to get the config.
-      // For simplicity in this POC, I'll use a fallback if I can't access the main settings.
-
-      // Wait, I'm already in the main process. I should just import the settings or pass them.
-      // Let's assume we can access the endpoint via a global or similar.
-      // I'll modify this to use a dynamic endpoint.
-
-      // To keep this clean, I'll just use a hardcoded fallback but in a real app I'd inject the config.
-      // Actually, let's just use a simple fetch call to the likely endpoint.
-
-      const endpoint = 'http://localhost:3000'; // In a real implementation, this comes from settings.json
-
-      const response = await fetch(`${endpoint}/classify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          appName: info.appName,
-          title: info.title,
-          url: info.url
-        })
-      });
-
-      if (!response.ok) throw new Error(`AI Server responded with ${response.status}`);
-
-      const data = await response.json();
-      console.log(`[AI] Remote Decision: ${data.category}`);
-      return data.category; // Expected: 'productive', 'leisure', or 'uncategorized'
-
-    } catch (e) {
-      console.error('[AI] AI Server unreachable or error occurred. Falling back to uncategorized.', e.message);
-      return 'uncategorized';
     }
   }
 

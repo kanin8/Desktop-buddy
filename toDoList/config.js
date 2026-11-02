@@ -15,17 +15,53 @@ module.exports = {
   // Store persistence
   STORE_DEBOUNCE_MS: 200, // coalesce rapid edits into one write
 
-  // AI backend (remote, OpenAI-compatible chat-completions API)
-  // Anything speaking /v1/chat/completions works: OpenAI, OpenRouter, Groq,
-  // Together, a self-hosted vLLM. Cheapest usable defaults come first.
-  AI_DEFAULT_BASE_URL: 'https://api.openai.com/v1',
-  AI_DEFAULT_MODEL: 'gpt-4o-mini',       // inexpensive, fast, reliable JSON output
-  AI_FREE_MODEL_HINTS: [                 // cheap/free options offered in Settings
-    'gpt-4o-mini',
-    'llama-3.1-8b-instant',               // Groq free tier
-    'gpt-3.5-turbo',
-  ],
+  // AI backend
+  // Every AI feature (chat, task breakdown, activity classification) shares
+  // this one backend. Anthropic goes through its official SDK
+  // (anthropicClient.js); the others speak the OpenAI-compatible
+  // /v1/chat/completions API.
+  AI_PROVIDERS: {
+    anthropic: {
+      label: 'Anthropic (Claude)',
+      baseUrl: 'https://api.anthropic.com', // fixed: the SDK sets it itself
+      model: 'claude-haiku-5-5',          // fast and cheap, fits short replies and classification
+      modelHints: ['claude-haiku-5-5'],
+      needsApiKey: true,
+      usesClaudeSdk: true,
+    },
+    openai: {
+      label: 'OpenAI',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o-mini',              // inexpensive, fast, reliable JSON output
+      modelHints: ['gpt-4o-mini', 'gpt-3.5-turbo'],
+      needsApiKey: true,
+    },
+    ollama: {
+      label: 'Ollama (local)',
+      baseUrl: 'http://localhost:11434/v1',
+      model: 'gemma:2b',
+      modelHints: ['gemma:2b', 'llama3.2', 'qwen2.5'],
+      needsApiKey: false,                // runs on this machine, no account
+    },
+    custom: {
+      label: 'Other (OpenAI-compatible)',
+      baseUrl: '',                        // e.g. Groq, OpenRouter, a vLLM server
+      model: '',
+      modelHints: ['llama-3.1-8b-instant'], // Groq free tier
+      needsApiKey: true,
+    },
+  },
+  AI_DEFAULT_PROVIDER: 'anthropic',
+  AI_DEFAULT_BASE_URL: 'https://api.anthropic.com',
+  AI_DEFAULT_MODEL: 'claude-haiku-5-5',
   AI_KEY_ENV_VAR: 'DESKTOP_BUDDY_AI_KEY', // env var checked before the stored key
+
+  // Claude-specific request shaping. Claude rejects temperature settings, so
+  // `effort` is the speed control instead. Claude thinks before it answers and
+  // that thinking counts toward max_tokens, so the cap is higher than the
+  // reply itself needs.
+  AI_CLAUDE_EFFORT: 'low',               // short replies and one-word classifications
+  AI_CLAUDE_MAX_TOKENS: 2048,
   AI_TIMEOUT_MS: 30000,                  // aborts a stalled request
   AI_MAX_TOKENS: 400,                    // caps cost of the in-character reply
   AI_TEMPERATURE: 0.7,
@@ -33,6 +69,10 @@ module.exports = {
   // Input classification (task vs chat)
   AI_CLASSIFY_TEMPERATURE: 0.1,
   AI_CLASSIFY_MAX_TOKENS: 50,
+
+  // Activity classification (productive vs leisure for the active window)
+  AI_ACTIVITY_TEMPERATURE: 0,            // same window should get the same answer
+  AI_ACTIVITY_MAX_TOKENS: 10,            // the answer is a single word
 
   // Task breakdown shaping
   MAX_SUBTASKS: 7,          // hard cap on generated subtasks

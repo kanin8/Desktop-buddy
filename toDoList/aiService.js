@@ -1,5 +1,6 @@
 /**
- * Electron wiring for the AI task-breakdown feature.
+ * Electron wiring for every AI feature: the overlay chat, task breakdown and
+ * activity classification.
  *
  * Owns the `ai-*` IPC surface: it runs the remote calls (so the API key stays in
  * this process), streams the reply tokens back to the overlay, and writes the
@@ -9,6 +10,7 @@
 const { ipcMain, BrowserWindow } = require('electron');
 const path = require('path');
 const ai = require('./ai');
+const { describeClaudeError } = require('./anthropicClient');
 const CONFIG = require('./config');
 const { createSettingsStore } = require('./appSettings');
 const { getStore, broadcastItems } = require('./todoService');
@@ -43,14 +45,14 @@ async function askAndBreakdown(win, text) {
   const goal = String(text || '').trim();
   if (!goal) return;
 
-  if (!config.isConfigured()) {
-    send(win, 'ai-error', 'Add an API key in Settings to use AI task breakdown.');
+  if (!config.isActive()) {
+    send(win, 'ai-error', 'Turn on AI and finish its setup in Settings to chat with the buddy.');
     return;
   }
 
   const controller = new AbortController();
   inFlight.set(eventKey(win), controller);
-  const base = { baseUrl: config.read().baseUrl, apiKey: config.resolveApiKey(), model: config.read().model, signal: controller.signal };
+  const base = Object.assign(config.connection(), { signal: controller.signal });
 
   try {
     const reply = await ai.streamReply(Object.assign({ text: goal, onToken: t => send(win, 'ai-stream', t) }, base));
@@ -107,6 +109,9 @@ function eventKey(win) {
 
 /** Turns a network failure into something worth showing a user. */
 function friendlyError(e) {
+  const claudeMessage = describeClaudeError(e);
+  if (claudeMessage) return claudeMessage;
+
   const message = String((e && e.message) || e);
   if (/abort/i.test(message)) return 'The AI request timed out.';
   if (/fetch failed|ENOTFOUND|ECONNREFUSED|EAI_AGAIN/i.test(message)) {
@@ -115,6 +120,28 @@ function friendlyError(e) {
   if (/401|403/.test(message)) return 'The API key was rejected. Check it in Settings.';
   if (/429/.test(message)) return 'Rate limited by the AI provider. Try again shortly.';
   return message.slice(0, 200);
+}
+
+/**
+ * Asks the AI whether a window is productive or leisure. Used by the activity
+ * detector for apps its rule list does not know. Resolves 'uncategorized' when
+ * AI is off or the request fails, so detection keeps running without AI.
+ */
+async function classifyActivity(info) {
+  const config = getSettings();
+  if (!config.isActive()) return 'uncategorized';
+
+  try {
+    return await ai.classifyActivity(Object.assign(config.connection(), {
+      appName: info.appName,
+      title: info.title,
+      // Windows/Linux cannot read browser URLs; the title-derived domain is the next best hint.
+      url: info.url || info.domain,
+    }));
+  } catch (e) {
+    console.warn('[AI] Activity classification failed:', friendlyError(e));
+    return 'uncategorized';
+  }
 }
 
 /** Registers the `ai-*` channels. Called once by the host app's main.js. */
@@ -137,4 +164,4 @@ function registerAiIpc() {
   });
 }
 
-module.exports = { registerAiIpc, getSettings, friendlyError };
+module.exports = { registerAiIpc, getSettings, friendlyError, classifyActivity };
