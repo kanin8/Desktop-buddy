@@ -60,6 +60,12 @@ test('buildReplyMessages asks for short prose and no JSON', () => {
   assert.ok(!messages.some((m) => /json/i.test(m.content)), 'reply must not be JSON');
 });
 
+test('buildReplyMessages puts the voice guide before the persona', () => {
+  const messages = ai.buildReplyMessages('hi', 'Talk like a friendly frog.');
+  assert.match(messages[0].content, /^Talk like a friendly frog\./);
+  assert.match(messages[0].content, /two short sentences/i);
+});
+
 test('buildBreakdownMessages requests the expected shape and a cap', () => {
   const messages = ai.buildBreakdownMessages('write my thesis', ['buy milk', 'pay bills']);
   assert.match(messages[0].content, /"parent"/);

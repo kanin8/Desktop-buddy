@@ -29,6 +29,9 @@ module.exports = {
   AI_TIMEOUT_MS: 30000,                  // aborts a stalled request
   AI_MAX_TOKENS: 400,                    // caps cost of the in-character reply
   AI_TEMPERATURE: 0.7,
+  // Voice guide sent as the reply's system message. Relative to this folder;
+  // aiService.js resolves it against __dirname so the launch directory never matters.
+  VOICE_GUIDE_PATH: '../docs/voice-and-behaviour.md',
 
   // Input classification (task vs chat)
   AI_CLASSIFY_TEMPERATURE: 0.1,

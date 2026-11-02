@@ -28,10 +28,13 @@ const CLASSIFY_PERSONA =
 /**
  * Messages for the streamed in-character reply.
  * No JSON mode: the tokens are shown live, so they must be readable prose.
+ * `voiceGuide` (optional) is the team's voice guide; it goes first and PERSONA
+ * last, so the length/format rule is the final instruction the model reads.
  */
-function buildReplyMessages(text) {
+function buildReplyMessages(text, voiceGuide) {
+  var systemPrompt = voiceGuide ? voiceGuide + '\n\n' + PERSONA : PERSONA;
   return [
-    { role: 'system', content: PERSONA },
+    { role: 'system', content: systemPrompt },
     { role: 'user', content: String(text || '').trim() },
   ];
 }
@@ -252,12 +255,12 @@ async function callChatApi(options) {
 }
 
 /** Streamed reply for the speech bubble. */
-async function streamReply({ baseUrl, apiKey, model, text, onToken, signal }) {
+async function streamReply({ baseUrl, apiKey, model, text, voiceGuide, onToken, signal }) {
   return callChatApi({
     baseUrl: baseUrl,
     apiKey: apiKey,
     model: model,
-    messages: buildReplyMessages(text),
+    messages: buildReplyMessages(text, voiceGuide),
     stream: true,
     temperature: CONFIG.AI_TEMPERATURE,
     maxTokens: CONFIG.AI_MAX_TOKENS,
