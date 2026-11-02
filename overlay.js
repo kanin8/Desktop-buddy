@@ -437,9 +437,9 @@ window.electronAPI.onAIError((message) => {
 
 window.electronAPI.onAITasksAdded((info) => {
   addChatLine(
-    info.count > 0
-      ? 'Added ' + info.count + ' subtask' + (info.count === 1 ? '' : 's') + ' to your list.'
-      : 'Added it to your list.',
+    info.count > 1
+      ? 'Done, ' + info.count + ' small steps on your list.'
+      : "Done, it's on your list.",
     'buddy'
   );
 });
