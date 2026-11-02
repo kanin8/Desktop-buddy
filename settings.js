@@ -1,22 +1,21 @@
-// Settings window: avatar appearance, movement style, the to-do panel toggle,
-// and the AI task-breakdown configuration.
+// Settings window: start/stop, current activity, the to-do panel toggle,
+// and the AI configuration shared by every AI feature.
 const toggleBtn = document.getElementById('toggleBtn');
 const statusBar = document.getElementById('statusBar');
 const todoToggle = document.getElementById('todoToggle');
 
-// AI task-breakdown settings. The API key is write-only: the main process
-// reports whether a key exists, but never sends the stored value back here.
-// Supports both provider selection (ollama/openai/etc) and model hints.
-const aiProvider = document.getElementById('aiProvider');
+// AI settings. The API key is write-only: the main process reports whether a
+// key exists, but never sends the stored value back here.
 const aiToggle = document.getElementById('aiToggle');
+const aiProvider = document.getElementById('aiProvider');
+const aiBaseUrlRow = document.getElementById('aiBaseUrlRow');
 const aiBaseUrl = document.getElementById('aiBaseUrl');
-const aiEndpoint = document.getElementById('aiEndpoint');
 const aiModel = document.getElementById('aiModel');
-const aiApiKey = document.getElementById('aiApiKey');
 const aiModelHints = document.getElementById('aiModelHints');
+const aiApiKeyRow = document.getElementById('aiApiKeyRow');
+const aiApiKey = document.getElementById('aiApiKey');
 const aiKeyHint = document.getElementById('aiKeyHint');
 const aiStatus = document.getElementById('aiStatus');
-const saveAiBtn = document.getElementById('saveAiBtn');
 
 
 let currentState = 'running';
@@ -33,15 +32,6 @@ async function syncState() {
   if (activity) {
     currentActivity = activity;
     updateActivityUI();
-  }
-
-  // Sync AI config
-  const aiConfig = await window.electronAPI.getAIConfig();
-  if (aiConfig) {
-    aiProvider.value = aiConfig.provider;
-    aiApiKey.value = aiConfig.apiKey;
-    aiModel.value = aiConfig.model;
-    aiEndpoint.value = aiConfig.endpoint;
   }
 
   updateUI();
@@ -106,70 +96,102 @@ todoToggle.addEventListener('change', () => {
   syncTodoState();
 });
 
-// --- AI TASK BREAKDOWN ---
+// --- AI ---
+// One section configures every AI feature. Fields save as soon as they change.
 
-function renderAiStatus(ai) {
-  if (ai.hasApiKey) {
-    aiKeyHint.textContent = ai.keyEnvVar + ' is set, so that key is used.';
-  } else {
-    aiKeyHint.textContent = 'The key is stored in your user data folder, never in the repo.';
-  }
-  aiStatus.textContent = ai.configured
-    ? 'Ready — ' + ai.model
-    : 'Add an API key to enable AI breakdown.';
+// Latest settings from the main process, so a provider switch can look up its preset.
+let aiSettings = null;
+
+// Fills the provider dropdown once from the presets in toDoList/config.js.
+function renderProviderOptions(providers) {
+  if (aiProvider.options.length) return;
+  Object.keys(providers).forEach((id) => {
+    const option = document.createElement('option');
+    option.value = id;
+    option.textContent = providers[id].label;
+    aiProvider.appendChild(option);
+  });
 }
 
-async function syncAiSettings() {
-  const ai = await window.electronAPI.getAISettings();
-  aiToggle.checked = ai.enabled;
-  aiBaseUrl.value = ai.baseUrl;
-  aiModel.value = ai.model;
-
-  // Clear the field so a stored key is never rendered back into the DOM.
-  aiApiKey.value = '';
-
+// Shows the model suggestions and placeholders for the selected provider.
+// Claude's SDK has a fixed address, so its endpoint row is hidden.
+function renderProviderHints(preset) {
+  aiBaseUrlRow.hidden = !!preset.usesClaudeSdk;
+  aiBaseUrl.placeholder = preset.baseUrl || 'https://your-endpoint/v1';
+  aiModel.placeholder = preset.model || 'model name';
   aiModelHints.innerHTML = '';
-  ai.modelHints.forEach((model) => {
+  preset.modelHints.forEach((model) => {
     const option = document.createElement('option');
     option.value = model;
     aiModelHints.appendChild(option);
   });
+}
+
+function renderKeyHint(ai) {
+  aiApiKeyRow.hidden = !ai.needsApiKey;
+  if (!ai.needsApiKey) {
+    aiKeyHint.textContent = 'No API key needed: Ollama runs on this computer.';
+  } else if (ai.keyFromEnv) {
+    aiKeyHint.textContent = ai.keyEnvVar + ' is set, so that key is used.';
+  } else if (ai.hasApiKey) {
+    aiKeyHint.textContent = 'A key is saved. Type a new one to replace it.';
+  } else if (ai.providers[ai.provider].usesClaudeSdk) {
+    aiKeyHint.textContent = 'Create a Claude key at console.anthropic.com. It is stored in your user data folder, never in the repo.';
+  } else {
+    aiKeyHint.textContent = 'The key is stored in your user data folder, never in the repo.';
+  }
+}
+
+function renderAiStatus(ai) {
+  if (!ai.enabled) {
+    aiStatus.textContent = 'AI is off.';
+  } else if (!ai.configured) {
+    aiStatus.textContent = ai.needsApiKey ? 'Add an API key to start.' : 'Fill in the endpoint and model.';
+  } else {
+    aiStatus.textContent = 'Ready: ' + ai.model;
+  }
+}
+
+// Redraws the whole section from the main process's view of the settings.
+function renderAiSettings(ai) {
+  aiSettings = ai;
+  renderProviderOptions(ai.providers);
+  aiToggle.checked = ai.enabled;
+  aiProvider.value = ai.provider;
+  aiBaseUrl.value = ai.baseUrl;
+  aiModel.value = ai.model;
+  // Clear the field so a stored key is never rendered back into the DOM.
+  aiApiKey.value = '';
+  aiApiKey.placeholder = ai.hasApiKey ? '•••••••• (saved)' : 'Paste your API key';
+  renderProviderHints(ai.providers[ai.provider]);
+  renderKeyHint(ai);
   renderAiStatus(ai);
 }
 
-// Sends only the fields the user actually edited; a blank key field is ignored
-// by the main process so it cannot wipe an existing key.
-function pushAiSettings() {
-  const patch = { enabled: aiToggle.checked };
-  if (aiBaseUrl.value.trim()) patch.baseUrl = aiBaseUrl.value.trim();
-  if (aiModel.value.trim()) patch.model = aiModel.value.trim();
-  if (aiApiKey.value.trim()) patch.apiKey = aiApiKey.value.trim();
-
-  return window.electronAPI.setAISettings(patch).then((ai) => {
-    aiApiKey.value = '';
-    renderAiStatus(ai);
-  });
+async function syncAiSettings() {
+  renderAiSettings(await window.electronAPI.getAISettings());
 }
 
-// Auto-sync for quick toggles (enabled, baseUrl, model)
-[aiToggle, aiBaseUrl, aiModel].forEach((el) => el.addEventListener('change', pushAiSettings));
-aiApiKey.addEventListener('change', pushAiSettings);
+// Sends a partial update; the main process ignores a blank key so it cannot
+// wipe a saved one.
+async function pushAiSettings(patch) {
+  renderAiSettings(await window.electronAPI.setAISettings(patch));
+}
 
-// Manual save for provider/endpoint (requires explicit confirmation)
-saveAiBtn.addEventListener('click', async () => {
-  const config = {
+aiToggle.addEventListener('change', () => pushAiSettings({ enabled: aiToggle.checked }));
+aiBaseUrl.addEventListener('change', () => pushAiSettings({ baseUrl: aiBaseUrl.value }));
+aiModel.addEventListener('change', () => pushAiSettings({ model: aiModel.value }));
+aiApiKey.addEventListener('change', () => pushAiSettings({ apiKey: aiApiKey.value }));
+
+// Switching provider loads that provider's default endpoint and model, so the
+// user only has to add a key. "Other" keeps the current values to edit.
+aiProvider.addEventListener('change', () => {
+  const preset = aiSettings.providers[aiProvider.value];
+  pushAiSettings({
     provider: aiProvider.value,
-    apiKey: aiApiKey.value,
-    model: aiModel.value,
-    endpoint: aiEndpoint.value
-  };
-
-  const result = await window.electronAPI.saveAIConfig(config);
-  if (result.success) {
-    alert('AI Settings saved and synced!');
-  } else {
-    alert('Failed to save AI settings.');
-  }
+    baseUrl: preset.baseUrl,
+    model: preset.model,
+  });
 });
 
 // Initial UI state

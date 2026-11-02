@@ -372,3 +372,29 @@ test('classifyInput defaults to chat when parsing fails', async () => {
     assert.deepStrictEqual(result, { type: 'chat' });
   });
 });
+// ------------------------------------------------- activity classification ---
+
+test('parseActivityCategory finds the keyword despite extra text', () => {
+  assert.strictEqual(ai.parseActivityCategory('Productive.'), 'productive');
+  assert.strictEqual(ai.parseActivityCategory('I would say leisure'), 'leisure');
+  assert.strictEqual(ai.parseActivityCategory('no idea'), 'uncategorized');
+  assert.strictEqual(ai.parseActivityCategory(null), 'uncategorized');
+});
+
+test('classifyActivity sends the window details and parses the reply', async () => {
+  let sentBody = null;
+  await withFetch(async (_url, init) => {
+    sentBody = JSON.parse(init.body);
+    return jsonResponse(chatPayload('leisure'));
+  }, async () => {
+    const category = await ai.classifyActivity({
+      baseUrl: 'http://localhost:11434/v1', model: 'gemma:2b',
+      appName: 'Chrome', title: 'Funny cats', url: 'https://youtube.com',
+    });
+    assert.strictEqual(category, 'leisure');
+  });
+  const userMessage = sentBody.messages[1].content;
+  assert.match(userMessage, /App: Chrome/);
+  assert.match(userMessage, /Title: Funny cats/);
+  assert.strictEqual(sentBody.stream, false);
+});
