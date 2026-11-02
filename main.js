@@ -216,10 +216,16 @@ function createOverlayWindow() {
 
 function createSettingsWindow() {
   settingsWin = new BrowserWindow({
-    width: 320,
-    height: 520,
+    width: 360,
+    // Measured as the page area (not counting the title bar), so the page
+    // fits without scrolling while AI is off. AI's fields scroll.
+    height: 660,
+    useContentSize: true,
     resizable: false,
     skipTaskbar: false,
+    // Shown before the page paints, so it can't read the CSS theme yet: the
+    // same grey as --grey-900 in styles/tokens.css. Update both together.
+    backgroundColor: '#1c1c1e',
     // Hidden at launch so it doesn't pop up every start; opened from the tray.
     show: false,
     webPreferences: {
