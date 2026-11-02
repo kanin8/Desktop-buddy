@@ -165,10 +165,11 @@ window.AVATAR_SPRITE_CONFIG = {
       frameDurationMs: 83,
       loop: false,
       display: {
-        width: 113,
-        height: 136,
+        width: 103,
+        height: 123,
       },
-      offsetY: -2,
+      offsetX: 4,
+      offsetY: 3,
     },
 
     closeComputer: {

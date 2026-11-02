@@ -47,7 +47,10 @@ const preloadedSpriteSheets = Object.values(window.AVATAR_SPRITE_CONFIG.animatio
 );
 
 // One-shot reaction played on click; hands back to the rest state when it ends.
+// While seated at the desk, the frog glances up instead of doing the standing
+// reaction.
 const CLICK_ANIMATION = 'standingClicked';
+const SEATED_CLICK_ANIMATION = 'deskLookUp';
 
 // The last activity category reported by detection. null until the first
 // update, so an already-running category is not mistaken for a transition.
@@ -174,7 +177,8 @@ function getFrogRect() {
 avatar.addEventListener('click', (event) => {
   if (isFromControls(event)) return;
   ++sequenceToken;
-  spriteAnimator.play(CLICK_ANIMATION, {
+  const isSeated = activityCategory === 'productive';
+  spriteAnimator.play(isSeated ? SEATED_CLICK_ANIMATION : CLICK_ANIMATION, {
     onComplete: resumeRestAnimation,
   });
 });
