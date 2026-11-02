@@ -34,8 +34,29 @@ const placementParts = [spriteElement, hoverIndicator, pill];
 // The animation shown while the frog is at rest.
 const DEFAULT_IMAGE_ANIMATION = 'idle';
 
-// One-shot reaction played on click; hands back to the idle loop when it ends.
+// Decode every sheet up front and keep the Image objects alive. The typing
+// loop swaps background images every couple of seconds; an undecoded sheet
+// would show as an empty frame for a moment during that swap.
+const preloadedSpriteSheets = Object.values(window.AVATAR_SPRITE_CONFIG.animations).map(
+  (animation) => {
+    const image = new Image();
+    image.src = animation.sheet;
+    if (image.decode) image.decode().catch(() => {});
+    return image;
+  },
+);
+
+// One-shot reaction played on click; hands back to the rest state when it ends.
 const CLICK_ANIMATION = 'standingClicked';
+
+// The last activity category reported by detection. null until the first
+// update, so an already-running category is not mistaken for a transition.
+let activityCategory = null;
+
+// Incremented whenever a category sequence starts or is interrupted. Each
+// onComplete captures the value it was started with and bails when it is
+// stale, so a late callback cannot restart an old sequence.
+let sequenceToken = 0;
 
 // Gap between the top of the frog and the speech bubble, and between the
 // bubble and the screen edge.
@@ -152,8 +173,9 @@ function getFrogRect() {
 // The listener sits on #avatar because #avatar-sprite is pointer-events: none.
 avatar.addEventListener('click', (event) => {
   if (isFromControls(event)) return;
+  ++sequenceToken;
   spriteAnimator.play(CLICK_ANIMATION, {
-    onComplete: () => spriteAnimator.play(DEFAULT_IMAGE_ANIMATION),
+    onComplete: resumeRestAnimation,
   });
 });
 
@@ -246,21 +268,126 @@ function showNudge(message) {
   if (isChatOpen() || controls.isMenuOpen()) return;
   const { cueAnimation, defaultText } = window.NUDGE_CONFIG;
   const text = message.text || defaultText;
+  ++sequenceToken;
   spriteAnimator.play(cueAnimation, {
-    onComplete: () => spriteAnimator.play(DEFAULT_IMAGE_ANIMATION),
+    onComplete: resumeRestAnimation,
   });
   setTimeout(() => {
     if (!isChatOpen() && !controls.isMenuOpen()) nudge.show(text);
   }, getAnimationLengthMs(cueAnimation));
 }
 
-// How long one play of a sprite animation takes (avatar/config.js).
+// How long one play of a sprite animation takes (avatar/config.js). An
+// animation may skip sheet frames, so measure its playback list, not the
+// sheet's total frame count.
 function getAnimationLengthMs(name) {
   const animation = window.AVATAR_SPRITE_CONFIG.animations[name];
-  return animation.frameCount * animation.frameDurationMs;
+  const frameCount = animation.frames ? animation.frames.length : animation.frameCount;
+  return frameCount * animation.frameDurationMs;
+}
+
+// --- ACTIVITY-DRIVEN ANIMATIONS ---
+// Productive work gets a seated entrance and a typing loop; leaving it plays
+// a short desk-clearing sequence before returning to idle. The sequence names
+// live in avatar/config.js; this block only decides when to play them.
+
+const { productiveIntro, productiveLoop, leaveProductive } =
+  window.AVATAR_SPRITE_CONFIG.activityAnimations;
+
+function isCurrentSequence(token) {
+  return token === sequenceToken;
+}
+
+// Plays `names` once each, then calls `onDone`. Stops silently if a newer
+// sequence or an interruption has taken over.
+function playSequence(names, token, onDone) {
+  const playAt = (index) => {
+    if (!isCurrentSequence(token)) return;
+    spriteAnimator.play(names[index], {
+      onComplete: () => {
+        if (!isCurrentSequence(token)) return;
+        if (index + 1 < names.length) playAt(index + 1);
+        else onDone();
+      },
+    });
+  };
+  playAt(0);
+}
+
+// Alternates the typing and blink sheets forever. The blink sheet is itself a
+// full typing cycle with one blink in it, so alternating whole loops keeps the
+// frog typing continuously.
+function startTypingLoop(token, startWithBlink = false) {
+  const [typingName, blinkName] = productiveLoop;
+  let showBlink = startWithBlink;
+
+  const step = () => {
+    if (!isCurrentSequence(token)) return;
+    const name = showBlink ? blinkName : typingName;
+    showBlink = !showBlink;
+    spriteAnimator.play(name, { onComplete: step });
+  };
+
+  step();
+}
+
+// Entrance into productive work: sit down, pull in the desk, type once, then
+// settle into the typing/blink loop. The intro already ended on the typing
+// sheet, so the loop starts with the blink variant to avoid replaying it.
+function playProductiveIntro() {
+  const token = ++sequenceToken;
+  playSequence(productiveIntro, token, () => {
+    if (!isCurrentSequence(token)) return;
+    startTypingLoop(token, true);
+  });
+}
+
+// Leaving productive work: look up, close the computer, stand up, then idle.
+function playLeaveProductive() {
+  const token = ++sequenceToken;
+  playSequence(leaveProductive, token, () => {
+    if (!isCurrentSequence(token)) return;
+    spriteAnimator.play(DEFAULT_IMAGE_ANIMATION);
+  });
+}
+
+// The pose shown when no one-off reaction is playing. A click or nudge uses
+// this to hand control back to whichever state the category calls for.
+function resumeRestAnimation() {
+  if (activityCategory === 'productive') {
+    startTypingLoop(++sequenceToken);
+    return;
+  }
+  ++sequenceToken;
+  spriteAnimator.play(DEFAULT_IMAGE_ANIMATION);
+}
+
+// Reacts only to actual category changes, so switching apps while still in
+// the same category does not replay the entrance. Entering productive always
+// replays the intro; leaving it plays the desk-clearing sequence.
+function setActivityCategory(next) {
+  if (!next || next === activityCategory) return;
+
+  const previous = activityCategory;
+  activityCategory = next;
+
+  if (next === 'productive') {
+    playProductiveIntro();
+  } else if (previous === 'productive') {
+    playLeaveProductive();
+  }
 }
 
 window.electronAPI.onNudge(showNudge);
+
+// Activity detection pushes the active window's category; the overlay turns
+// it into the seated/typing behaviour above.
+window.electronAPI.onActivityUpdate((event) => setActivityCategory(event.category));
+
+// The overlay can load after the first broadcast, so seed the category once.
+window.electronAPI.getActivity().then((activity) => {
+  if (activity) setActivityCategory(activity.category);
+});
 
 // Opening the menu makes room for it: the nudge would sit right beside it.
 pillMoreButton.addEventListener('click', () => nudge.dismiss());

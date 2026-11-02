@@ -12,6 +12,7 @@ class SpriteAnimator {
     this.element = element;
     this.animation = null;
     this.display = null;
+    this.frames = null;
     this.onComplete = null;
     this.frameIndex = 0;
     this.lastFrameAt = 0;
@@ -33,6 +34,9 @@ class SpriteAnimator {
 
     this.animation = animation;
     this.display = animation.display || config.frameDisplay;
+    // Optional explicit sheet-frame order, so an export with blank or torn
+    // frames can leave them out without editing the PNG.
+    this.frames = animation.frames && animation.frames.length ? animation.frames : null;
     this.onComplete = onComplete;
     this.frameIndex = 0;
     this.lastFrameAt = performance.now();
@@ -59,7 +63,7 @@ class SpriteAnimator {
       return;
     }
 
-    this.frameIndex = (this.frameIndex + steps) % this.animation.frameCount;
+    this.frameIndex = (this.frameIndex + steps) % this.getFrameCount();
 
     // Advance the clock by the frames consumed instead of snapping it to `now`,
     // which keeps the loop in phase and stops rounding error accumulating.
@@ -73,6 +77,7 @@ class SpriteAnimator {
   stop() {
     this.animation = null;
     this.display = null;
+    this.frames = null;
     // Dropped so a reaction interrupted by a mode switch cannot fire its
     // callback later and yank the sprite back.
     this.onComplete = null;
@@ -87,23 +92,30 @@ class SpriteAnimator {
     this.element.style.height = '';
   }
 
+  // Number of frames this playback actually shows. Animations may list
+  // explicit sheet frames; otherwise every frame in the sheet is used.
+  getFrameCount() {
+    return this.frames ? this.frames.length : this.animation.frameCount;
+  }
+
   // Reports whether advancing `steps` frames would overshoot the last frame of
   // a one-shot animation. Looping animations wrap and so never end.
   hasReachedEnd(steps) {
-    return !this.animation.loop && this.frameIndex + steps >= this.animation.frameCount;
+    return !this.animation.loop && this.frameIndex + steps >= this.getFrameCount();
   }
 
   // Ends a one-shot: parks on the final frame, drops all playback state, then
   // hands control back to the caller. State is cleared before the callback so
   // a callback that starts another animation starts from a clean slate.
   finish() {
-    this.frameIndex = this.animation.frameCount - 1;
+    this.frameIndex = this.getFrameCount() - 1;
     this.lastFrameAt = performance.now();
     this.applyFrame();
 
     const onComplete = this.onComplete;
     this.animation = null;
     this.display = null;
+    this.frames = null;
     this.onComplete = null;
     this.frameIndex = 0;
 
@@ -120,22 +132,38 @@ class SpriteAnimator {
     this.element.style.backgroundImage = `url('${animation.sheet}')`;
     this.element.style.backgroundSize =
       `${animation.columns * this.display.width}px ${rowCount * this.display.height}px`;
+  }
 
-    // Sheets rarely place the character at the same height within the cell, so
-    // each animation nudges itself back onto a shared baseline. Applied as a
-    // transform so it does not disturb the parent's centring, and so the
-    // element's bounding rect (used for click/hover) follows the shift.
-    this.element.style.transform = `translateY(${animation.offsetY || 0}px)`;
+  // Nudges the sprite onto the shared feet baseline. A number is a fixed
+  // offset; `{ from, to }` ramps across the playback so a pose whose feet
+  // drift within the sheet stays planted. Applied as a transform so it does
+  // not disturb the parent's centring, and so the element's bounding rect
+  // (used for click/hover) follows the shift.
+  applyOffset() {
+    const offsetY = this.animation.offsetY;
+    let value = offsetY;
+
+    if (offsetY && typeof offsetY === 'object') {
+      const frameCount = this.getFrameCount();
+      const progress = frameCount > 1 ? this.frameIndex / (frameCount - 1) : 0;
+      value = offsetY.from + (offsetY.to - offsetY.from) * progress;
+    }
+
+    this.element.style.transform = `translateY(${value || 0}px)`;
   }
 
   // Moves the background to the current frame. Offsets are negative to pull the
-  // sheet up and left under the element.
+  // sheet up and left under the element. `frameIndex` walks the playback list,
+  // which may skip sheet frames; `sheetIndex` is the actual cell to show.
   applyFrame() {
-    const column = this.frameIndex % this.animation.columns;
-    const row = Math.floor(this.frameIndex / this.animation.columns);
+    const sheetIndex = this.frames ? this.frames[this.frameIndex] : this.frameIndex;
+    const column = sheetIndex % this.animation.columns;
+    const row = Math.floor(sheetIndex / this.animation.columns);
 
     this.element.style.backgroundPosition =
       `${-column * this.display.width}px ${-row * this.display.height}px`;
+
+    this.applyOffset();
   }
 }
 
