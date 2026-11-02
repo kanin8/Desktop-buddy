@@ -73,21 +73,6 @@
       color: #888;
     }
 
-    /* Used by the AI Configuration section's field list. */
-    .personality-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .personality-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      cursor: pointer;
-      font-size: 0.9rem;
-    }
-    .personality-item input { cursor: pointer; }
-
     .status-bar {
       margin-top: auto;
       font-size: 0.75rem;
@@ -95,6 +80,10 @@
       text-align: center;
       padding: 10px 0;
     }
+
+    /* ============================
+       AI section — labelled form fields
+       ============================ */
     .field-row {
       display: flex;
       align-items: center;
@@ -106,13 +95,24 @@
       flex: 0 0 70px;
       color: #556;
     }
-    .field-row input {
+    .field-row input,
+    .field-row select {
       flex: 1;
       min-width: 0;
       font: inherit;
       padding: 5px 8px;
       border: 1px solid #ccc;
       border-radius: 6px;
+    }
+
+    /* ============================
+       States
+       ============================ */
+    /* `display: flex` above would otherwise override the hidden attribute
+       (used to hide rows a provider does not need: the key for Ollama, the
+       endpoint for Claude). */
+    .field-row[hidden] {
+      display: none;
     }
   </style>
 </head>
@@ -143,54 +143,31 @@
     </div>
 
     <div class="section">
-      <span class="section-title">AI Task Breakdown</span>
+      <span class="section-title">AI</span>
       <label class="toggle-row">
         <input type="checkbox" id="aiToggle">
-        <span>Enable AI breakdown</span>
+        <span>Enable AI</span>
       </label>
-      <p class="hint">Hover the avatar, then click "Ask the buddy" to break a goal into subtasks.</p>
+      <p class="hint">Powers the buddy chat, goal-to-subtask breakdown, and sorting unknown apps into productive or leisure.</p>
       <label class="field-row">
+        <span>Provider</span>
+        <select id="aiProvider"></select>
+      </label>
+      <label class="field-row" id="aiBaseUrlRow">
         <span>Endpoint</span>
-        <input type="text" id="aiBaseUrl" placeholder="https://api.openai.com/v1" spellcheck="false">
+        <input type="text" id="aiBaseUrl" spellcheck="false">
       </label>
       <label class="field-row">
         <span>Model</span>
-        <input type="text" id="aiModel" placeholder="gpt-4o-mini" spellcheck="false" list="aiModelHints">
+        <input type="text" id="aiModel" spellcheck="false" list="aiModelHints">
         <datalist id="aiModelHints"></datalist>
       </label>
-      <label class="field-row">
+      <label class="field-row" id="aiApiKeyRow">
         <span>API key</span>
-        <input type="password" id="aiApiKey" placeholder="sk-..." spellcheck="false" autocomplete="off">
+        <input type="password" id="aiApiKey" spellcheck="false" autocomplete="off">
       </label>
-      <p class="hint" id="aiKeyHint">The key is stored in your user data folder, never in the repo.</p>
+      <p class="hint" id="aiKeyHint"></p>
       <p class="hint" id="aiStatus"></p>
-    </div>
-
-    <div class="section">
-      <span class="section-title">AI Configuration</span>
-      <div class="personality-list">
-        <div class="personality-item" style="flex-direction: column; align-items: flex-start; gap: 4px;">
-          <label style="font-size: 0.8rem;">Provider</label>
-          <select id="aiProvider" style="width: 100%; padding: 4px;">
-            <option value="ollama">Ollama (Local)</option>
-            <option value="anthropic">Anthropic (Claude)</option>
-            <option value="openai">OpenAI (GPT)</option>
-          </select>
-        </div>
-        <div class="personality-item" style="flex-direction: column; align-items: flex-start; gap: 4px;">
-          <label style="font-size: 0.8rem;">API Key</label>
-          <input type="password" id="aiApiKey" style="width: 100%; padding: 4px;" placeholder="Not needed for Ollama">
-        </div>
-        <div class="personality-item" style="flex-direction: column; align-items: flex-start; gap: 4px;">
-          <label style="font-size: 0.8rem;">Model</label>
-          <input type="text" id="aiModel" style="width: 100%; padding: 4px;" placeholder="e.g. gemma:2b">
-        </div>
-        <div class="personality-item" style="flex-direction: column; align-items: flex-start; gap: 4px;">
-          <label style="font-size: 0.8rem;">Server Endpoint</label>
-          <input type="text" id="aiEndpoint" style="width: 100%; padding: 4px;" placeholder="http://localhost:3000">
-        </div>
-        <button id="saveAiBtn" style="margin-top: 10px; width: 100%; padding: 8px; cursor: pointer; background: #4CAF50; color: white; border: none; border-radius: 4px;">Save AI Settings</button>
-      </div>
     </div>
 
     <div class="status-bar" id="statusBar">

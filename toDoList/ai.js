@@ -1,8 +1,10 @@
 /**
- * Remote AI layer for task breakdown.
+ * Remote AI layer for the chat reply, task breakdown and activity
+ * classification.
  *
- * Targets any OpenAI-compatible `/chat/completions` endpoint (OpenAI,
- * OpenRouter, Groq, Together, a self-hosted vLLM). Requests are made from the
+ * Claude goes through Anthropic's SDK (anthropicClient.js). Every other
+ * provider uses any OpenAI-compatible `/chat/completions` endpoint (OpenAI,
+ * Ollama, OpenRouter, Groq, a self-hosted vLLM). Requests are made from the
  * main process so the API key never reaches a renderer.
  *
  * Free of Electron imports and of any live network call at module scope, so the
@@ -10,6 +12,7 @@
  */
 
 const CONFIG = require('./config');
+const { callClaudeApi } = require('./anthropicClient');
 
 // Length and format rule for the in-character reply. Persona and tone live in
 // the voice guide; this only keeps the bubble short, and lets the guide's
@@ -25,6 +28,21 @@ const CLASSIFY_PERSONA =
   'or "chat" (greeting, question, follow-up, venting, casual talk). ' +
   'Examples: "plan a website"->task, "write a script"->task, "hello"->chat, "how are you"->chat. ' +
   'Reply with JSON only: {"type": "task"} or {"type": "chat"}.';
+
+// Activity prompt: decides whether the window the user is looking at is work
+// or entertainment. Only used for apps the local rule list does not know.
+const ACTIVITY_PERSONA =
+  'You are a strict productivity classifier. Classify the activity as "productive" or "leisure".\n' +
+  'Productive: work/study apps (VS Code, IntelliJ, Word, Excel, PowerPoint, Notion, Obsidian, ' +
+  'Terminal, Docker, Figma, Jira), research articles, university portals, digital libraries, ' +
+  'tutorials and documentation.\n' +
+  'Leisure: entertainment (YouTube vlogs/gaming/music, Netflix, Twitch, Disney+), social media ' +
+  '(Twitter, Instagram, Reddit, Facebook), games and game launchers, shopping, general news.\n' +
+  'Examples: "App: Visual Studio Code, Title: index.ts" -> productive; ' +
+  '"App: Chrome, Title: arXiv.org - Quantum Computing Paper" -> productive; ' +
+  '"App: Chrome, Title: PewDiePie - Funny Moments" -> leisure; ' +
+  '"App: Spotify, Title: Gaming Beats" -> leisure.\n' +
+  'Reply with ONLY the word productive or leisure. No explanation, no punctuation.';
 
 /**
  * Messages for the streamed in-character reply.
@@ -47,6 +65,17 @@ function buildClassifyMessages(text) {
   return [
     { role: 'system', content: CLASSIFY_PERSONA },
     { role: 'user', content: String(text || '').trim() },
+  ];
+}
+
+/** Messages for activity classification of one window. */
+function buildActivityMessages({ appName, title, url }) {
+  return [
+    { role: 'system', content: ACTIVITY_PERSONA },
+    {
+      role: 'user',
+      content: 'App: ' + (appName || 'unknown') + '\nTitle: ' + (title || '') + '\nURL: ' + (url || 'N/A'),
+    },
   ];
 }
 
@@ -255,9 +284,21 @@ async function callChatApi(options) {
   }
 }
 
+/**
+ * Sends one request to the configured provider. Claude goes through
+ * Anthropic's SDK; every other provider through the OpenAI-compatible API.
+ * Both take the same options and resolve with the reply text.
+ */
+function callModel(options) {
+  var preset = CONFIG.AI_PROVIDERS[options.provider];
+  if (preset && preset.usesClaudeSdk) return callClaudeApi(options);
+  return callChatApi(options);
+}
+
 /** Streamed reply for the speech bubble. */
-async function streamReply({ baseUrl, apiKey, model, text, voiceGuide, onToken, signal }) {
-  return callChatApi({
+async function streamReply({ provider, baseUrl, apiKey, model, text, voiceGuide, onToken, signal }) {
+  return callModel({
+    provider: provider,
     baseUrl: baseUrl,
     apiKey: apiKey,
     model: model,
@@ -276,14 +317,15 @@ async function streamReply({ baseUrl, apiKey, model, text, voiceGuide, onToken, 
  * the user their subtasks. Falls back to the raw text as the parent task when
  * no JSON survives, so the goal is never silently dropped.
  */
-async function breakdownGoal({ baseUrl, apiKey, model, text, openItems, signal }) {
+async function breakdownGoal({ provider, baseUrl, apiKey, model, text, openItems, signal }) {
   var messages = buildBreakdownMessages(text, openItems);
 
   var raw = '';
   var lastError = null;
   for (var attempt = 0; attempt < 2; attempt++) {
     try {
-      raw = await callChatApi({
+      raw = await callModel({
+        provider: provider,
         baseUrl: baseUrl,
         apiKey: apiKey,
         model: model,
@@ -332,10 +374,11 @@ function parseClassification(raw) {
  * Classifies user input as 'task' (wants subtasks) or 'chat' (casual).
  * Uses a fast, low-temperature call to avoid latency.
  */
-async function classifyInput({ baseUrl, apiKey, model, text, signal }) {
+async function classifyInput({ provider, baseUrl, apiKey, model, text, signal }) {
   var messages = buildClassifyMessages(text);
 
-  var raw = await callChatApi({
+  var raw = await callModel({
+    provider: provider,
     baseUrl: baseUrl,
     apiKey: apiKey,
     model: model,
@@ -358,16 +401,49 @@ async function classifyInput({ baseUrl, apiKey, model, text, signal }) {
   return { type: 'chat' };
 }
 
+/**
+ * Maps a model's answer to 'productive', 'leisure' or 'uncategorized'.
+ * Models sometimes add punctuation or a sentence, so this matches the keyword
+ * anywhere in the reply.
+ */
+function parseActivityCategory(raw) {
+  var text = String(raw == null ? '' : raw).toLowerCase();
+  if (text.includes('productive')) return 'productive';
+  if (text.includes('leisure')) return 'leisure';
+  return 'uncategorized';
+}
+
+/** Classifies the active window as productive or leisure. */
+async function classifyActivity({ provider, baseUrl, apiKey, model, appName, title, url, signal }) {
+  var raw = await callModel({
+    provider: provider,
+    baseUrl: baseUrl,
+    apiKey: apiKey,
+    model: model,
+    messages: buildActivityMessages({ appName: appName, title: title, url: url }),
+    stream: false,
+    temperature: CONFIG.AI_ACTIVITY_TEMPERATURE,
+    maxTokens: CONFIG.AI_ACTIVITY_MAX_TOKENS,
+    timeoutMs: CONFIG.AI_TIMEOUT_MS,
+    signal: signal,
+  });
+  return parseActivityCategory(raw);
+}
+
 module.exports = {
   buildReplyMessages,
   buildBreakdownMessages,
   buildClassifyMessages,
+  buildActivityMessages,
   parseBreakdown,
   parseClassification,
+  parseActivityCategory,
+  classifyActivity,
   stripCodeFences,
   firstJsonObject,
   readSseStream,
   callChatApi,
+  callModel,
   streamReply,
   breakdownGoal,
   classifyInput,

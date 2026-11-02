@@ -34,11 +34,18 @@ class ActivityClassifier {
   classify(info) {
     const overrides = this.loadOverrides();
 
-    if (info.url && overrides[info.url]) return overrides[info.url];
+    // `domain` comes from the window title when the URL cannot be read, so
+    // url rules and overrides match either.
+    const address = info.url || info.domain;
+
+    if (address && overrides[address]) return overrides[address];
+    // The UI shows the site name for browser tabs, so a user override for an
+    // unlisted site is saved under that name.
+    if (info.site && overrides[info.site]) return overrides[info.site];
     if (overrides[info.appName]) return overrides[info.appName];
 
     for (const rule of this.config.rules) {
-      if (rule.type === 'url' && info.url && info.url.includes(rule.pattern)) {
+      if (rule.type === 'url' && address && address.includes(rule.pattern)) {
         return rule.category;
       }
       if (rule.type === 'app' && info.appName.includes(rule.pattern)) {

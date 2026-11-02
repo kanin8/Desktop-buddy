@@ -1,6 +1,5 @@
 const { app, BrowserWindow, screen, Tray, Menu, nativeImage, ipcMain, globalShortcut } = require('electron');
 const path = require('path');
-const fs = require('fs');
 const http = require('http');
 const { ActivityIPCHandlers } = require('./src/features/activity-detection/ipc/handlers.js');
 const {
@@ -8,7 +7,7 @@ const {
   isTodoWindowVisible,
   hideTodoWindow,
 } = require('./toDoList/todoWindow');
-const { registerAiIpc } = require('./toDoList/aiService');
+const { registerAiIpc, classifyActivity } = require('./toDoList/aiService');
 const { flushStore } = require('./toDoList/todoService');
 const CONFIG = require('./config');
 
@@ -163,38 +162,6 @@ function stopCursorPolling() {
   }
   cursorStreamBuffer = '';
 }
-
-// --- SETTINGS PERSISTENCE ---
-const SETTINGS_PATH = path.join(app.getPath('userData'), 'settings.json');
-
-function loadSettings() {
-  try {
-    if (fs.existsSync(SETTINGS_PATH)) {
-      return JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
-    }
-  } catch (e) {
-    console.error('Error loading settings:', e);
-  }
-  // Default settings
-  return {
-    aiConfig: {
-      endpoint: 'http://localhost:3000',
-      provider: 'ollama',
-      apiKey: '',
-      model: 'gemma:2b'
-    }
-  };
-}
-
-function saveSettings(settings) {
-  try {
-    fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2));
-  } catch (e) {
-    console.error('Error saving settings:', e);
-  }
-}
-
-const currentSettings = loadSettings();
 
 function createOverlayWindow() {
 
@@ -426,33 +393,6 @@ ipcMain.handle('get-avatar-state', () => {
   return (overlayWin && !overlayWin.isDestroyed()) ? (overlayWin.isVisible() ? 'running' : 'stopped') : 'stopped';
 });
 
-ipcMain.handle('get-ai-config', () => {
-  return currentSettings.aiConfig;
-});
-
-ipcMain.handle('save-ai-config', async (event, config) => {
-  currentSettings.aiConfig = config;
-  saveSettings(currentSettings);
-
-  try {
-    // Sync with AI server
-    await fetch(config.endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider: config.provider,
-        apiKey: config.apiKey,
-        model: config.model
-      })
-    });
-    console.log('[Main] AI config synced with server');
-  } catch (e) {
-    console.error('[Main] Failed to sync AI config with server:', e.message);
-  }
-
-  return { success: true };
-});
-
 // --- SNOOZE ---
 // "Snooze" in the buddy's More menu hides it for a while. Only one snooze runs
 // at a time, and bringing the buddy back any other way (tray, shortcut)
@@ -602,10 +542,10 @@ function broadcastTodoState() {
 
 ipcMain.on('todolist-state-changed', broadcastTodoState);
 
-// --- AI TASK BREAKDOWN ---
+// --- AI ---
 // Requests run in the main process so the API key never reaches a renderer.
-// The overlay chat (hover the avatar, click Chat in the pill) is the only
-// consumer.
+// The overlay chat uses these channels; activity detection calls
+// classifyActivity directly (see app.whenReady below).
 registerAiIpc();
 
 // A debounced task write could still be pending when the app quits.
@@ -622,8 +562,9 @@ app.whenReady().then(() => {
   createOverlayWindow();
   registerControlsShortcut();
 
-  // Initialize Activity Detection
-  const activityHandlers = new ActivityIPCHandlers();
+  // Initialize Activity Detection. Unknown apps are classified by the same AI
+  // backend the chat uses, configured in Settings.
+  const activityHandlers = new ActivityIPCHandlers({ aiClassify: classifyActivity });
   activityHandlers.init();
   // The to-do list panel is opt-in, so it is deliberately not created here.
   // Enable it from Settings or the tray menu.

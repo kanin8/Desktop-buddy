@@ -12,14 +12,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // pushes the authoritative state after every change.
   onTodoListStateChanged: (callback) => ipcRenderer.on('todolist-state-changed', (event, state) => callback(state)),
 
-  // AI Configuration API
-  getAIConfig: () => ipcRenderer.invoke('get-ai-config'),
-  saveAIConfig: (config) => ipcRenderer.invoke('save-ai-config', config),
-
-  // AI Configuration API
-  getAIConfig: () => ipcRenderer.invoke('get-ai-config'),
-  saveAIConfig: (config) => ipcRenderer.invoke('save-ai-config', config),
-
   // Overlay Window API
   speak: (callback) => ipcRenderer.on('avatar-speak', (event, text) => callback(text)),
   setScreenGrayscale: (callback) => ipcRenderer.on('set-screen-grayscale', (event, enabled) => callback(enabled)),

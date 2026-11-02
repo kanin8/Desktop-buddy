@@ -3,7 +3,8 @@
  * Since we are moving to JS, we use these as documentation/reference.
  */
 // ActivityEvent {
-//   app: string,
+//   app: string,               // site name for a known browser site, else app name
+//   browser: string | null,    // the browser, when `app` is a site
 //   domain: string | null,
 //   title: string,
 //   category: string,
@@ -16,5 +17,7 @@
 //   title: string,
 //   appName: string,
 //   url?: string,
+//   site?: string,     // e.g. "YouTube", read from a browser's window title
+//   domain?: string,   // e.g. "youtube.com", set together with `site`
 //   source: 'url' | 'title' | 'app',
 // }
