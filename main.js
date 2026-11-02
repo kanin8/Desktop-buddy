@@ -389,9 +389,24 @@ if (gotTheLock) {
 }
 
 // IPC Handlers
-ipcMain.handle('get-avatar-state', () => {
-  return (overlayWin && !overlayWin.isDestroyed()) ? (overlayWin.isVisible() ? 'running' : 'stopped') : 'stopped';
-});
+// 'running' while the buddy is on screen, 'stopped' when hidden or snoozed.
+function getAvatarState() {
+  return (overlayWin && !overlayWin.isDestroyed() && overlayWin.isVisible()) ? 'running' : 'stopped';
+}
+
+ipcMain.handle('get-avatar-state', getAvatarState);
+
+// Pushes the buddy's state to Settings so its switch stays right when the
+// buddy was shown or hidden from the tray, the shortcut or a snooze.
+function broadcastAvatarState() {
+  if (!settingsWin || settingsWin.isDestroyed()) return;
+  settingsWin.webContents.send('avatar-state-changed', getAvatarState());
+}
+
+ipcMain.on('avatar-state-changed', broadcastAvatarState);
+
+// The Quit button in Settings: the same full quit as the tray's Quit.
+ipcMain.on('quit-app', () => app.quit());
 
 // --- SNOOZE ---
 // "Snooze" in the buddy's More menu hides it for a while. Only one snooze runs
