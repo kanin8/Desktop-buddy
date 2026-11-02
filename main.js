@@ -216,10 +216,16 @@ function createOverlayWindow() {
 
 function createSettingsWindow() {
   settingsWin = new BrowserWindow({
-    width: 320,
-    height: 520,
+    width: 360,
+    // Measured as the page area (not counting the title bar), so the page
+    // fits without scrolling while AI is off. AI's fields scroll.
+    height: 660,
+    useContentSize: true,
     resizable: false,
     skipTaskbar: false,
+    // Shown before the page paints, so it can't read the CSS theme yet: the
+    // same grey as --grey-900 in styles/tokens.css. Update both together.
+    backgroundColor: '#1c1c1e',
     // Hidden at launch so it doesn't pop up every start; opened from the tray.
     show: false,
     webPreferences: {
@@ -389,9 +395,24 @@ if (gotTheLock) {
 }
 
 // IPC Handlers
-ipcMain.handle('get-avatar-state', () => {
-  return (overlayWin && !overlayWin.isDestroyed()) ? (overlayWin.isVisible() ? 'running' : 'stopped') : 'stopped';
-});
+// 'running' while the buddy is on screen, 'stopped' when hidden or snoozed.
+function getAvatarState() {
+  return (overlayWin && !overlayWin.isDestroyed() && overlayWin.isVisible()) ? 'running' : 'stopped';
+}
+
+ipcMain.handle('get-avatar-state', getAvatarState);
+
+// Pushes the buddy's state to Settings so its switch stays right when the
+// buddy was shown or hidden from the tray, the shortcut or a snooze.
+function broadcastAvatarState() {
+  if (!settingsWin || settingsWin.isDestroyed()) return;
+  settingsWin.webContents.send('avatar-state-changed', getAvatarState());
+}
+
+ipcMain.on('avatar-state-changed', broadcastAvatarState);
+
+// The Quit button in Settings: the same full quit as the tray's Quit.
+ipcMain.on('quit-app', () => app.quit());
 
 // --- SNOOZE ---
 // "Snooze" in the buddy's More menu hides it for a while. Only one snooze runs

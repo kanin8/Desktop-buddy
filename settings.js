@@ -1,12 +1,15 @@
-// Settings window: start/stop, current activity, the to-do panel toggle,
-// and the AI configuration shared by every AI feature.
-const toggleBtn = document.getElementById('toggleBtn');
-const statusBar = document.getElementById('statusBar');
+// Settings window: buddy and to-do switches, current activity, quit, and
+// the AI configuration shared by every AI feature.
+const avatarToggle = document.getElementById('avatarToggle');
 const todoToggle = document.getElementById('todoToggle');
+const activityStatus = document.getElementById('activityStatus');
+const quitBtn = document.getElementById('quitBtn');
 
 // AI settings. The API key is write-only: the main process reports whether a
 // key exists, but never sends the stored value back here.
 const aiToggle = document.getElementById('aiToggle');
+const aiBadge = document.getElementById('aiBadge');
+const aiFields = document.getElementById('aiFields');
 const aiProvider = document.getElementById('aiProvider');
 const aiBaseUrlRow = document.getElementById('aiBaseUrlRow');
 const aiBaseUrl = document.getElementById('aiBaseUrl');
@@ -17,69 +20,64 @@ const aiApiKey = document.getElementById('aiApiKey');
 const aiKeyHint = document.getElementById('aiKeyHint');
 const aiStatus = document.getElementById('aiStatus');
 
+// --- BUDDY ---
 
-let currentState = 'running';
-
-// Activity state
-let currentActivity = null;
-
-async function syncState() {
-  const state = await window.electronAPI.getAvatarState();
-  currentState = state;
-
-  // Sync initial activity
-  const activity = await window.electronAPI.getActivity();
-  if (activity) {
-    currentActivity = activity;
-    updateActivityUI();
-  }
-
-  updateUI();
+// Sets the switch from the main process's state ('running' or 'stopped').
+function renderAvatarState(state) {
+  avatarToggle.checked = state === 'running';
 }
 
-function updateActivityUI() {
+async function syncAvatarState() {
+  renderAvatarState(await window.electronAPI.getAvatarState());
+}
 
-  const el = document.getElementById('activityStatus');
-  if (!currentActivity) {
-    el.textContent = 'Detecting...';
+// The buddy can also be shown or hidden from the tray, the shortcut or a
+// snooze, so the main process pushes the real state after every change.
+window.electronAPI.onAvatarStateChanged(renderAvatarState);
+
+avatarToggle.addEventListener('change', () => {
+  window.electronAPI.toggleRunning();
+});
+
+// --- CURRENT ACTIVITY ---
+
+// Categories the badge has a colour for; anything else shows as uncategorized.
+const KNOWN_CATEGORIES = ['productive', 'leisure', 'uncategorized'];
+
+// Shows the category as a coloured badge next to the app or website name.
+// Built with textContent, not innerHTML: for browser tabs `app` comes from
+// the page title, which any website controls.
+function renderActivity(activity) {
+  if (!activity) {
+    activityStatus.textContent = 'Detecting…';
     return;
   }
 
-  const categoryColors = {
-    productive: '#2c7a7b',
-    leisure: '#b7791f',
-    uncategorized: '#4a5568'
-  };
+  const category = KNOWN_CATEGORIES.includes(activity.category) ? activity.category : 'uncategorized';
+  const badge = document.createElement('span');
+  badge.className = 'badge is-' + category;
+  badge.textContent = category.charAt(0).toUpperCase() + category.slice(1);
 
-  const color = categoryColors[currentActivity.category] || '#333';
-  // Built with textContent, not innerHTML: for browser tabs `app` comes from
-  // the page title, which any website controls.
-  const categoryEl = document.createElement('span');
-  categoryEl.style.color = color;
-  categoryEl.style.fontWeight = 'bold';
-  categoryEl.textContent = currentActivity.category.toUpperCase();
-  el.replaceChildren(categoryEl, ': ' + currentActivity.app);
+  const app = document.createElement('span');
+  app.className = 'activity-app';
+  app.textContent = activity.app;
+
+  activityStatus.replaceChildren(badge, app);
 }
 
-function updateUI() {
-  // Update button
-  if (currentState === 'running') {
-    toggleBtn.textContent = 'STOP';
-    toggleBtn.className = 'btn-stop';
-  } else {
-    toggleBtn.textContent = 'START';
-    toggleBtn.className = 'btn-start';
-  }
-
-  // Update status text
-  statusBar.textContent = `Status: ${currentState.charAt(0).toUpperCase() + currentState.slice(1)}`;
+async function syncActivity() {
+  renderActivity(await window.electronAPI.getActivity());
 }
 
-toggleBtn.addEventListener('click', () => {
-  currentState = currentState === 'running' ? 'stopped' : 'running';
-  window.electronAPI.toggleRunning();
-  updateUI();
+window.electronAPI.onActivityUpdate(renderActivity);
+
+// --- QUIT ---
+
+quitBtn.addEventListener('click', () => {
+  window.electronAPI.quitApp();
 });
+
+// --- TO-DO LIST ---
 
 // Syncs the to-do list checkbox with the actual panel state in the main
 // process. The panel can also be toggled from the tray menu, so the checkbox
@@ -148,13 +146,21 @@ function renderKeyHint(ai) {
   }
 }
 
+// Short badge next to "Enable AI", plus a line under the fields saying
+// what is still missing (or which model is in use). While AI is off the
+// switch already says so, so the badge is left empty (and hidden).
 function renderAiStatus(ai) {
   if (!ai.enabled) {
-    aiStatus.textContent = 'AI is off.';
+    aiBadge.textContent = '';
+    aiStatus.textContent = '';
   } else if (!ai.configured) {
+    aiBadge.textContent = 'Needs setup';
+    aiBadge.className = 'badge is-needs-setup';
     aiStatus.textContent = ai.needsApiKey ? 'Add an API key to start.' : 'Fill in the endpoint and model.';
   } else {
-    aiStatus.textContent = 'Ready: ' + ai.model;
+    aiBadge.textContent = 'Ready';
+    aiBadge.className = 'badge is-ready';
+    aiStatus.textContent = 'Using ' + ai.model + '.';
   }
 }
 
@@ -163,6 +169,8 @@ function renderAiSettings(ai) {
   aiSettings = ai;
   renderProviderOptions(ai.providers);
   aiToggle.checked = ai.enabled;
+  // The fields only matter once AI is on, so they stay out of the way until then.
+  aiFields.hidden = !ai.enabled;
   aiProvider.value = ai.provider;
   aiBaseUrl.value = ai.baseUrl;
   aiModel.value = ai.model;
@@ -201,13 +209,7 @@ aiProvider.addEventListener('change', () => {
 });
 
 // Initial UI state
-syncState();
+syncAvatarState();
 syncTodoState();
 syncAiSettings();
-updateUI();
-
-// Listen for activity updates in real-time
-window.electronAPI.onActivityUpdate((event) => {
-  currentActivity = event;
-  updateActivityUI();
-});
+syncActivity();
