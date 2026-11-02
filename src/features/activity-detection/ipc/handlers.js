@@ -138,7 +138,8 @@ class ActivityIPCHandlers {
     return (
       newEvent.app !== this.currentActivity.app ||
       newEvent.domain !== this.currentActivity.domain ||
-      newEvent.title !== this.currentActivity.title
+      newEvent.title !== this.currentActivity.title ||
+      newEvent.category !== this.currentActivity.category
     );
   }
 

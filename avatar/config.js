@@ -72,5 +72,144 @@ window.AVATAR_SPRITE_CONFIG = {
       // eyeballed and tuned here rather than recomputed.
       offsetY: -9,
     },
+
+    // --- Category-driven poses ---
+    // These sheets are drawn at different source resolutions, so each
+    // `display` is scaled so the visible sprite is about as tall as idle
+    // (~125px). Scaling by the raw source ratio instead would make the frog
+    // shrink to half size in the standing poses.
+    //
+    // The seated poses are then scaled down another 10%: matching idle's
+    // height left them looking a little larger than the standing frog, since
+    // they also carry the chair and desk. The desk and typing poses are 5%
+    // smaller again, as they still read slightly large beside the others.
+    // offsetY aligns each pose's feet with idle's baseline
+    // (box centre + --avatar-feet-offset).
+    sittingDown: {
+      sheet: 'avatar/sittingDown.png',
+      frameWidth: 338,
+      frameHeight: 604,
+      columns: 5,
+      frameCount: 25,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 80,
+        height: 143,
+      },
+      offsetY: -11,
+    },
+
+    sittingGettingDesk: {
+      sheet: 'avatar/sittingGettingDesk.png',
+      frameWidth: 896,
+      frameHeight: 504,
+      columns: 5,
+      // `frameCount` stays 25: it describes the 5x5 sheet grid used to size
+      // the background. `frames` is the playback order.
+      frameCount: 25,
+      // Frames 14-16 of the export are almost empty, so the frog vanishes for
+      // about 250ms mid-animation. Skip them and play the surrounding frames
+      // back-to-back instead.
+      frames: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17, 18, 19, 20, 21, 22, 23, 24],
+      frameDurationMs: 83,
+      loop: false,
+      // Wide scene: the frog sits well inside the cell while the desk is
+      // pulled into frame.
+      display: {
+        width: 276,
+        height: 155,
+      },
+      offsetY: 5,
+    },
+
+    sittingTyping: {
+      sheet: 'avatar/sittingTyping.png',
+      frameWidth: 428,
+      frameHeight: 474,
+      columns: 5,
+      frameCount: 25,
+      frameDurationMs: 83,
+      // One-shot at the animator level: overlay.js chains this and the blink
+      // sheet into an endless loop.
+      loop: false,
+      display: {
+        width: 96,
+        height: 105,
+      },
+      offsetY: 9,
+    },
+
+    sittingTypingBlink: {
+      sheet: 'avatar/sittingTypingBlink.png',
+      frameWidth: 428,
+      frameHeight: 474,
+      columns: 5,
+      frameCount: 25,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 96,
+        height: 105,
+      },
+      offsetY: 9,
+    },
+
+    deskLookUp: {
+      sheet: 'avatar/DeskLookUp.png',
+      // A single row of five frames, so there are no rows to derive.
+      frameWidth: 350,
+      frameHeight: 420,
+      columns: 5,
+      frameCount: 5,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 113,
+        height: 136,
+      },
+      offsetY: -2,
+    },
+
+    closeComputer: {
+      sheet: 'avatar/CloseComputer_2.png',
+      frameWidth: 242,
+      frameHeight: 264,
+      columns: 5,
+      frameCount: 25,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 103,
+        height: 112,
+      },
+      offsetY: 6,
+    },
+
+    standUp: {
+      sheet: 'avatar/StandUp.png',
+      frameWidth: 170,
+      frameHeight: 275,
+      columns: 5,
+      frameCount: 25,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 83,
+        height: 134,
+      },
+      // The feet sit high in the first cells and drift ~30px down the sheet as
+      // the frog stands. Ramp the whole sprite up across the clip so the feet
+      // stay planted, ending on idle's baseline.
+      offsetY: { from: 28, to: -1 },
+    },
+  },
+
+  // Sequence names for the category-driven behaviour in overlay.js. Kept
+  // here so a new pose can be slotted in without changing the state machine.
+  activityAnimations: {
+    productiveIntro: ['sittingDown', 'sittingGettingDesk', 'sittingTyping'],
+    productiveLoop: ['sittingTyping', 'sittingTypingBlink'],
+    leaveProductive: ['closeComputer', 'standUp'],
   },
 };
