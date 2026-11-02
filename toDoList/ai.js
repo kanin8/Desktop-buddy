@@ -11,11 +11,12 @@
 
 const CONFIG = require('./config');
 
-// Persona used for the in-character reply. Kept short: it is the visible bubble
-// text, and it costs tokens.
+// Length and format rule for the in-character reply. Persona and tone live in
+// the voice guide; this only keeps the bubble short, and lets the guide's
+// fixed messages (e.g. tier 3, three sentences) through the length limit.
 const PERSONA =
-  'You are a small, encouraging desk buddy. Reply in at most two short sentences. ' +
-  'Be warm and concrete, never use lists or markdown.';
+  'Keep replies short, usually one or two sentences. No lists or markdown. ' +
+  'If you have been given a message to send word for word, send exactly that.';
 
 // Classification prompt: determines if user input is a task/goal (needs subtasks)
 // or casual chat (question, greeting, follow-up, venting).

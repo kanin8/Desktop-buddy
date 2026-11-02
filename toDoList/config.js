@@ -31,7 +31,7 @@ module.exports = {
   AI_TEMPERATURE: 0.7,
   // Voice guide sent as the reply's system message. Relative to this folder;
   // aiService.js resolves it against __dirname so the launch directory never matters.
-  VOICE_GUIDE_PATH: '../docs/voice-and-behaviour.md',
+  VOICE_GUIDE_PATH: '../docs/voice-prompt.md',
 
   // Input classification (task vs chat)
   AI_CLASSIFY_TEMPERATURE: 0.1,
