@@ -1,5 +1,9 @@
+const { withSiteFromTitle } = require('../siteFromTitle.js');
+
 /**
  * Base detector implementation using active-win for baseline window detection.
+ * active-win cannot read browser URLs on Windows or Linux, so browser windows
+ * get their site from the window title instead.
  */
 class BaseDetector {
   async getActiveWindow() {
@@ -18,11 +22,11 @@ class BaseDetector {
         };
       }
 
-      return {
+      return withSiteFromTitle({
         title: window.title || 'Unknown',
         appName: window.owner.name || 'Unknown',
         source: 'app'
-      };
+      });
     } catch (e) {
       console.error('[Detector] CRITICAL ERROR in BaseDetector:', e);
       return {

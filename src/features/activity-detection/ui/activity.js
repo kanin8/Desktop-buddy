@@ -5,6 +5,28 @@ const eventListEl = document.getElementById('eventList');
 
 let currentActivityId = '';
 
+function textElement(tag, className, text) {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  el.textContent = text;
+  return el;
+}
+
+// History row: activity name, domain (or window title) and time.
+function eventInfoElement(event, time) {
+  const info = textElement('div', 'event-info', '');
+  info.append(
+    textElement('strong', '', event.app),
+    textElement('span', '', event.domain || event.title),
+    textElement('span', 'event-time', time),
+  );
+  return info;
+}
+
+function categoryBadgeElement(category) {
+  return textElement('div', 'category-badge cat-' + category, category);
+}
+
 function updateUI(event) {
   currentAppEl.textContent = event.app;
   currentDomainEl.textContent = event.domain || '-';
@@ -17,14 +39,9 @@ function updateUI(event) {
   const li = document.createElement('li');
   li.className = 'event-item';
   const time = new Date(event.startedAt).toLocaleTimeString();
-  li.innerHTML = `
-    <div class="event-info">
-      <strong>${event.app}</strong>
-      <span>${event.domain || event.title}</span>
-      <span class="event-time">${time}</span>
-    </div>
-    <div class="category-badge cat-${event.category}">${event.category}</div>
-  `;
+  // Built with textContent, not innerHTML: app names and titles come from
+  // window titles, which any website can set.
+  li.append(eventInfoElement(event, time), categoryBadgeElement(event.category));
 
   eventListEl.prepend(li);
   if (eventListEl.children.length > 20) {

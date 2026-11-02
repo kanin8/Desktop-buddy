@@ -52,7 +52,13 @@ function updateActivityUI() {
   };
 
   const color = categoryColors[currentActivity.category] || '#333';
-  el.innerHTML = `<span style="color: ${color}; font-weight: bold;">${currentActivity.category.toUpperCase()}</span>: ${currentActivity.app} ${currentActivity.domain ? `(${currentActivity.domain})` : ''}`;
+  // Built with textContent, not innerHTML: for browser tabs `app` comes from
+  // the page title, which any website controls.
+  const categoryEl = document.createElement('span');
+  categoryEl.style.color = color;
+  categoryEl.style.fontWeight = 'bold';
+  categoryEl.textContent = currentActivity.category.toUpperCase();
+  el.replaceChildren(categoryEl, ': ' + currentActivity.app);
 }
 
 function updateUI() {

@@ -50,9 +50,12 @@ class ActivityIPCHandlers {
         category = await this.aiClassify(info);
       }
 
+      // For a browser on a known site, the site is the activity
+      // ("YouTube"), and the browser is kept separately.
       const event = {
-        app: info.appName,
-        domain: info.url ? new URL(info.url).hostname : null,
+        app: info.site || info.appName,
+        browser: info.site ? info.appName : null,
+        domain: info.url ? new URL(info.url).hostname : (info.domain || null),
         title: info.title,
         category: category,
         source: info.source,

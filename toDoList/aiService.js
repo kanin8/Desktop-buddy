@@ -135,7 +135,8 @@ async function classifyActivity(info) {
     return await ai.classifyActivity(Object.assign(config.connection(), {
       appName: info.appName,
       title: info.title,
-      url: info.url,
+      // Windows/Linux cannot read browser URLs; the title-derived domain is the next best hint.
+      url: info.url || info.domain,
     }));
   } catch (e) {
     console.warn('[AI] Activity classification failed:', friendlyError(e));

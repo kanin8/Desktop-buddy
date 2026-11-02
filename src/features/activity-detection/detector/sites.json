@@ -1,0 +1,28 @@
+{
+  "browsers": [
+    "Brave",
+    "Google Chrome",
+    "Chrome",
+    "Microsoft Edge",
+    "Firefox",
+    "Opera",
+    "Vivaldi",
+    "Safari",
+    "Arc"
+  ],
+  "sites": [
+    { "name": "YouTube", "domain": "youtube.com", "titleMarkers": ["YouTube"] },
+    { "name": "Netflix", "domain": "netflix.com", "titleMarkers": ["Netflix"] },
+    { "name": "Twitch", "domain": "twitch.tv", "titleMarkers": ["Twitch"] },
+    { "name": "Disney+", "domain": "disneyplus.com", "titleMarkers": ["Disney+"] },
+    { "name": "Reddit", "domain": "reddit.com", "titleMarkers": ["Reddit"] },
+    { "name": "Facebook", "domain": "facebook.com", "titleMarkers": ["Facebook"] },
+    { "name": "Instagram", "domain": "instagram.com", "titleMarkers": ["Instagram"] },
+    { "name": "TikTok", "domain": "tiktok.com", "titleMarkers": ["TikTok"] },
+    { "name": "X", "domain": "x.com", "titleMarkers": ["X", "Twitter"] },
+    { "name": "GitHub", "domain": "github.com", "titleMarkers": ["GitHub"] },
+    { "name": "Stack Overflow", "domain": "stackoverflow.com", "titleMarkers": ["Stack Overflow"] },
+    { "name": "Google Docs", "domain": "docs.google.com", "titleMarkers": ["Google Docs"] },
+    { "name": "Notion", "domain": "notion.so", "titleMarkers": ["Notion"] }
+  ]
+}
