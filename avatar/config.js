@@ -40,6 +40,19 @@ window.AVATAR_SPRITE_CONFIG = {
       offsetY: 0,
     },
 
+    // Standing "talking" loop, played while the buddy is delivering a chat
+    // message. Same 5x5 layout as idle, so it shares idle's default display.
+    idleSpeak: {
+      sheet: 'avatar/IdleSpeak.png',
+      frameWidth: 392,
+      frameHeight: 616,
+      columns: 5,
+      frameCount: 25,
+      frameDurationMs: 83,
+      loop: false,
+      offsetY: 0,
+    },
+
     // One-shot click reaction, played from the idle loop and handed back to it
     // when the last frame lands. See overlay.js for the click wiring.
     standingClicked: {
@@ -298,6 +311,24 @@ window.AVATAR_SPRITE_CONFIG = {
       offsetY: 11,
     },
 
+    // Seated "talking" loop, played while the buddy delivers a chat message
+    // from the desk. Mirrors SittingLookingFix's grid and framing.
+    sittingLooking1Speak: {
+      sheet: 'avatar/SittingLooking1speak.png',
+      frameWidth: 396,
+      frameHeight: 402,
+      columns: 5,
+      frameCount: 25,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 102,
+        height: 104,
+      },
+      offsetX: 3,
+      offsetY: 11,
+    },
+
     closeComputer: {
       sheet: 'avatar/CloseComputer_2.png',
       frameWidth: 242,
@@ -346,5 +377,16 @@ window.AVATAR_SPRITE_CONFIG = {
     seatedClickLook: 'sittingLookingFix',
     seatedClickLookRepeats: 10,
     seatedClickExit: 'deskLookDown',
+  },
+
+  // How the avatar "speaks" a chat message: the standing sheet while idle, the
+  // seated one at the desk. The clip is held for a length proportional to the
+  // message, clamped so short lines still read and long ones don't drag on.
+  speaking: {
+    idleAnimation: 'idleSpeak',
+    seatedAnimation: 'sittingLooking1Speak',
+    msPerCharacter: 55,
+    minMs: 1200,
+    maxMs: 12000,
   },
 };
