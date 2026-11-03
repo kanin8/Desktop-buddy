@@ -181,9 +181,13 @@ function getFrogRect() {
 // The listener sits on #avatar because #avatar-sprite is pointer-events: none.
 avatar.addEventListener('click', (event) => {
   if (isFromControls(event)) return;
+  // Seated at work: run the look-up / look-over reaction before typing again.
+  if (activityCategory === 'productive') {
+    playSeatedClickReaction();
+    return;
+  }
   ++sequenceToken;
-  const isSeated = activityCategory === 'productive' || isJudging;
-  spriteAnimator.play(isSeated ? SEATED_CLICK_ANIMATION : CLICK_ANIMATION, {
+  spriteAnimator.play(isJudging ? SEATED_CLICK_ANIMATION : CLICK_ANIMATION, {
     onComplete: resumeRestAnimation,
   });
 });
@@ -212,8 +216,13 @@ const controls = createBuddyControls(
   {
     onChat: () => {
       nudge.dismiss();
-      if (isChatOpen()) closeChat();
-      else openChat();
+      if (isChatOpen()) {
+        closeChat();
+      } else {
+        // Opening the chat while seated also plays the look-over reaction.
+        if (activityCategory === 'productive') playSeatedClickReaction();
+        openChat();
+      }
     },
     onTodo: () => window.electronAPI.showTodoList(),
     onSettings: () => window.electronAPI.showSettings(),
@@ -310,6 +319,10 @@ const {
   judgingStare,
   judgingStareRepeats,
   judgingExit,
+  seatedClickIntro,
+  seatedClickLook,
+  seatedClickLookRepeats,
+  seatedClickExit,
 } = window.AVATAR_SPRITE_CONFIG.activityAnimations;
 
 function isCurrentSequence(token) {
@@ -358,6 +371,36 @@ function playProductiveIntro() {
   playSequence(productiveIntro, token, () => {
     if (!isCurrentSequence(token)) return;
     startTypingLoop(token, true);
+  });
+}
+
+// Seated reaction to a click or the chat button: look up from the keyboard,
+// look over at the user for a while, then look back down and resume typing.
+function playSeatedClickReaction() {
+  const token = ++sequenceToken;
+  spriteAnimator.play(seatedClickIntro, {
+    onComplete: () => {
+      if (!isCurrentSequence(token)) return;
+      playLookingFix(token, seatedClickLookRepeats);
+    },
+  });
+}
+
+// Replays the look-at-user sheet `remaining` times, then looks back down and
+// returns to the typing loop.
+function playLookingFix(token, remaining) {
+  if (!isCurrentSequence(token)) return;
+  if (remaining <= 0) {
+    spriteAnimator.play(seatedClickExit, {
+      onComplete: () => {
+        if (!isCurrentSequence(token)) return;
+        startTypingLoop(token);
+      },
+    });
+    return;
+  }
+  spriteAnimator.play(seatedClickLook, {
+    onComplete: () => playLookingFix(token, remaining - 1),
   });
 }
 

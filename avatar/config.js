@@ -172,6 +172,24 @@ window.AVATAR_SPRITE_CONFIG = {
       offsetY: 3,
     },
 
+    // Alternative look-up sheet used by the judging sequence. Same 5x1 layout
+    // and framing as DeskLookUp, so it shares its display and offset.
+    deskLookUp2: {
+      sheet: 'avatar/DeskLookUp2.png',
+      frameWidth: 350,
+      frameHeight: 420,
+      columns: 5,
+      frameCount: 5,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 103,
+        height: 123,
+      },
+      offsetX: 4,
+      offsetY: 3,
+    },
+
     // --- Judging the user's focus ---
     // Played when the user leaves productive work: the frog looks up from the
     // desk, judges them, then loops (blink once, stare five times) until
@@ -190,8 +208,8 @@ window.AVATAR_SPRITE_CONFIG = {
       frameDurationMs: 83,
       loop: false,
       display: {
-        width: 116,
-        height: 118,
+        width: 104,
+        height: 106,
       },
       offsetY: 3,
     },
@@ -207,8 +225,8 @@ window.AVATAR_SPRITE_CONFIG = {
       frameDurationMs: 83,
       loop: false,
       display: {
-        width: 116,
-        height: 118,
+        width: 104,
+        height: 106,
       },
       offsetY: 3,
     },
@@ -222,8 +240,8 @@ window.AVATAR_SPRITE_CONFIG = {
       frameDurationMs: 83,
       loop: false,
       display: {
-        width: 116,
-        height: 118,
+        width: 104,
+        height: 106,
       },
       offsetY: 3,
     },
@@ -237,8 +255,8 @@ window.AVATAR_SPRITE_CONFIG = {
       frameDurationMs: 83,
       loop: false,
       display: {
-        width: 116,
-        height: 118,
+        width: 104,
+        height: 106,
       },
       offsetY: 3,
     },
@@ -259,6 +277,25 @@ window.AVATAR_SPRITE_CONFIG = {
       },
       offsetX: 4,
       offsetY: 3,
+    },
+
+    // Reaction while seated and typing: the frog looks over at the user. Loops
+    // a few times before DeskLookDown returns it to the keyboard.
+    sittingLookingFix: {
+      sheet: 'avatar/SittingLookingFix.png',
+      // 5x5 grid of 396x402 cells, matching the judge scenes' framing.
+      frameWidth: 396,
+      frameHeight: 402,
+      columns: 5,
+      frameCount: 25,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 102,
+        height: 104,
+      },
+      offsetX: 3,
+      offsetY: 11,
     },
 
     closeComputer: {
@@ -300,10 +337,14 @@ window.AVATAR_SPRITE_CONFIG = {
   activityAnimations: {
     productiveIntro: ['sittingDown', 'sittingGettingDesk', 'sittingTyping'],
     productiveLoop: ['sittingTyping', 'sittingTypingBlink'],
-    judgingIntro: ['deskLookUp', 'sittingJudgeStart'],
+    judgingIntro: ['deskLookUp2', 'sittingJudgeStart'],
     judgingBlink: 'sittingJudgeBlink',
     judgingStare: 'sittingJudgeNoBlink',
     judgingStareRepeats: 5,
     judgingExit: ['sittingJudgeStop', 'deskLookDown'],
+    seatedClickIntro: 'deskLookUp',
+    seatedClickLook: 'sittingLookingFix',
+    seatedClickLookRepeats: 10,
+    seatedClickExit: 'deskLookDown',
   },
 };

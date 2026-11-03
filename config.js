@@ -10,6 +10,11 @@ module.exports = {
 
   BEDTIME_CHECK_MS: 60000,             // how often the clock is polled
 
+  // How often the active window is sampled to detect the user's activity
+  // category. Shorter means the avatar reacts sooner, at the cost of more
+  // active-window lookups and AI classifications.
+  ACTIVITY_POLL_MS: 30000,
+
   // The overlay relies on the cursor position to reveal the "Ask the buddy"
   // option. Electron only forwards mouse moves into a click-through window on
   // some platforms, and screen.getCursorScreenPoint() itself goes stale on
