@@ -14,11 +14,12 @@
 const CONFIG = require('./config');
 const { callClaudeApi } = require('./anthropicClient');
 
-// Persona used for the in-character reply. Kept short: it is the visible bubble
-// text, and it costs tokens.
+// Length and format rule for the in-character reply. Persona and tone live in
+// the voice guide; this only keeps the bubble short, and lets the guide's
+// fixed messages (e.g. tier 3, three sentences) through the length limit.
 const PERSONA =
-  'You are a small, encouraging desk buddy. Reply in at most two short sentences. ' +
-  'Be warm and concrete, never use lists or markdown.';
+  'Keep replies short, usually one or two sentences. No lists or markdown. ' +
+  'If you have been given a message to send word for word, send exactly that.';
 
 // Classification prompt: determines if user input is a task/goal (needs subtasks)
 // or casual chat (question, greeting, follow-up, venting).
@@ -46,10 +47,13 @@ const ACTIVITY_PERSONA =
 /**
  * Messages for the streamed in-character reply.
  * No JSON mode: the tokens are shown live, so they must be readable prose.
+ * `voiceGuide` (optional) is the team's voice guide; it goes first and PERSONA
+ * last, so the length/format rule is the final instruction the model reads.
  */
-function buildReplyMessages(text) {
+function buildReplyMessages(text, voiceGuide) {
+  var systemPrompt = voiceGuide ? voiceGuide + '\n\n' + PERSONA : PERSONA;
   return [
-    { role: 'system', content: PERSONA },
+    { role: 'system', content: systemPrompt },
     { role: 'user', content: String(text || '').trim() },
   ];
 }
@@ -292,13 +296,13 @@ function callModel(options) {
 }
 
 /** Streamed reply for the speech bubble. */
-async function streamReply({ provider, baseUrl, apiKey, model, text, onToken, signal }) {
+async function streamReply({ provider, baseUrl, apiKey, model, text, voiceGuide, onToken, signal }) {
   return callModel({
     provider: provider,
     baseUrl: baseUrl,
     apiKey: apiKey,
     model: model,
-    messages: buildReplyMessages(text),
+    messages: buildReplyMessages(text, voiceGuide),
     stream: true,
     temperature: CONFIG.AI_TEMPERATURE,
     maxTokens: CONFIG.AI_MAX_TOKENS,

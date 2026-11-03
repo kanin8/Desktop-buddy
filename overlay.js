@@ -684,6 +684,7 @@ function reevaluateHover() {
 // repeated exchanges cannot leak handlers. They read this state:
 
 let activeReply = null;   // element showing the reply being streamed
+let activeReplyText = ''; // raw streamed text, before em dashes are replaced
 let activePending = null; // "..." placeholder shown until the first token
 
 function addChatLine(text, kind) {
@@ -701,6 +702,12 @@ function removeChatLine(el) {
   if (el && el.parentNode) el.parentNode.removeChild(el);
 }
 
+// The voice guide bans em dashes, but models still slip them in. Replaces each
+// one, and the spaces around it, with ", ".
+function replaceEmDashes(text) {
+  return text.replace(/\s*—\s*/g, ', ');
+}
+
 // Called on the first token of a reply, so the placeholder is replaced exactly
 // once no matter how the events interleave.
 function ensureReplyElement() {
@@ -715,6 +722,7 @@ function endExchange() {
   removeChatLine(activePending);
   activePending = null;
   activeReply = null;
+  activeReplyText = '';
   chatSend.disabled = false;
 }
 
@@ -763,8 +771,11 @@ function submitChat(e) {
 
 window.electronAPI.onAIStream(() => { ensureReplyElement(); });
 
+// Cleans the whole text so far, not each token: the spaces around a dash can
+// arrive in a different token than the dash itself.
 window.electronAPI.onAIStream((token) => {
-  ensureReplyElement().textContent += token;
+  activeReplyText += token;
+  ensureReplyElement().textContent = replaceEmDashes(activeReplyText);
   chatLog.scrollTop = chatLog.scrollHeight;
 });
 
@@ -787,9 +798,9 @@ window.electronAPI.onAIError((message) => {
 
 window.electronAPI.onAITasksAdded((info) => {
   addChatLine(
-    info.count > 0
-      ? 'Added ' + info.count + ' subtask' + (info.count === 1 ? '' : 's') + ' to your list.'
-      : 'Added it to your list.',
+    info.count > 1
+      ? 'Done, ' + info.count + ' small steps on your list.'
+      : "Done, it's on your list.",
     'buddy'
   );
 });

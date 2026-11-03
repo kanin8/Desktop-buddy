@@ -13,11 +13,31 @@ const ai = require('./ai');
 const { describeClaudeError } = require('./anthropicClient');
 const CONFIG = require('./config');
 const { createSettingsStore } = require('./appSettings');
+const fs = require('fs');
 const { getStore, broadcastItems } = require('./todoService');
 
 let settings = null;
 // In-flight request per requesting window, so a closed overlay can cancel work.
 const inFlight = new Map();
+// Voice guide text, read once at startup. Empty means "fall back to the short persona".
+let voiceGuide = '';
+
+/**
+ * Reads the voice guide from disk and logs how much was loaded.
+ * A missing or unreadable file is not fatal: the buddy still replies, just
+ * without the guide, so the warning is the only signal.
+ */
+function loadVoiceGuide() {
+  const guidePath = path.join(__dirname, CONFIG.VOICE_GUIDE_PATH);
+  try {
+    const text = fs.readFileSync(guidePath, 'utf8').trim();
+    console.log('[AI] Loaded voice guide: ' + text.length + ' characters from ' + guidePath);
+    return text;
+  } catch (e) {
+    console.warn('[AI] Could not load voice guide from ' + guidePath + ':', e.message);
+    return '';
+  }
+}
 
 function getSettings() {
   if (settings) return settings;
@@ -55,7 +75,9 @@ async function askAndBreakdown(win, text) {
   const base = Object.assign(config.connection(), { signal: controller.signal });
 
   try {
-    const reply = await ai.streamReply(Object.assign({ text: goal, onToken: t => send(win, 'ai-stream', t) }, base));
+    // Only the visible reply gets the voice guide: the classify and breakdown
+    // calls need strict JSON, and the guide would add ~4k tokens to each.
+    const reply = await ai.streamReply(Object.assign({ text: goal, voiceGuide: voiceGuide, onToken: t => send(win, 'ai-stream', t) }, base));
     send(win, 'ai-stream-end', reply || '');
   } catch (e) {
     send(win, 'ai-error', friendlyError(e));
@@ -146,6 +168,8 @@ async function classifyActivity(info) {
 
 /** Registers the `ai-*` channels. Called once by the host app's main.js. */
 function registerAiIpc() {
+  voiceGuide = loadVoiceGuide();
+
   ipcMain.handle('ai-ask', (event, text) => askAndBreakdown(overlayOf(event), text));
 
   ipcMain.handle('ai-get-settings', () => getSettings().read());

@@ -55,9 +55,16 @@ const chatPayload = (content) => ({ choices: [{ message: { content } }] });
 test('buildReplyMessages asks for short prose and no JSON', () => {
   const messages = ai.buildReplyMessages('  write my thesis  ');
   assert.strictEqual(messages[0].role, 'system');
-  assert.match(messages[0].content, /two short sentences/i);
+  assert.match(messages[0].content, /one or two sentences/i);
   assert.strictEqual(messages[1].content, 'write my thesis');
   assert.ok(!messages.some((m) => /json/i.test(m.content)), 'reply must not be JSON');
+});
+
+test('buildReplyMessages puts the voice guide before the persona', () => {
+  const messages = ai.buildReplyMessages('hi', 'Talk like a friendly frog.');
+  assert.match(messages[0].content, /^Talk like a friendly frog\./);
+  assert.match(messages[0].content, /one or two sentences/i);
+  assert.match(messages[0].content, /word for word/i);
 });
 
 test('buildBreakdownMessages requests the expected shape and a cap', () => {

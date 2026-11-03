@@ -1,179 +1,91 @@
 <!DOCTYPE html>
+<!-- Settings window markup: buddy and to-do switches, AI setup, current
+     activity and quit. Behaviour lives in settings.js, styles in settings.css. -->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Avatar Settings</title>
-  <style>
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background-color: #f5f5f5;
-      margin: 0;
-      padding: 20px;
-      user-select: none;
-    }
-    .container {
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
-    h1 {
-      font-size: 1.2rem;
-      margin: 0 0 10px 0;
-      color: #333;
-      text-align: center;
-    }
-    .section {
-      background: white;
-      padding: 15px;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .section-title {
-      font-size: 0.9rem;
-      font-weight: bold;
-      margin-bottom: 10px;
-      color: #666;
-      display: block;
-    }
-    .toggle-container {
-      display: flex;
-      justify-content: center;
-      margin-bottom: 10px;
-    }
-    #toggleBtn {
-      width: 100%;
-      padding: 12px;
-      font-size: 1rem;
-      font-weight: bold;
-      cursor: pointer;
-      border: none;
-      border-radius: 6px;
-      transition: background 0.2s;
-    }
-    .btn-start { background-color: #4CAF50; color: white; }
-    .btn-stop { background-color: #f44336; color: white; }
-
-    /* ============================
-       To-Do List toggle
-       ============================ */
-    .toggle-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 0.9rem;
-      color: #333;
-      cursor: pointer;
-    }
-    .toggle-row input {
-      cursor: pointer;
-    }
-    .hint {
-      margin: 8px 0 0 0;
-      font-size: 0.75rem;
-      color: #888;
-    }
-
-    .status-bar {
-      margin-top: auto;
-      font-size: 0.75rem;
-      color: #888;
-      text-align: center;
-      padding: 10px 0;
-    }
-
-    /* ============================
-       AI section — labelled form fields
-       ============================ */
-    .field-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 8px;
-      font-size: 13px;
-    }
-    .field-row > span {
-      flex: 0 0 70px;
-      color: #556;
-    }
-    .field-row input,
-    .field-row select {
-      flex: 1;
-      min-width: 0;
-      font: inherit;
-      padding: 5px 8px;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-    }
-
-    /* ============================
-       States
-       ============================ */
-    /* `display: flex` above would otherwise override the hidden attribute
-       (used to hide rows a provider does not need: the key for Ollama, the
-       endpoint for Claude). */
-    .field-row[hidden] {
-      display: none;
-    }
-  </style>
+  <title>Buddy settings</title>
+  <!-- The buddy's theme (colours, fonts, spacing), shared with the avatar. -->
+  <link rel="stylesheet" href="styles/tokens.css">
+  <link rel="stylesheet" href="settings.css">
 </head>
 <body>
-  <div class="container">
-    <h1>Desktop Avatar</h1>
+  <main class="settings">
+    <h1 class="settings-title">Settings</h1>
 
-    <div class="section">
-      <span class="section-title">Current Activity</span>
-      <div id="activityStatus" style="font-size: 0.85rem; text-align: center; padding: 5px 0;">
-        Detecting...
+    <!-- Things shown on screen -->
+    <section class="settings-group" aria-labelledby="onScreenHeading">
+      <h2 class="group-heading" id="onScreenHeading">On screen</h2>
+      <div class="card">
+        <label class="setting-row">
+          <span class="setting-text">
+            <span class="setting-label">Show the buddy</span>
+            <span class="setting-hint" id="avatarHint">The frog on your screen. To pause it for a while, use Snooze in its menu.</span>
+          </span>
+          <input type="checkbox" role="switch" class="switch" id="avatarToggle" aria-describedby="avatarHint">
+        </label>
+        <label class="setting-row">
+          <span class="setting-text">
+            <span class="setting-label">To-do list</span>
+            <span class="setting-hint" id="todoHint">Pins a small task list to the bottom-right corner.</span>
+          </span>
+          <input type="checkbox" role="switch" class="switch" id="todoToggle" aria-describedby="todoHint">
+        </label>
       </div>
-    </div>
+    </section>
 
-    <div class="section">
-      <div class="toggle-container">
-        <button id="toggleBtn" class="btn-stop">STOP</button>
+    <!-- AI: one section for every AI feature -->
+    <section class="settings-group" aria-labelledby="aiHeading">
+      <h2 class="group-heading" id="aiHeading">AI</h2>
+      <div class="card">
+        <label class="setting-row">
+          <span class="setting-text">
+            <span class="setting-label">
+              Enable AI
+              <span class="badge" id="aiBadge"></span>
+            </span>
+            <span class="setting-hint" id="aiHint">Powers the buddy chat, splitting goals into subtasks, and sorting unknown apps.</span>
+          </span>
+          <input type="checkbox" role="switch" class="switch" id="aiToggle" aria-describedby="aiHint">
+        </label>
+
+        <div class="ai-fields" id="aiFields">
+          <label class="field">
+            <span class="field-label">Provider</span>
+            <select class="field-input" id="aiProvider"></select>
+          </label>
+          <label class="field" id="aiBaseUrlRow">
+            <span class="field-label">Endpoint</span>
+            <input type="text" class="field-input" id="aiBaseUrl" spellcheck="false">
+          </label>
+          <label class="field">
+            <span class="field-label">Model</span>
+            <input type="text" class="field-input" id="aiModel" spellcheck="false" list="aiModelHints">
+            <datalist id="aiModelHints"></datalist>
+          </label>
+          <label class="field" id="aiApiKeyRow">
+            <span class="field-label">API key</span>
+            <input type="password" class="field-input" id="aiApiKey" spellcheck="false" autocomplete="off" aria-describedby="aiKeyHint">
+          </label>
+          <p class="setting-hint" id="aiKeyHint"></p>
+          <p class="ai-status" id="aiStatus" aria-live="polite"></p>
+        </div>
       </div>
-    </div>
+    </section>
 
-    <div class="section">
-      <span class="section-title">To-Do List</span>
-      <label class="toggle-row">
-        <input type="checkbox" id="todoToggle">
-        <span>Show to-do list panel</span>
-      </label>
-      <p class="hint">Pins a small task list to the bottom-right corner.</p>
-    </div>
+    <!-- What the buddy currently thinks the user is doing -->
+    <section class="settings-group" aria-labelledby="activityHeading">
+      <h2 class="group-heading" id="activityHeading">Current activity</h2>
+      <div class="card">
+        <p class="activity" id="activityStatus" aria-live="polite">Detecting…</p>
+      </div>
+    </section>
 
-    <div class="section">
-      <span class="section-title">AI</span>
-      <label class="toggle-row">
-        <input type="checkbox" id="aiToggle">
-        <span>Enable AI</span>
-      </label>
-      <p class="hint">Powers the buddy chat, goal-to-subtask breakdown, and sorting unknown apps into productive or leisure.</p>
-      <label class="field-row">
-        <span>Provider</span>
-        <select id="aiProvider"></select>
-      </label>
-      <label class="field-row" id="aiBaseUrlRow">
-        <span>Endpoint</span>
-        <input type="text" id="aiBaseUrl" spellcheck="false">
-      </label>
-      <label class="field-row">
-        <span>Model</span>
-        <input type="text" id="aiModel" spellcheck="false" list="aiModelHints">
-        <datalist id="aiModelHints"></datalist>
-      </label>
-      <label class="field-row" id="aiApiKeyRow">
-        <span>API key</span>
-        <input type="password" id="aiApiKey" spellcheck="false" autocomplete="off">
-      </label>
-      <p class="hint" id="aiKeyHint"></p>
-      <p class="hint" id="aiStatus"></p>
-    </div>
-
-    <div class="status-bar" id="statusBar">
-      Status: Running
-    </div>
-  </div>
+    <footer class="settings-footer">
+      <button type="button" class="button-secondary" id="quitBtn">Quit the buddy</button>
+      <p class="setting-hint">Closes the frog, the to-do list and the tray icon.</p>
+    </footer>
+  </main>
   <script src="settings.js"></script>
 </body>
 </html>
