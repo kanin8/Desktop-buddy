@@ -56,6 +56,11 @@ const SEATED_CLICK_ANIMATION = 'deskLookUp';
 // update, so an already-running category is not mistaken for a transition.
 let activityCategory = null;
 
+// True while the frog is judging the user for leaving productive work. Lets a
+// return to productive work play the short stop pair instead of the full
+// sitting-down intro.
+let isJudging = false;
+
 // Incremented whenever a category sequence starts or is interrupted. Each
 // onComplete captures the value it was started with and bails when it is
 // stale, so a late callback cannot restart an old sequence.
@@ -177,7 +182,7 @@ function getFrogRect() {
 avatar.addEventListener('click', (event) => {
   if (isFromControls(event)) return;
   ++sequenceToken;
-  const isSeated = activityCategory === 'productive';
+  const isSeated = activityCategory === 'productive' || isJudging;
   spriteAnimator.play(isSeated ? SEATED_CLICK_ANIMATION : CLICK_ANIMATION, {
     onComplete: resumeRestAnimation,
   });
@@ -291,12 +296,21 @@ function getAnimationLengthMs(name) {
 }
 
 // --- ACTIVITY-DRIVEN ANIMATIONS ---
-// Productive work gets a seated entrance and a typing loop; leaving it plays
-// a short desk-clearing sequence before returning to idle. The sequence names
-// live in avatar/config.js; this block only decides when to play them.
+// Productive work gets a seated entrance and a typing loop. Leaving it plays a
+// judging sequence (look up, start judging, blink, stare a few times) before
+// returning to idle; coming back mid-judge stops it and resumes typing. The
+// sequence names live in avatar/config.js; this block only decides when to
+// play them.
 
-const { productiveIntro, productiveLoop, leaveProductive } =
-  window.AVATAR_SPRITE_CONFIG.activityAnimations;
+const {
+  productiveIntro,
+  productiveLoop,
+  judgingIntro,
+  judgingBlink,
+  judgingStare,
+  judgingStareRepeats,
+  judgingExit,
+} = window.AVATAR_SPRITE_CONFIG.activityAnimations;
 
 function isCurrentSequence(token) {
   return token === sequenceToken;
@@ -340,18 +354,57 @@ function startTypingLoop(token, startWithBlink = false) {
 // sheet, so the loop starts with the blink variant to avoid replaying it.
 function playProductiveIntro() {
   const token = ++sequenceToken;
+  isJudging = false;
   playSequence(productiveIntro, token, () => {
     if (!isCurrentSequence(token)) return;
     startTypingLoop(token, true);
   });
 }
 
-// Leaving productive work: look up, close the computer, stand up, then idle.
-function playLeaveProductive() {
+// Leaving productive work: look up, start judging, then loop the judge poses
+// (blink once, stare a handful of times) until productive work resumes.
+function playJudgingSequence() {
   const token = ++sequenceToken;
-  playSequence(leaveProductive, token, () => {
+  isJudging = true;
+
+  playSequence(judgingIntro, token, () => {
+    playJudgingLoop(token);
+  });
+}
+
+// One judge cycle: blink once, then stare `judgingStareRepeats` times. Repeats
+// forever; a return to productive work or an interruption takes the token.
+function playJudgingLoop(token) {
+  if (!isCurrentSequence(token)) return;
+  spriteAnimator.play(judgingBlink, {
+    onComplete: () => {
+      if (!isCurrentSequence(token)) return;
+      playStare(token, judgingStareRepeats);
+    },
+  });
+}
+
+// Replays the no-blink judge sheet `remaining` times, then starts another
+// judge cycle.
+function playStare(token, remaining) {
+  if (!isCurrentSequence(token)) return;
+  if (remaining <= 0) {
+    playJudgingLoop(token);
+    return;
+  }
+  spriteAnimator.play(judgingStare, {
+    onComplete: () => playStare(token, remaining - 1),
+  });
+}
+
+// Resuming productive work mid-judge: stop judging, drop the glance, then pick
+// the typing loop back up.
+function playLeaveJudging() {
+  const token = ++sequenceToken;
+  isJudging = false;
+  playSequence(judgingExit, token, () => {
     if (!isCurrentSequence(token)) return;
-    spriteAnimator.play(DEFAULT_IMAGE_ANIMATION);
+    startTypingLoop(token);
   });
 }
 
@@ -362,13 +415,20 @@ function resumeRestAnimation() {
     startTypingLoop(++sequenceToken);
     return;
   }
+  // Judging is itself a rest state: a click or nudge pauses it and hands back
+  // to the judge loop, not to idle.
+  if (isJudging) {
+    playJudgingLoop(++sequenceToken);
+    return;
+  }
   ++sequenceToken;
   spriteAnimator.play(DEFAULT_IMAGE_ANIMATION);
 }
 
 // Reacts only to actual category changes, so switching apps while still in
-// the same category does not replay the entrance. Entering productive always
-// replays the intro; leaving it plays the desk-clearing sequence.
+// the same category does not replay the entrance. Entering productive replays
+// the intro (or stops an in-progress judge); leaving it starts the judging
+// sequence.
 function setActivityCategory(next) {
   if (!next || next === activityCategory) return;
 
@@ -376,9 +436,10 @@ function setActivityCategory(next) {
   activityCategory = next;
 
   if (next === 'productive') {
-    playProductiveIntro();
+    if (isJudging) playLeaveJudging();
+    else playProductiveIntro();
   } else if (previous === 'productive') {
-    playLeaveProductive();
+    playJudgingSequence();
   }
 }
 

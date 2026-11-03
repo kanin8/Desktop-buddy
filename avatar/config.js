@@ -172,6 +172,95 @@ window.AVATAR_SPRITE_CONFIG = {
       offsetY: 3,
     },
 
+    // --- Judging the user's focus ---
+    // Played when the user leaves productive work: the frog looks up from the
+    // desk, judges them, then loops (blink once, stare five times) until
+    // productive work resumes. `judgingExit` reverses it back to typing.
+    //
+    // These scenes are drawn wider than the look-up pair, so their `display`
+    // is scaled to keep the frog about the same size. The cells are ~396x402,
+    // hence a slightly shorter box than DeskLookUp's 350x420.
+    sittingJudgeStart: {
+      sheet: 'avatar/SittingJudgeStart.png',
+      // A single row of five frames, so there are no rows to derive.
+      frameWidth: 396,
+      frameHeight: 404,
+      columns: 5,
+      frameCount: 5,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 116,
+        height: 118,
+      },
+      offsetY: 3,
+    },
+
+    sittingJudgeBlink: {
+      sheet: 'avatar/SittingJudgeBlink.png',
+      // 5x4 grid. The bottom row is a few pixels short (1609px tall), so
+      // frameHeight is rounded; the animator scales by row count anyway.
+      frameWidth: 396,
+      frameHeight: 402,
+      columns: 5,
+      frameCount: 20,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 116,
+        height: 118,
+      },
+      offsetY: 3,
+    },
+
+    sittingJudgeNoBlink: {
+      sheet: 'avatar/SittingJudgeNoBlink.png',
+      frameWidth: 396,
+      frameHeight: 405,
+      columns: 5,
+      frameCount: 5,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 116,
+        height: 118,
+      },
+      offsetY: 3,
+    },
+
+    sittingJudgeStop: {
+      sheet: 'avatar/SittingJudgeStop.png',
+      frameWidth: 396,
+      frameHeight: 405,
+      columns: 5,
+      frameCount: 5,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 116,
+        height: 118,
+      },
+      offsetY: 3,
+    },
+
+    deskLookDown: {
+      sheet: 'avatar/DeskLookDown.png',
+      // Same 5x1 layout and framing as DeskLookUp, so it shares its display
+      // and offset.
+      frameWidth: 350,
+      frameHeight: 420,
+      columns: 5,
+      frameCount: 5,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 103,
+        height: 123,
+      },
+      offsetX: 4,
+      offsetY: 3,
+    },
+
     closeComputer: {
       sheet: 'avatar/CloseComputer_2.png',
       frameWidth: 242,
@@ -211,6 +300,10 @@ window.AVATAR_SPRITE_CONFIG = {
   activityAnimations: {
     productiveIntro: ['sittingDown', 'sittingGettingDesk', 'sittingTyping'],
     productiveLoop: ['sittingTyping', 'sittingTypingBlink'],
-    leaveProductive: ['closeComputer', 'standUp'],
+    judgingIntro: ['deskLookUp', 'sittingJudgeStart'],
+    judgingBlink: 'sittingJudgeBlink',
+    judgingStare: 'sittingJudgeNoBlink',
+    judgingStareRepeats: 5,
+    judgingExit: ['sittingJudgeStop', 'deskLookDown'],
   },
 };
