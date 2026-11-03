@@ -40,6 +40,19 @@ window.AVATAR_SPRITE_CONFIG = {
       offsetY: 0,
     },
 
+    // Standing "talking" loop, played while the buddy is delivering a chat
+    // message. Same 5x5 layout as idle, so it shares idle's default display.
+    idleSpeak: {
+      sheet: 'avatar/IdleSpeak.png',
+      frameWidth: 392,
+      frameHeight: 616,
+      columns: 5,
+      frameCount: 25,
+      frameDurationMs: 83,
+      loop: false,
+      offsetY: 0,
+    },
+
     // One-shot click reaction, played from the idle loop and handed back to it
     // when the last frame lands. See overlay.js for the click wiring.
     standingClicked: {
@@ -165,10 +178,155 @@ window.AVATAR_SPRITE_CONFIG = {
       frameDurationMs: 83,
       loop: false,
       display: {
-        width: 113,
-        height: 136,
+        width: 103,
+        height: 123,
       },
-      offsetY: -2,
+      offsetX: 4,
+      offsetY: 3,
+    },
+
+    // Alternative look-up sheet used by the judging sequence. Same 5x1 layout
+    // and framing as DeskLookUp, so it shares its display and offset.
+    deskLookUp2: {
+      sheet: 'avatar/DeskLookUp2.png',
+      frameWidth: 350,
+      frameHeight: 420,
+      columns: 5,
+      frameCount: 5,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 103,
+        height: 123,
+      },
+      offsetX: 4,
+      offsetY: 3,
+    },
+
+    // --- Judging the user's focus ---
+    // Played when the user leaves productive work: the frog looks up from the
+    // desk, judges them, then loops (blink once, stare five times) until
+    // productive work resumes. `judgingExit` reverses it back to typing.
+    //
+    // These scenes are drawn wider than the look-up pair, so their `display`
+    // is scaled to keep the frog about the same size. The cells are ~396x402,
+    // hence a slightly shorter box than DeskLookUp's 350x420.
+    sittingJudgeStart: {
+      sheet: 'avatar/SittingJudgeStart.png',
+      // A single row of five frames, so there are no rows to derive.
+      frameWidth: 396,
+      frameHeight: 404,
+      columns: 5,
+      frameCount: 5,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 104,
+        height: 106,
+      },
+      offsetY: 3,
+    },
+
+    sittingJudgeBlink: {
+      sheet: 'avatar/SittingJudgeBlink.png',
+      // 5x4 grid. The bottom row is a few pixels short (1609px tall), so
+      // frameHeight is rounded; the animator scales by row count anyway.
+      frameWidth: 396,
+      frameHeight: 402,
+      columns: 5,
+      frameCount: 20,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 104,
+        height: 106,
+      },
+      offsetY: 3,
+    },
+
+    sittingJudgeNoBlink: {
+      sheet: 'avatar/SittingJudgeNoBlink.png',
+      frameWidth: 396,
+      frameHeight: 405,
+      columns: 5,
+      frameCount: 5,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 104,
+        height: 106,
+      },
+      offsetY: 3,
+    },
+
+    sittingJudgeStop: {
+      sheet: 'avatar/SittingJudgeStop.png',
+      frameWidth: 396,
+      frameHeight: 405,
+      columns: 5,
+      frameCount: 5,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 104,
+        height: 106,
+      },
+      offsetY: 3,
+    },
+
+    deskLookDown: {
+      sheet: 'avatar/DeskLookDown.png',
+      // Same 5x1 layout and framing as DeskLookUp, so it shares its display
+      // and offset.
+      frameWidth: 350,
+      frameHeight: 420,
+      columns: 5,
+      frameCount: 5,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 103,
+        height: 123,
+      },
+      offsetX: 4,
+      offsetY: 3,
+    },
+
+    // Reaction while seated and typing: the frog looks over at the user. Loops
+    // a few times before DeskLookDown returns it to the keyboard.
+    sittingLookingFix: {
+      sheet: 'avatar/SittingLookingFix.png',
+      // 5x5 grid of 396x402 cells, matching the judge scenes' framing.
+      frameWidth: 396,
+      frameHeight: 402,
+      columns: 5,
+      frameCount: 25,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 102,
+        height: 104,
+      },
+      offsetX: 3,
+      offsetY: 11,
+    },
+
+    // Seated "talking" loop, played while the buddy delivers a chat message
+    // from the desk. Mirrors SittingLookingFix's grid and framing.
+    sittingLooking1Speak: {
+      sheet: 'avatar/SittingLooking1speak.png',
+      frameWidth: 396,
+      frameHeight: 402,
+      columns: 5,
+      frameCount: 25,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 102,
+        height: 104,
+      },
+      offsetX: 3,
+      offsetY: 11,
     },
 
     closeComputer: {
@@ -210,6 +368,25 @@ window.AVATAR_SPRITE_CONFIG = {
   activityAnimations: {
     productiveIntro: ['sittingDown', 'sittingGettingDesk', 'sittingTyping'],
     productiveLoop: ['sittingTyping', 'sittingTypingBlink'],
-    leaveProductive: ['closeComputer', 'standUp'],
+    judgingIntro: ['deskLookUp2', 'sittingJudgeStart'],
+    judgingBlink: 'sittingJudgeBlink',
+    judgingStare: 'sittingJudgeNoBlink',
+    judgingStareRepeats: 5,
+    judgingExit: ['sittingJudgeStop', 'deskLookDown'],
+    seatedClickIntro: 'deskLookUp',
+    seatedClickLook: 'sittingLookingFix',
+    seatedClickLookRepeats: 10,
+    seatedClickExit: 'deskLookDown',
+  },
+
+  // How the avatar "speaks" a chat message: the standing sheet while idle, the
+  // seated one at the desk. The clip is held for a length proportional to the
+  // message, clamped so short lines still read and long ones don't drag on.
+  speaking: {
+    idleAnimation: 'idleSpeak',
+    seatedAnimation: 'sittingLooking1Speak',
+    msPerCharacter: 55,
+    minMs: 1200,
+    maxMs: 12000,
   },
 };

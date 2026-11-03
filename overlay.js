@@ -34,6 +34,10 @@ const placementParts = [spriteElement, hoverIndicator, pill];
 // The animation shown while the frog is at rest.
 const DEFAULT_IMAGE_ANIMATION = 'idle';
 
+// Chat "speaking" reaction: while the buddy delivers a chat message, play the
+// matching talking loop for roughly as long as the message would take to say.
+const SPEAKING = window.AVATAR_SPRITE_CONFIG.speaking;
+
 // Decode every sheet up front and keep the Image objects alive. The typing
 // loop swaps background images every couple of seconds; an undecoded sheet
 // would show as an empty frame for a moment during that swap.
@@ -47,11 +51,24 @@ const preloadedSpriteSheets = Object.values(window.AVATAR_SPRITE_CONFIG.animatio
 );
 
 // One-shot reaction played on click; hands back to the rest state when it ends.
+// While seated at the desk, the frog glances up instead of doing the standing
+// reaction.
 const CLICK_ANIMATION = 'standingClicked';
+const SEATED_CLICK_ANIMATION = 'deskLookUp';
 
 // The last activity category reported by detection. null until the first
 // update, so an already-running category is not mistaken for a transition.
 let activityCategory = null;
+
+// True while the frog is judging the user for leaving productive work. Lets a
+// return to productive work play the short stop pair instead of the full
+// sitting-down intro.
+let isJudging = false;
+
+// True while the seated "chat" pose is holding. Opening the chat at the desk
+// starts a look-over loop that only ends when the chat closes, so this flag
+// tells `closeChat` whether it owes the user a look-down before typing.
+let isChatPoseActive = false;
 
 // Incremented whenever a category sequence starts or is interrupted. Each
 // onComplete captures the value it was started with and bails when it is
@@ -173,8 +190,15 @@ function getFrogRect() {
 // The listener sits on #avatar because #avatar-sprite is pointer-events: none.
 avatar.addEventListener('click', (event) => {
   if (isFromControls(event)) return;
+  // Seated at work: run the look-up / look-over reaction before typing again.
+  // While the chat is open the look-over loop is already holding, so leave it
+  // running instead of interrupting it.
+  if (activityCategory === 'productive') {
+    if (!isChatOpen()) playSeatedClickReaction();
+    return;
+  }
   ++sequenceToken;
-  spriteAnimator.play(CLICK_ANIMATION, {
+  spriteAnimator.play(isJudging ? SEATED_CLICK_ANIMATION : CLICK_ANIMATION, {
     onComplete: resumeRestAnimation,
   });
 });
@@ -203,8 +227,11 @@ const controls = createBuddyControls(
   {
     onChat: () => {
       nudge.dismiss();
-      if (isChatOpen()) closeChat();
-      else openChat();
+      if (isChatOpen()) {
+        closeChat();
+      } else {
+        openChat();
+      }
     },
     onTodo: () => window.electronAPI.showTodoList(),
     onSettings: () => window.electronAPI.showSettings(),
@@ -286,13 +313,76 @@ function getAnimationLengthMs(name) {
   return frameCount * animation.frameDurationMs;
 }
 
-// --- ACTIVITY-DRIVEN ANIMATIONS ---
-// Productive work gets a seated entrance and a typing loop; leaving it plays
-// a short desk-clearing sequence before returning to idle. The sequence names
-// live in avatar/config.js; this block only decides when to play them.
+// True while the frog is seated at the desk (typing or judging), so a message
+// should use the seated talking sprite instead of the standing one.
+function isSeatedState() {
+  return activityCategory === 'productive' || isJudging;
+}
 
-const { productiveIntro, productiveLoop, leaveProductive } =
-  window.AVATAR_SPRITE_CONFIG.activityAnimations;
+// Buddy lines added in the same tick (a nudge plus its follow-up, ...) are
+// combined so one speaking reaction covers all of them.
+let pendingSpeechText = '';
+let speechStartTimer = null;
+
+// Queues a buddy chat message for the talking animation. Empty placeholders
+// (the reply line starts empty while streaming) are ignored.
+function speakMessage(text) {
+  const message = String(text || '').trim();
+  if (!message) return;
+
+  pendingSpeechText = pendingSpeechText ? pendingSpeechText + ' ' + message : message;
+  if (speechStartTimer) return;
+
+  speechStartTimer = setTimeout(() => {
+    speechStartTimer = null;
+    const combined = pendingSpeechText;
+    pendingSpeechText = '';
+    startSpeech(combined);
+  }, 0);
+}
+
+// Plays the talking clip for a length proportional to `message`, then hands
+// back to whichever rest state applies (idle, typing, or judging).
+function startSpeech(message) {
+  const name = isSeatedState() ? SPEAKING.seatedAnimation : SPEAKING.idleAnimation;
+  const durationMs = Math.min(
+    SPEAKING.maxMs,
+    Math.max(SPEAKING.minMs, message.length * SPEAKING.msPerCharacter)
+  );
+  const cycles = Math.max(1, Math.ceil(durationMs / getAnimationLengthMs(name)));
+  const token = ++sequenceToken;
+
+  const step = (remaining) => {
+    if (!isCurrentSequence(token)) return;
+    if (remaining <= 0) {
+      resumeRestAnimation();
+      return;
+    }
+    spriteAnimator.play(name, { onComplete: () => step(remaining - 1) });
+  };
+  step(cycles);
+}
+
+// --- ACTIVITY-DRIVEN ANIMATIONS ---
+// Productive work gets a seated entrance and a typing loop. Leaving it plays a
+// judging sequence (look up, start judging, blink, stare a few times) before
+// returning to idle; coming back mid-judge stops it and resumes typing. The
+// sequence names live in avatar/config.js; this block only decides when to
+// play them.
+
+const {
+  productiveIntro,
+  productiveLoop,
+  judgingIntro,
+  judgingBlink,
+  judgingStare,
+  judgingStareRepeats,
+  judgingExit,
+  seatedClickIntro,
+  seatedClickLook,
+  seatedClickLookRepeats,
+  seatedClickExit,
+} = window.AVATAR_SPRITE_CONFIG.activityAnimations;
 
 function isCurrentSequence(token) {
   return token === sequenceToken;
@@ -336,18 +426,134 @@ function startTypingLoop(token, startWithBlink = false) {
 // sheet, so the loop starts with the blink variant to avoid replaying it.
 function playProductiveIntro() {
   const token = ++sequenceToken;
+  isJudging = false;
   playSequence(productiveIntro, token, () => {
     if (!isCurrentSequence(token)) return;
-    startTypingLoop(token, true);
+    resumeProductiveRest(token, true);
   });
 }
 
-// Leaving productive work: look up, close the computer, stand up, then idle.
-function playLeaveProductive() {
+// Seated reaction to a click on the frog (with the chat closed): look up from
+// the keyboard, look over at the user for a while, then look back down and
+// resume typing.
+function playSeatedClickReaction() {
   const token = ++sequenceToken;
-  playSequence(leaveProductive, token, () => {
+  spriteAnimator.play(seatedClickIntro, {
+    onComplete: () => {
+      if (!isCurrentSequence(token)) return;
+      playLookingFix(token, seatedClickLookRepeats);
+    },
+  });
+}
+
+// Replays the look-at-user sheet `remaining` times, then looks back down and
+// returns to the typing loop.
+function playLookingFix(token, remaining) {
+  if (!isCurrentSequence(token)) return;
+  if (remaining <= 0) {
+    spriteAnimator.play(seatedClickExit, {
+      onComplete: () => {
+        if (!isCurrentSequence(token)) return;
+        startTypingLoop(token);
+      },
+    });
+    return;
+  }
+  spriteAnimator.play(seatedClickLook, {
+    onComplete: () => playLookingFix(token, remaining - 1),
+  });
+}
+
+// Opening the chat while seated: look up from the keyboard, then hold the
+// look-over loop until the chat closes.
+function playChatOpenReaction() {
+  const token = ++sequenceToken;
+  isChatPoseActive = true;
+  spriteAnimator.play(seatedClickIntro, {
+    onComplete: () => {
+      if (!isCurrentSequence(token)) return;
+      startSeatedChatLoop(token);
+    },
+  });
+}
+
+// Loops the look-over sheet indefinitely. Used while the chat is open so the
+// frog stays turned toward the user instead of typing behind the panel.
+function startSeatedChatLoop(token) {
+  if (!isCurrentSequence(token)) return;
+  spriteAnimator.play(seatedClickLook, {
+    onComplete: () => startSeatedChatLoop(token),
+  });
+}
+
+// Closing the chat while seated: look back down, then resume the typing loop.
+function playChatCloseReaction() {
+  const token = ++sequenceToken;
+  isChatPoseActive = false;
+  spriteAnimator.play(seatedClickExit, {
+    onComplete: () => {
+      if (!isCurrentSequence(token)) return;
+      startTypingLoop(token);
+    },
+  });
+}
+
+// Picks the productive rest pose: the look-over loop while the chat is open,
+// otherwise the typing loop. Also records that the chat pose is holding so
+// `closeChat` knows to play the look-down.
+function resumeProductiveRest(token, startWithBlink) {
+  if (isChatOpen()) {
+    isChatPoseActive = true;
+    startSeatedChatLoop(token);
+  } else {
+    startTypingLoop(token, startWithBlink);
+  }
+}
+
+// Leaving productive work: look up, start judging, then loop the judge poses
+// (blink once, stare a handful of times) until productive work resumes.
+function playJudgingSequence() {
+  const token = ++sequenceToken;
+  isJudging = true;
+
+  playSequence(judgingIntro, token, () => {
+    playJudgingLoop(token);
+  });
+}
+
+// One judge cycle: blink once, then stare `judgingStareRepeats` times. Repeats
+// forever; a return to productive work or an interruption takes the token.
+function playJudgingLoop(token) {
+  if (!isCurrentSequence(token)) return;
+  spriteAnimator.play(judgingBlink, {
+    onComplete: () => {
+      if (!isCurrentSequence(token)) return;
+      playStare(token, judgingStareRepeats);
+    },
+  });
+}
+
+// Replays the no-blink judge sheet `remaining` times, then starts another
+// judge cycle.
+function playStare(token, remaining) {
+  if (!isCurrentSequence(token)) return;
+  if (remaining <= 0) {
+    playJudgingLoop(token);
+    return;
+  }
+  spriteAnimator.play(judgingStare, {
+    onComplete: () => playStare(token, remaining - 1),
+  });
+}
+
+// Resuming productive work mid-judge: stop judging, drop the glance, then pick
+// the typing loop back up.
+function playLeaveJudging() {
+  const token = ++sequenceToken;
+  isJudging = false;
+  playSequence(judgingExit, token, () => {
     if (!isCurrentSequence(token)) return;
-    spriteAnimator.play(DEFAULT_IMAGE_ANIMATION);
+    resumeProductiveRest(token);
   });
 }
 
@@ -355,7 +561,13 @@ function playLeaveProductive() {
 // this to hand control back to whichever state the category calls for.
 function resumeRestAnimation() {
   if (activityCategory === 'productive') {
-    startTypingLoop(++sequenceToken);
+    resumeProductiveRest(++sequenceToken);
+    return;
+  }
+  // Judging is itself a rest state: a click or nudge pauses it and hands back
+  // to the judge loop, not to idle.
+  if (isJudging) {
+    playJudgingLoop(++sequenceToken);
     return;
   }
   ++sequenceToken;
@@ -363,8 +575,9 @@ function resumeRestAnimation() {
 }
 
 // Reacts only to actual category changes, so switching apps while still in
-// the same category does not replay the entrance. Entering productive always
-// replays the intro; leaving it plays the desk-clearing sequence.
+// the same category does not replay the entrance. Entering productive replays
+// the intro (or stops an in-progress judge); leaving it starts the judging
+// sequence.
 function setActivityCategory(next) {
   if (!next || next === activityCategory) return;
 
@@ -372,9 +585,10 @@ function setActivityCategory(next) {
   activityCategory = next;
 
   if (next === 'productive') {
-    playProductiveIntro();
+    if (isJudging) playLeaveJudging();
+    else playProductiveIntro();
   } else if (previous === 'productive') {
-    playLeaveProductive();
+    playJudgingSequence();
   }
 }
 
@@ -479,6 +693,8 @@ function addChatLine(text, kind) {
   el.textContent = text;
   chatLog.appendChild(el);
   chatLog.scrollTop = chatLog.scrollHeight;
+  // Every buddy line is "spoken": standing when idle, seated at the desk.
+  if (kind === 'buddy') speakMessage(text);
   return el;
 }
 
@@ -517,6 +733,9 @@ function openChat() {
   // The chat is open, so the overlay must stay interactive even before the
   // pointer moves again.
   window.electronAPI.setIgnoreMouse(false);
+  // Seated at the desk: turn toward the user and keep the look-over loop alive
+  // for as long as the chat is open.
+  if (activityCategory === 'productive') playChatOpenReaction();
 }
 
 function closeChat() {
@@ -525,6 +744,15 @@ function closeChat() {
   controls.setChatActive(false);
   chatPanel.style.display = 'none';
   chatInput.value = '';
+  // Seated chats owe a look back down (and a return to typing); chats opened
+  // while standing or judging just close.
+  if (isChatPoseActive) {
+    if (activityCategory === 'productive') {
+      playChatCloseReaction();
+    } else {
+      isChatPoseActive = false;
+    }
+  }
   releaseIfIdle();
 }
 
@@ -553,7 +781,13 @@ window.electronAPI.onAIStream((token) => {
 
 window.electronAPI.onAIStreamEnd((reply) => {
   // A model can finish without emitting content; show what it did send.
-  if (!activeReply && reply) addChatLine(replaceEmDashes(reply), 'buddy');
+  if (!activeReply && reply) {
+    addChatLine(reply, 'buddy');
+  } else if (activeReply) {
+    // The streamed reply was appended to an existing line, so speak the final
+    // text here (addChatLine only saw the empty placeholder).
+    speakMessage(activeReply.textContent);
+  }
   endExchange();
 });
 

@@ -1,6 +1,7 @@
 const { ipcMain, BrowserWindow } = require('electron');
 const { createDetector } = require('../detector/index.js');
 const { ActivityClassifier } = require('../classifier/index.js');
+const CONFIG = require('../../../../config');
 
 class ActivityIPCHandlers {
   // `aiClassify(info)` resolves a category for windows the rule list does not
@@ -34,11 +35,11 @@ class ActivityIPCHandlers {
   }
 
   startPolling() {
-    // Changed loop time to 1 minute (60,000ms)
-    console.log('[Activity] Starting polling loop (every 60 seconds)...');
+    const intervalMs = CONFIG.ACTIVITY_POLL_MS;
+    console.log(`[Activity] Starting polling loop (every ${intervalMs / 1000} seconds)...`);
     this.pollingInterval = setInterval(async () => {
       await this.updateLoop();
-    }, 60000);
+    }, intervalMs);
   }
 
   async updateLoop() {

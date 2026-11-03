@@ -136,9 +136,10 @@ class SpriteAnimator {
 
   // Nudges the sprite onto the shared feet baseline. A number is a fixed
   // offset; `{ from, to }` ramps across the playback so a pose whose feet
-  // drift within the sheet stays planted. Applied as a transform so it does
-  // not disturb the parent's centring, and so the element's bounding rect
-  // (used for click/hover) follows the shift.
+  // drift within the sheet stays planted. `offsetX` shifts horizontally the
+  // same way. Applied as a transform so it does not disturb the parent's
+  // centring, and so the element's bounding rect (used for click/hover)
+  // follows the shift.
   applyOffset() {
     const offsetY = this.animation.offsetY;
     let value = offsetY;
@@ -149,7 +150,8 @@ class SpriteAnimator {
       value = offsetY.from + (offsetY.to - offsetY.from) * progress;
     }
 
-    this.element.style.transform = `translateY(${value || 0}px)`;
+    const offsetX = this.animation.offsetX || 0;
+    this.element.style.transform = `translate(${offsetX}px, ${value || 0}px)`;
   }
 
   // Moves the background to the current frame. Offsets are negative to pull the
