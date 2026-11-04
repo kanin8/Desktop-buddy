@@ -12,8 +12,21 @@ module.exports = {
 
   // How often the active window is sampled to detect the user's activity
   // category. Shorter means the avatar reacts sooner, at the cost of more
-  // active-window lookups and AI classifications.
-  ACTIVITY_POLL_MS: 30000,
+  // active-window lookups. AI answers are cached per app/site, so a short
+  // interval doesn't mean an AI call every few seconds.
+  ACTIVITY_POLL_MS: 4000,
+
+  // When the AI couldn't classify a window (AI off, request failed), wait this
+  // long before asking about the same window again.
+  AI_ACTIVITY_RETRY_MS: 60000,
+
+  // Level 1 idle check-in: after this long without keyboard or mouse input
+  // (also counted from startup if nothing has happened yet), the buddy asks
+  // "still there?". Fires once per idle stretch.
+  IDLE_CHECK_IN_AFTER_MS: 5 * 60 * 1000,
+
+  // How often the system idle time is read for the check-in above.
+  IDLE_POLL_MS: 5000,
 
   // The overlay relies on the cursor position to reveal the "Ask the buddy"
   // option. Electron only forwards mouse moves into a click-through window on

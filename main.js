@@ -1,7 +1,8 @@
-const { app, BrowserWindow, screen, Tray, Menu, nativeImage, ipcMain, globalShortcut } = require('electron');
+const { app, BrowserWindow, screen, Tray, Menu, nativeImage, ipcMain, globalShortcut, powerMonitor } = require('electron');
 const path = require('path');
 const http = require('http');
 const { ActivityIPCHandlers } = require('./src/features/activity-detection/ipc/handlers.js');
+const { IdleWatcher } = require('./src/features/activity-detection/idle/idleWatcher.js');
 const {
   createTodoWindow,
   isTodoWindowVisible,
@@ -308,10 +309,12 @@ function triggerBedtime() {
   }
 }
 
-// Shows the buddy's default nudge (--test-nudge). With no text the overlay
-// uses the default line from nudge/config.js.
-function triggerTestNudge() {
-  if (overlayWin && !overlayWin.isDestroyed()) {
+// Shows the buddy's default nudge, the level 1 "still there?" check-in. Sent
+// by the idle watcher and by --test-nudge. With no text the overlay uses the
+// default line from nudge/config.js. Skipped while the buddy is hidden or
+// snoozed, so an old nudge isn't waiting when it comes back.
+function sendDefaultNudge() {
+  if (overlayWin && !overlayWin.isDestroyed() && overlayWin.isVisible()) {
     overlayWin.webContents.send('avatar-nudge', {});
   }
 }
@@ -587,6 +590,17 @@ app.whenReady().then(() => {
   // backend the chat uses, configured in Settings.
   const activityHandlers = new ActivityIPCHandlers({ aiClassify: classifyActivity });
   activityHandlers.init();
+
+  // Idle check-in: nudge after a stretch with no keyboard or mouse input.
+  // powerMonitor is the cross-platform source; the watcher only sees a number.
+  const idleWatcher = new IdleWatcher({
+    getIdleSeconds: () => powerMonitor.getSystemIdleTime(),
+    onIdle: sendDefaultNudge,
+    thresholdMs: CONFIG.IDLE_CHECK_IN_AFTER_MS,
+    pollMs: CONFIG.IDLE_POLL_MS,
+  });
+  idleWatcher.start();
+
   // The to-do list panel is opt-in, so it is deliberately not created here.
   // Enable it from Settings or the tray menu.
 
@@ -596,11 +610,10 @@ app.whenReady().then(() => {
     setTimeout(triggerBedtime, 2000); // Give window time to load
   }
 
-  // Test nudge trigger. Nothing sends real nudges yet: the detection branch
-  // will send the same 'avatar-nudge' message, optionally with its own text.
+  // Test nudge trigger: the same message the idle check-in sends.
   if (process.argv.includes('--test-nudge')) {
     console.log('Test mode: sending a nudge...');
-    setTimeout(triggerTestNudge, 2000); // Give window time to load
+    setTimeout(sendDefaultNudge, 2000); // Give window time to load
   }
 });
 

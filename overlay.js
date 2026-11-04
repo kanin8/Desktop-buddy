@@ -60,10 +60,21 @@ const SEATED_CLICK_ANIMATION = 'deskLookUp';
 // update, so an already-running category is not mistaken for a transition.
 let activityCategory = null;
 
-// True while the frog is judging the user for leaving productive work. Lets a
+// True once the frog has sat down at the desk (the first productive
+// activity). It stays seated from then on, typing or judging, because there
+// is no stand-up animation. Kept apart from activityCategory because an
+// uncategorized app leaves the frog where it is.
+let isAtDesk = false;
+
+// True while the frog is judging the user for being in leisure. Lets a
 // return to productive work play the short stop pair instead of the full
 // sitting-down intro.
 let isJudging = false;
+
+// True while the frog sits at the desk typing (rather than judging).
+function isTyping() {
+  return isAtDesk && !isJudging;
+}
 
 // True while the seated "chat" pose is holding. Opening the chat at the desk
 // starts a look-over loop that only ends when the chat closes, so this flag
@@ -193,7 +204,7 @@ avatar.addEventListener('click', (event) => {
   // Seated at work: run the look-up / look-over reaction before typing again.
   // While the chat is open the look-over loop is already holding, so leave it
   // running instead of interrupting it.
-  if (activityCategory === 'productive') {
+  if (isTyping()) {
     if (!isChatOpen()) playSeatedClickReaction();
     return;
   }
@@ -420,7 +431,7 @@ function getAnimationLengthMs(name) {
 // True while the frog is seated at the desk (typing or judging), so a message
 // should use the seated talking sprite instead of the standing one.
 function isSeatedState() {
-  return activityCategory === 'productive' || isJudging;
+  return isAtDesk;
 }
 
 // Buddy lines added in the same tick (a nudge plus its follow-up, ...) are
@@ -468,11 +479,11 @@ function startSpeech(message) {
 }
 
 // --- ACTIVITY-DRIVEN ANIMATIONS ---
-// Productive work gets a seated entrance and a typing loop. Leaving it plays a
-// judging sequence (look up, start judging, blink, stare a few times) before
-// returning to idle; coming back mid-judge stops it and resumes typing. The
-// sequence names live in avatar/config.js; this block only decides when to
-// play them.
+// Productive work gets a seated entrance and a typing loop. Switching to
+// leisure plays a judging sequence (look up, start judging, blink, stare a few
+// times) that loops until the user leaves leisure; then the frog stops judging
+// and resumes typing. The sequence names live in avatar/config.js; this block
+// only decides when to play them.
 
 const {
   productiveIntro,
@@ -530,6 +541,7 @@ function startTypingLoop(token, startWithBlink = false) {
 // sheet, so the loop starts with the blink variant to avoid replaying it.
 function playProductiveIntro() {
   const token = ++sequenceToken;
+  isAtDesk = true;
   isJudging = false;
   playSequence(productiveIntro, token, () => {
     if (!isCurrentSequence(token)) return;
@@ -614,8 +626,8 @@ function resumeProductiveRest(token, startWithBlink) {
   }
 }
 
-// Leaving productive work: look up, start judging, then loop the judge poses
-// (blink once, stare a handful of times) until productive work resumes.
+// Switching to leisure: look up, start judging, then loop the judge poses
+// (blink once, stare a handful of times) until the user leaves leisure.
 function playJudgingSequence() {
   const token = ++sequenceToken;
   isJudging = true;
@@ -650,8 +662,8 @@ function playStare(token, remaining) {
   });
 }
 
-// Resuming productive work mid-judge: stop judging, drop the glance, then pick
-// the typing loop back up.
+// Leaving leisure mid-judge (to productive or uncategorized): stop judging,
+// drop the glance, then pick the typing loop back up.
 function playLeaveJudging() {
   const token = ++sequenceToken;
   isJudging = false;
@@ -664,7 +676,7 @@ function playLeaveJudging() {
 // The pose shown when no one-off reaction is playing. A click or nudge uses
 // this to hand control back to whichever state the category calls for.
 function resumeRestAnimation() {
-  if (activityCategory === 'productive') {
+  if (isTyping()) {
     resumeProductiveRest(++sequenceToken);
     return;
   }
@@ -679,24 +691,27 @@ function resumeRestAnimation() {
 }
 
 // Reacts only to actual category changes, so switching apps while still in
-// the same category does not replay the entrance. Entering productive replays
-// the intro (or stops an in-progress judge); leaving it starts the judging
-// sequence. While judging in leisure (not uncategorized), the nudge timer runs.
+// the same category does not replay the entrance.
+// - productive: sits the frog down the first time, or stops a judge.
+// - leisure: starts judging (once the frog is at the desk) and the nudge timer.
+// - uncategorized: detection doesn't know what the user is doing, so the frog
+//   never judges it. A judge stops and the frog goes back to typing. The
+//   nudge timer is left running, so a quick hop leisure -> uncategorized ->
+//   leisure doesn't restart the wait (showJudgingNudge only speaks in leisure).
 function setActivityCategory(next) {
   if (!next || next === activityCategory) return;
-
-  const previous = activityCategory;
   activityCategory = next;
 
   if (next === 'productive') {
     cancelJudgingNudgeTimer();
     if (isJudging) playLeaveJudging();
-    else playProductiveIntro();
-  } else if (previous === 'productive') {
-    playJudgingSequence();
+    else if (!isAtDesk) playProductiveIntro();
+  } else if (next === 'leisure') {
+    if (isAtDesk && !isJudging) playJudgingSequence();
+    if (isJudging) startJudgingNudgeTimer();
+  } else if (isJudging) {
+    playLeaveJudging();
   }
-
-  if (next === 'leisure' && isJudging) startJudgingNudgeTimer();
 }
 
 window.electronAPI.onNudge(showNudge);
@@ -846,7 +861,7 @@ function openChat() {
   window.electronAPI.setIgnoreMouse(false);
   // Seated at the desk: turn toward the user and keep the look-over loop alive
   // for as long as the chat is open.
-  if (activityCategory === 'productive') playChatOpenReaction();
+  if (isTyping()) playChatOpenReaction();
 }
 
 function closeChat() {
@@ -858,7 +873,7 @@ function closeChat() {
   // Seated chats owe a look back down (and a return to typing); chats opened
   // while standing or judging just close.
   if (isChatPoseActive) {
-    if (activityCategory === 'productive') {
+    if (isTyping()) {
       playChatCloseReaction();
     } else {
       isChatPoseActive = false;

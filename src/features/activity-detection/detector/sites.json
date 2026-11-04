@@ -23,6 +23,11 @@
     { "name": "GitHub", "domain": "github.com", "titleMarkers": ["GitHub"] },
     { "name": "Stack Overflow", "domain": "stackoverflow.com", "titleMarkers": ["Stack Overflow"] },
     { "name": "Google Docs", "domain": "docs.google.com", "titleMarkers": ["Google Docs"] },
-    { "name": "Notion", "domain": "notion.so", "titleMarkers": ["Notion"] }
+    { "name": "Notion", "domain": "notion.so", "titleMarkers": ["Notion"] },
+    { "name": "Google Sheets", "domain": "docs.google.com", "titleMarkers": ["Google Sheets"] },
+    { "name": "Google Slides", "domain": "docs.google.com", "titleMarkers": ["Google Slides"] },
+    { "name": "Claude", "domain": "claude.ai", "titleMarkers": ["Claude"] },
+    { "name": "Figma", "domain": "figma.com", "titleMarkers": ["Figma"] },
+    { "name": "Overleaf", "domain": "overleaf.com", "titleMarkers": ["Overleaf"] }
   ]
 }

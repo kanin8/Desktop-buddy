@@ -204,9 +204,9 @@ window.AVATAR_SPRITE_CONFIG = {
     },
 
     // --- Judging the user's focus ---
-    // Played when the user leaves productive work: the frog looks up from the
-    // desk, judges them, then loops (blink once, stare five times) until
-    // productive work resumes. `judgingExit` reverses it back to typing.
+    // Played when the user switches to leisure: the frog looks up from the
+    // desk, judges them, then loops (blink once, stare five times) until they
+    // leave leisure. `judgingExit` reverses it back to typing.
     //
     // These scenes are drawn wider than the look-up pair, so their `display`
     // is scaled to keep the frog about the same size. The cells are ~396x402,
