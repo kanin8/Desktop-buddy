@@ -1,6 +1,6 @@
 // The buddy's proactive message (nudge): one bubble with the text, a × and
-// quick-reply buttons. Handles showing, the back-off line, and fading out when
-// ignored. Where it sits is chat/chatLayout.js; what the replies do is up to
+// quick-reply buttons. Handles showing, the short lines after a reply (back-off,
+// fine), and fading out when ignored. Where it sits is chat/chatLayout.js; what the replies do is up to
 // the overlay (onReply).
 
 // Sets up the nudge and returns the functions the overlay uses.
@@ -23,25 +23,33 @@ function createNudge(elements, actions) {
 
   const isVisible = () => nudge.classList.contains('is-visible');
 
-  // Shows a nudge with the configured reply buttons. Doesn't take keyboard
-  // focus: the user may be typing in another app. Screen readers still
-  // announce the text (aria-live on the text).
-  function show(message) {
+  // Shows a nudge with its own reply buttons (replyList), or the default ones
+  // from nudge/config.js when it has none. Doesn't take keyboard focus: the
+  // user may be typing in another app. Screen readers still announce the text
+  // (aria-live on the text).
+  function show(message, replyList) {
     nudge.classList.add('is-visible');
     text.textContent = message;
-    renderReplies(config().replies);
+    renderReplies(replyList || config().replies);
     restartHideTimer(config().autoHideMs);
   }
 
-  // "Not now": a short back-off line, no buttons, then it fades.
-  function showBackOff() {
+  // A short line with no buttons that fades after backOffVisibleMs (the
+  // back-off line, or fineLine after "I'm fine").
+  function showBriefly(line) {
     // Checked before the buttons go: the focused one is about to be removed.
     const hadFocus = nudge.contains(document.activeElement);
-    text.textContent = config().backOffLine;
+    text.textContent = line;
     renderReplies([]);
     // Keep focus in the nudge so Escape still works.
     if (hadFocus) close.focus();
     restartHideTimer(config().backOffVisibleMs);
+  }
+
+  // "Not now": a random back-off line, no buttons, then it fades.
+  function showBackOff() {
+    const lines = config().backOffLines;
+    showBriefly(lines[Math.floor(Math.random() * lines.length)]);
   }
 
   function dismiss() {
@@ -122,6 +130,7 @@ function createNudge(elements, actions) {
 
   return {
     show,
+    showBriefly,
     showBackOff,
     dismiss,
     focus,

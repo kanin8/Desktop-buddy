@@ -262,9 +262,19 @@ const nudge = createNudge(
     close: nudgeElement.querySelector('.nudge-close'),
   },
   {
+    // "Not now" and "I'm fine" both start the quiet period (quietAfterNotNowMs).
     onReply: (id, text) => {
-      if (id === 'yes') acceptNudge(text);
-      else if (id === 'notNow') nudge.showBackOff();
+      if (id === 'yes') {
+        acceptNudge(text);
+      } else if (id === 'notNow') {
+        nudge.showBackOff();
+        lastNotNowAt = Date.now();
+      } else if (id === 'fine') {
+        nudge.showBriefly(window.NUDGE_CONFIG.fineLine);
+        lastNotNowAt = Date.now();
+      } else if (id === 'notFine') {
+        acceptNudge(text, window.NUDGE_CONFIG.notFineLine);
+      }
     },
     // Not mid-drag: the overlay must keep catching the mouse until the drop.
     onHidden: () => {
@@ -273,26 +283,30 @@ const nudge = createNudge(
   }
 );
 
-// "Yes, help me!": opens the chat with the nudge and a follow-up already in
-// the history, so the user can answer straight away in the input.
+// "Yes, help me!" (or "I'm not"): opens the chat with the nudge and a
+// follow-up already in the history, so the user can answer straight away in
+// the input. followUp defaults to helpLine.
 // The chat opens before the nudge closes, so closing it doesn't hand focus
 // back to the other app (onHidden -> releaseIfIdle).
-function acceptNudge(text) {
+function acceptNudge(text, followUp = window.NUDGE_CONFIG.helpLine) {
   controls.showPill();
   openChat();
   nudge.dismiss();
   addChatLine(text, 'buddy');
-  addChatLine(window.NUDGE_CONFIG.helpLine, 'buddy');
+  addChatLine(followUp, 'buddy');
 }
 
-// A nudge from the main process (detection later, --test-nudge for now).
+// A nudge from the main process (--test-nudge) or the judging timer below.
+// message: { text, replies }, both optional; without them the default text
+// and buttons from nudge/config.js are used.
 // The frog plays its cue first so the message doesn't pop up out of nowhere.
-// Skipped while the chat or menu is open: the user is already busy with the
-// buddy. The message waits for the cue's length rather than its onComplete,
-// because clicking the frog mid-cue restarts the animation with its own
-// callback and the message would be lost.
+// Skipped while the chat or menu is open (the user is already busy with the
+// buddy) or while a cooldown is running (canShowNudge). The message waits for
+// the cue's length rather than its onComplete, because clicking the frog
+// mid-cue restarts the animation with its own callback and the message would
+// be lost.
 function showNudge(message) {
-  if (isChatOpen() || controls.isMenuOpen()) return;
+  if (isChatOpen() || controls.isMenuOpen() || !canShowNudge()) return;
   const { cueAnimation, defaultText } = window.NUDGE_CONFIG;
   const text = message.text || defaultText;
   ++sequenceToken;
@@ -300,8 +314,83 @@ function showNudge(message) {
     onComplete: resumeRestAnimation,
   });
   setTimeout(() => {
-    if (!isChatOpen() && !controls.isMenuOpen()) nudge.show(text);
+    if (isChatOpen() || controls.isMenuOpen()) return;
+    nudge.show(text, message.replies);
+    recordNudgeShown();
   }, getAnimationLengthMs(cueAnimation));
+}
+
+// --- NUDGE TIMING ---
+// When the frog starts judging and the user is in leisure, a timer waits
+// judgingDelayMs before the frog says one of the judgingLines. Cooldowns keep
+// it from getting annoying. All values live in nudge/config.js and are read
+// when needed, so they can be tuned from the dev tools while the app runs.
+
+const ONE_HOUR_MS = 60 * 60 * 1000;
+
+let judgingNudgeTimer = null;
+// Index into judgingLines of the last line said, so it isn't repeated next.
+let lastJudgingLineIndex = -1;
+// When each nudge was shown, trimmed to the last hour (for maxPerHour).
+let nudgeShownTimes = [];
+// When "Not now" or "I'm fine" was last pressed; 0 means never.
+let lastNotNowAt = 0;
+
+// Starts the wait before a judging nudge. Does nothing if one is already
+// waiting, so going leisure -> uncategorized -> leisure doesn't restart it.
+function startJudgingNudgeTimer() {
+  if (judgingNudgeTimer) return;
+  judgingNudgeTimer = setTimeout(() => {
+    judgingNudgeTimer = null;
+    showJudgingNudge();
+  }, window.NUDGE_CONFIG.judgingDelayMs);
+}
+
+function cancelJudgingNudgeTimer() {
+  clearTimeout(judgingNudgeTimer);
+  judgingNudgeTimer = null;
+}
+
+// Says a random judging line (with its own buttons, if it has any), but only
+// if the user is still in leisure after the delay.
+function showJudgingNudge() {
+  if (activityCategory !== 'leisure') return;
+  const index = pickJudgingLineIndex();
+  lastJudgingLineIndex = index;
+  const line = window.NUDGE_CONFIG.judgingLines[index];
+  showNudge({ text: line.text, replies: line.replies });
+}
+
+// A random index into judgingLines, never the same as the last one (unless
+// there is only one line).
+function pickJudgingLineIndex() {
+  const count = window.NUDGE_CONFIG.judgingLines.length;
+  if (count <= 1) return 0;
+  let index;
+  do {
+    index = Math.floor(Math.random() * count);
+  } while (index === lastJudgingLineIndex);
+  return index;
+}
+
+// False while any cooldown is running: too soon after the last nudge, the
+// hourly limit is reached, or the user recently said "Not now" / "I'm fine".
+function canShowNudge() {
+  const { cooldownMs, maxPerHour, quietAfterNotNowMs } = window.NUDGE_CONFIG;
+  const now = Date.now();
+  nudgeShownTimes = nudgeShownTimes.filter((time) => now - time < ONE_HOUR_MS);
+  const lastShownAt = nudgeShownTimes[nudgeShownTimes.length - 1] || 0;
+
+  if (now - lastShownAt < cooldownMs) return false;
+  if (nudgeShownTimes.length >= maxPerHour) return false;
+  if (now - lastNotNowAt < quietAfterNotNowMs) return false;
+  return true;
+}
+
+// Counted only once the nudge is actually on screen, so a skipped one doesn't
+// use up the cooldown.
+function recordNudgeShown() {
+  nudgeShownTimes.push(Date.now());
 }
 
 // How long one play of a sprite animation takes (avatar/config.js). An
@@ -577,7 +666,7 @@ function resumeRestAnimation() {
 // Reacts only to actual category changes, so switching apps while still in
 // the same category does not replay the entrance. Entering productive replays
 // the intro (or stops an in-progress judge); leaving it starts the judging
-// sequence.
+// sequence. While judging in leisure (not uncategorized), the nudge timer runs.
 function setActivityCategory(next) {
   if (!next || next === activityCategory) return;
 
@@ -585,11 +674,14 @@ function setActivityCategory(next) {
   activityCategory = next;
 
   if (next === 'productive') {
+    cancelJudgingNudgeTimer();
     if (isJudging) playLeaveJudging();
     else playProductiveIntro();
   } else if (previous === 'productive') {
     playJudgingSequence();
   }
+
+  if (next === 'leisure' && isJudging) startJudgingNudgeTimer();
 }
 
 window.electronAPI.onNudge(showNudge);
