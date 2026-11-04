@@ -44,18 +44,65 @@ const ACTIVITY_PERSONA =
   '"App: Spotify, Title: Gaming Beats" -> leisure.\n' +
   'Reply with ONLY the word productive or leisure. No explanation, no punctuation.';
 
+// Put in front of a history that starts with the buddy (e.g. a nudge), because
+// the conversation must open with a user turn (Claude rejects it otherwise).
+var BUDDY_SPOKE_FIRST = '(The buddy started this conversation.)';
+
+/**
+ * Cleans the chat history sent by the overlay: keeps only user/assistant
+ * lines that have text, shortens each to CONFIG.AI_CHAT_HISTORY_MAX_CHARS and
+ * keeps the last CONFIG.AI_CHAT_HISTORY_MESSAGES. It comes from a renderer, so
+ * it isn't trusted to be well formed.
+ */
+function cleanChatHistory(history) {
+  if (!Array.isArray(history)) return [];
+  return history
+    .filter(function (line) {
+      return line && (line.role === 'user' || line.role === 'assistant') && typeof line.content === 'string';
+    })
+    .map(function (line) {
+      return { role: line.role, content: line.content.trim().slice(0, CONFIG.AI_CHAT_HISTORY_MAX_CHARS) };
+    })
+    .filter(function (line) { return line.content; })
+    .slice(-CONFIG.AI_CHAT_HISTORY_MESSAGES);
+}
+
+/**
+ * Joins back-to-back lines from the same speaker into one turn (a nudge and
+ * the buddy's follow-up are two buddy lines in a row), so every provider gets
+ * alternating turns. Opens with a user turn if the buddy spoke first.
+ */
+function toAlternatingTurns(lines) {
+  var turns = [];
+  lines.forEach(function (line) {
+    var last = turns[turns.length - 1];
+    if (last && last.role === line.role) {
+      last.content += '\n\n' + line.content;
+    } else {
+      turns.push({ role: line.role, content: line.content });
+    }
+  });
+  if (turns.length && turns[0].role === 'assistant') {
+    turns.unshift({ role: 'user', content: BUDDY_SPOKE_FIRST });
+  }
+  return turns;
+}
+
 /**
  * Messages for the streamed in-character reply.
  * No JSON mode: the tokens are shown live, so they must be readable prose.
  * `voiceGuide` (optional) is the team's voice guide; it goes first and PERSONA
  * last, so the length/format rule is the final instruction the model reads.
+ * `history` (optional) is the chat so far as [{ role, content }], oldest
+ * first, including nudges and the user's button replies, so the buddy knows
+ * what it just asked.
  */
-function buildReplyMessages(text, voiceGuide) {
+function buildReplyMessages(text, voiceGuide, history) {
   var systemPrompt = voiceGuide ? voiceGuide + '\n\n' + PERSONA : PERSONA;
-  return [
-    { role: 'system', content: systemPrompt },
+  var lines = cleanChatHistory(history).concat([
     { role: 'user', content: String(text || '').trim() },
-  ];
+  ]);
+  return [{ role: 'system', content: systemPrompt }].concat(toAlternatingTurns(lines));
 }
 
 /**
@@ -296,13 +343,13 @@ function callModel(options) {
 }
 
 /** Streamed reply for the speech bubble. */
-async function streamReply({ provider, baseUrl, apiKey, model, text, voiceGuide, onToken, signal }) {
+async function streamReply({ provider, baseUrl, apiKey, model, text, voiceGuide, history, onToken, signal }) {
   return callModel({
     provider: provider,
     baseUrl: baseUrl,
     apiKey: apiKey,
     model: model,
-    messages: buildReplyMessages(text, voiceGuide),
+    messages: buildReplyMessages(text, voiceGuide, history),
     stream: true,
     temperature: CONFIG.AI_TEMPERATURE,
     maxTokens: CONFIG.AI_MAX_TOKENS,
