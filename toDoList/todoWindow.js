@@ -33,14 +33,14 @@ function workArea() {
 }
 
 // Positions the panel relative to the frog when its position is known
-// (Desktop-buddy): the bottom edge rests on the frog's feet, so the frog
-// stands entirely ABOVE the list, and the panel grows upward from there. It
-// is centred horizontally under the frog and clamped to the work area. The
-// height is capped so the bottom edge can stay on the feet even when the
-// frog is dragged far up; the list inside the panel scrolls instead. If the
-// frog was dragged very near the screen top, the top edge stops at the work
-// area and the panel hangs below the feet again — the price of never
-// letting a task list go off screen.
+// (Desktop-buddy): the TOP edge rests at the frog's feet (optionally a few
+// pixels above them, so the feet sink into the list), and the panel grows
+// DOWNWARD from there, so the frog stands fully above the list. It is
+// centred horizontally under the frog and clamped to the work area. The
+// height is capped so the bottom edge stays inside the work area; a longer
+// list scrolls inside the panel instead. If the frog was dragged very near
+// the screen bottom, the whole panel is pushed up a little so it still fits
+// — the price of never letting a task list go off screen.
 //
 // The frog stays on top of the panel no matter what: the host app re-raises
 // the avatar overlay on every panel raise ('todo-panel-raised', handled in
@@ -52,7 +52,7 @@ function workArea() {
 function anchor() {
   if (!todoWin || todoWin.isDestroyed()) return;
   const wa = workArea();
-  const height = Math.max(
+  const wantedHeight = Math.max(
     CONFIG.MIN_HEIGHT,
     Math.min(contentHeight, wa.height - 2 * CONFIG.SCREEN_MARGIN)
   );
@@ -60,9 +60,9 @@ function anchor() {
   if (!frogFeet) {
     todoWin.setBounds({
       x: wa.x + wa.width - CONFIG.WINDOW_WIDTH - CONFIG.SCREEN_MARGIN,
-      y: wa.y + wa.height - height - CONFIG.SCREEN_MARGIN,
+      y: wa.y + wa.height - wantedHeight - CONFIG.SCREEN_MARGIN,
       width: CONFIG.WINDOW_WIDTH,
-      height,
+      height: wantedHeight,
     });
     return;
   }
@@ -71,15 +71,17 @@ function anchor() {
     Math.max(Math.round(frogFeet.x - CONFIG.WINDOW_WIDTH / 2), wa.x + CONFIG.SCREEN_MARGIN),
     wa.x + wa.width - CONFIG.WINDOW_WIDTH - CONFIG.SCREEN_MARGIN
   );
-  const followHeight = Math.min(height, Math.max(
+  const top = Math.round(frogFeet.y) - CONFIG.FOLLOW_FEET_OVERLAP;
+  // Never let the panel's bottom edge leave the work area.
+  const height = Math.max(
     CONFIG.MIN_HEIGHT,
-    Math.round(frogFeet.y) - CONFIG.FOLLOW_FEET_OVERLAP - wa.y
-  ));
+    Math.min(wantedHeight, wa.y + wa.height - CONFIG.SCREEN_MARGIN - top)
+  );
   todoWin.setBounds({
     x,
-    y: Math.max(wa.y, Math.round(frogFeet.y) - CONFIG.FOLLOW_FEET_OVERLAP - followHeight),
+    y: Math.min(top, wa.y + wa.height - CONFIG.SCREEN_MARGIN - height),
     width: CONFIG.WINDOW_WIDTH,
-    height: followHeight,
+    height,
   });
 }
 
