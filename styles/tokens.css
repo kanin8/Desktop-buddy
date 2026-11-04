@@ -180,6 +180,11 @@
   --radius-sm: 6px;
   /* Half a spacing step, for small nudges in tight rows. */
   --space-half: 2px;
+  /* Clickable field of the disclosure button in front of parent tasks. */
+  --twisty-size: 24px;
+  /* How far right one nesting level starts, so subtasks clearly read as
+     children of the parent above them. */
+  --todo-indent: 48px;
   /* The × and – glyphs in the panel header. */
   --icon-glyph-size: 18px;
   --checkbox-size: 20px;

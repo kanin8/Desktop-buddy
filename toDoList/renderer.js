@@ -126,7 +126,6 @@
         twisty = document.createElement('button');
         twisty.className = 'twisty';
         twisty.type = 'button';
-        twisty.textContent = it.collapsed ? '▸' : '▾';
         twisty.setAttribute('aria-expanded', it.collapsed ? 'false' : 'true');
         twisty.setAttribute('aria-label',
           (it.collapsed ? 'Expand subtasks of ' : 'Collapse subtasks of ') + it.text);
