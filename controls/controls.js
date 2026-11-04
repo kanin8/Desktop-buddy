@@ -1,16 +1,16 @@
-// The buddy's controls: the hover pill (Chat + More) and the More menu
+// The buddy's controls: the hover pill (Chat, To-do, More) and the More menu
 // (To-do, Settings, Snooze). Handles showing/hiding, the accent highlight for
 // the active function, menu placement and keyboard use. Knows nothing about
 // chat or the main process: every action comes in as a callback.
 
 // Sets up the controls and returns the functions the overlay uses to drive
 // them.
-// - elements: { avatar, pill, chatButton, moreButton, menu }
+// - elements: { avatar, pill, chatButton, todoButton, moreButton, menu }
 // - getFrogRect(): the visible frog's rectangle, used to place the menu
 // - actions: { onChat, onTodo, onSettings, onSnooze(choice), onHidden }
 //   onHidden runs every time the pill hides, however it was closed.
 function createBuddyControls(elements, getFrogRect, actions) {
-  const { avatar, pill, chatButton, moreButton, menu } = elements;
+  const { avatar, pill, chatButton, todoButton, moreButton, menu } = elements;
   const { pillHideDelayMs } = window.CONTROLS_CONFIG;
   const snoozeItem = menu.querySelector('[data-action="snooze"]');
   const snoozeChoices = menu.querySelector('.snooze-choices');
@@ -150,6 +150,11 @@ function createBuddyControls(elements, getFrogRect, actions) {
   chatButton.addEventListener('click', () => {
     closeMenu();
     actions.onChat();
+  });
+
+  todoButton.addEventListener('click', () => {
+    closeMenu();
+    actions.onTodo();
   });
 
   // event.detail is 0 for keyboard "clicks" (Enter/Space): only then does

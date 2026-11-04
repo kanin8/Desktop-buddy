@@ -8,6 +8,7 @@ const bubble = document.getElementById('speech-bubble');
 const hoverIndicator = document.getElementById('hover-indicator');
 const pill = document.getElementById('buddy-pill');
 const pillChatButton = document.getElementById('pill-chat');
+const pillTodoButton = document.getElementById('pill-todo');
 const pillMoreButton = document.getElementById('pill-more');
 const buddyMenu = document.getElementById('buddy-menu');
 const chatPanel = document.getElementById('chat-panel');
@@ -229,10 +230,10 @@ avatar.addEventListener('click', (event) => {
 
 const isChatOpen = () => chatPanel.style.display === 'flex';
 
-// The pill and menu. Chat toggles Maike's chat panel; the menu items call the
-// main process. See controls/controls.js.
+// The pill and menu. Chat toggles Maike's chat panel; the to-do button and
+// the menu items call the main process. See controls/controls.js.
 const controls = createBuddyControls(
-  { avatar, pill, chatButton: pillChatButton, moreButton: pillMoreButton, menu: buddyMenu },
+  { avatar, pill, chatButton: pillChatButton, todoButton: pillTodoButton, moreButton: pillMoreButton, menu: buddyMenu },
   getFrogRect,
   {
     onChat: () => {
@@ -240,7 +241,9 @@ const controls = createBuddyControls(
       if (isChatOpen()) closeChat();
       else openChat();
     },
-    onTodo: () => window.electronAPI.showTodoList(),
+    // The pill icon and the menu item switch the panel on and off, like Chat
+    // does for its own panel.
+    onTodo: () => window.electronAPI.toggleTodoList(),
     onSettings: () => window.electronAPI.showSettings(),
     onSnooze: (choice) => {
       nudge.dismiss();

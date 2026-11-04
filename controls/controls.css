@@ -31,9 +31,9 @@
 /* ============================
    4. Components — hover pill
    ============================
-   Chat + More, in the indicator's spot under the frog's feet. It is always
-   laid out but invisible until shown, so placement can reserve room for it
-   near the screen edge. */
+   Chat, To-do and More, in the indicator's spot under the frog's feet. It is
+   always laid out but invisible until shown, so placement can reserve room for
+   it near the screen edge. */
 .buddy-pill {
   position: absolute;
   top: calc(50% + var(--avatar-feet-offset) + var(--indicator-gap));
