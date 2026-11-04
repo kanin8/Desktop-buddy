@@ -33,18 +33,19 @@ function workArea() {
 }
 
 // Positions the panel relative to the frog when its position is known
-// (Desktop-buddy): the bottom edge rests exactly on the frog's feet, so the
-// frog sits right on the panel's top line, and the panel grows upward from
-// there. It is centred horizontally under the frog and clamped to the work
-// area. The height is capped so the bottom edge can stay on the feet even
-// when the frog is dragged far up; the list inside the panel scrolls
-// instead. If the frog was dragged very near the screen top, the top edge
-// stops at the work area and the panel hangs below the feet again — the
-// price of never letting a task list go off screen.
+// (Desktop-buddy): the bottom edge rests on the frog's feet minus a few
+// pixels of overlap, so the frog reads as sitting on the list, and the panel
+// grows upward from there. It is centred horizontally under the frog and
+// clamped to the work area. The height is capped so the bottom edge can stay
+// on the feet even when the frog is dragged far up; the list inside the
+// panel scrolls instead. If the frog was dragged very near the screen top,
+// the top edge stops at the work area and the panel hangs below the feet
+// again — the price of never letting a task list go off screen.
 //
-// The frog position comes with no overlap into the panel's area, so the
-// panel never covers the frog regardless of how the window manager stacks
-// its always-on-top windows.
+// Being under the frog is guaranteed by the host app re-raising the overlay
+// ('todo-panel-raised', handled in main.js): on X11 the window manager
+// stacks same-level always-on-top windows by map order, so the panel,
+// usually mapped later, would otherwise cover the frog.
 //
 // Without a frog position (standalone run, overlay not yet loaded) the panel
 // anchors in the bottom-right corner, as it always has, and grows upward.
@@ -94,6 +95,8 @@ function createTodoWindow({ onClose } = {}) {
     // existing here. Re-anchoring before showing avoids a flash at stale bounds.
     anchor();
     existing.show();
+    // Re-raised: the host should put the frog overlay back on top.
+    ipcMain.emit('todo-panel-raised');
     return existing;
   }
 
@@ -120,11 +123,12 @@ function createTodoWindow({ onClose } = {}) {
     },
   });
 
-  // 'screen-saver' level keeps the panel above fullscreen apps and the
-  // Desktop-buddy avatar overlay, which also sits at this level. Covering
-  // the frog is not a concern: the follow anchored panel's top edge is
-  // exactly at the frog's feet, so the two windows do not overlap.
-  todoWin.setAlwaysOnTop(true, 'screen-saver');
+  // One level below the avatar overlay ('screen-saver'). The level ordering
+  // is honoured on macOS/Windows; on X11 window managers it may not be, so
+  // the host also re-raises the overlay on every raise below ('todo-panel-
+  // raised'). Keeping the overlay above the panel is what lets the frog sit
+  // ON the list instead of being covered by it.
+  todoWin.setAlwaysOnTop(true, 'floating');
   todoWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   todoWin.setMenuBarVisibility(false);
 
@@ -140,6 +144,9 @@ function createTodoWindow({ onClose } = {}) {
   todoWin.once('ready-to-show', () => {
     anchor();
     todoWin.show();
+    // First raise: the host should put the frog overlay back on top, so the
+    // frog's feet sit on the list's top edge instead of behind the panel.
+    ipcMain.emit('todo-panel-raised');
   });
 
   // Release the timer and the module-scoped reference. Without clearing the
@@ -152,9 +159,14 @@ function createTodoWindow({ onClose } = {}) {
   });
 
   // Some window managers drop always-on-top after the window is mapped or after
-  // focus changes. Re-assert it periodically so the panel stays put.
+  // focus changes. Re-assert it periodically so the panel stays put. Every
+  // raise also tells the host to put the frog overlay back on top, so the
+  // panel can never end up covering the frog.
   topReassertTimer = setInterval(() => {
-    if (todoWin && !todoWin.isDestroyed()) todoWin.setAlwaysOnTop(true, 'screen-saver');
+    if (todoWin && !todoWin.isDestroyed()) {
+      todoWin.setAlwaysOnTop(true, 'floating');
+      ipcMain.emit('todo-panel-raised');
+    }
   }, CONFIG.TOP_REASSERT_MS);
 
   return todoWin;

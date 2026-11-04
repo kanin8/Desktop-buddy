@@ -533,6 +533,17 @@ ipcMain.on('toggle-todolist', () => {
   ipcMain.emit('todolist-state-changed');
 });
 
+// The to-do panel sits under the frog (the frog's feet rest on its top edge).
+// X11 window managers stack same-level always-on-top windows by map order and
+// the panel is usually mapped later, so the panel can end up covering the
+// feet. Re-raise the overlay whenever the panel is raised. moveTop() does not
+// steal keyboard focus, so typing stays in the app the user is in.
+ipcMain.on('todo-panel-raised', () => {
+  if (overlayWin && !overlayWin.isDestroyed() && overlayWin.isVisible()) {
+    overlayWin.moveTop();
+  }
+});
+
 // Pushes the authoritative panel state to Settings so its checkbox reflects
 // reality even when the panel was toggled from the tray menu instead.
 function broadcastTodoState() {
