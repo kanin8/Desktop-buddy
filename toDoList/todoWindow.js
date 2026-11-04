@@ -20,6 +20,10 @@ let todoWin = null;
 let topReassertTimer = null;
 // Height reported by the renderer on the last `todo-resize` message.
 let contentHeight = CONFIG.DEFAULT_HEIGHT;
+// Latest frog feet position reported by the overlay on `avatar-position`, in
+// screen coordinates. Null for standalone runs and before the overlay has
+// reported once, which falls back to the bottom-right anchoring below.
+let frogFeet = null;
 // Called when the panel's close button is used. Set by whichever app is hosting.
 let onCloseRequested = null;
 
@@ -28,20 +32,49 @@ function workArea() {
   return screen.getPrimaryDisplay().workArea;
 }
 
-// Positions the panel in the bottom-right corner; grows upward as content grows.
-// Clamped to the work area so a very long task list cannot push it offscreen.
+// Positions the panel relative to the frog when its position is known
+// (Desktop-buddy): the bottom edge rests on the frog's feet (minus a few
+// pixels of overlap, so the frog reads as sitting on the list) and the panel
+// grows upward from there. It is centred horizontally under the frog and
+// clamped to the work area. The height is capped so the bottom edge can stay
+// on the feet even when the frog is dragged far up; the list inside the
+// panel scrolls instead. If the frog was dragged very near the screen top,
+// the top edge stops at the work area and the panel hangs below the feet
+// again — the price of never letting a task list go off screen.
+//
+// Without a frog position (standalone run, overlay not yet loaded) the panel
+// anchors in the bottom-right corner, as it always has, and grows upward.
 function anchor() {
   if (!todoWin || todoWin.isDestroyed()) return;
   const wa = workArea();
-  const h = Math.max(
+  const height = Math.max(
     CONFIG.MIN_HEIGHT,
     Math.min(contentHeight, wa.height - 2 * CONFIG.SCREEN_MARGIN)
   );
+
+  if (!frogFeet) {
+    todoWin.setBounds({
+      x: wa.x + wa.width - CONFIG.WINDOW_WIDTH - CONFIG.SCREEN_MARGIN,
+      y: wa.y + wa.height - height - CONFIG.SCREEN_MARGIN,
+      width: CONFIG.WINDOW_WIDTH,
+      height,
+    });
+    return;
+  }
+
+  const x = Math.min(
+    Math.max(Math.round(frogFeet.x - CONFIG.WINDOW_WIDTH / 2), wa.x + CONFIG.SCREEN_MARGIN),
+    wa.x + wa.width - CONFIG.WINDOW_WIDTH - CONFIG.SCREEN_MARGIN
+  );
+  const followHeight = Math.min(height, Math.max(
+    CONFIG.MIN_HEIGHT,
+    Math.round(frogFeet.y) - CONFIG.FOLLOW_FEET_OVERLAP - wa.y
+  ));
   todoWin.setBounds({
-    x: wa.x + wa.width - CONFIG.WINDOW_WIDTH - CONFIG.SCREEN_MARGIN,
-    y: wa.y + wa.height - h - CONFIG.SCREEN_MARGIN,
+    x,
+    y: Math.max(wa.y, Math.round(frogFeet.y) - CONFIG.FOLLOW_FEET_OVERLAP - followHeight),
     width: CONFIG.WINDOW_WIDTH,
-    height: h,
+    height: followHeight,
   });
 }
 
@@ -85,7 +118,12 @@ function createTodoWindow({ onClose } = {}) {
 
   // 'screen-saver' level keeps the panel above fullscreen apps and the
   // Desktop-buddy avatar overlay, which also sits at this level.
-  todoWin.setAlwaysOnTop(true, 'screen-saver');
+  // One level below 'screen-saver': the Desktop-buddy avatar overlay sits at
+  // that level, and it must render the frog's feet ON TOP of the panel's
+  // top edge — the frog looks like it is sitting on the list. The trade-off
+  // is that macOS fullscreen apps, which 'screen-saver' wins over, can now
+  // cover the panel. The panel still sits above every normal window.
+  todoWin.setAlwaysOnTop(true, 'floating');
   todoWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   todoWin.setMenuBarVisibility(false);
 
@@ -113,9 +151,11 @@ function createTodoWindow({ onClose } = {}) {
   });
 
   // Some window managers drop always-on-top after the window is mapped or after
-  // focus changes. Re-assert it periodically so the panel stays put.
+  // focus changes. Re-assert it periodically so the panel stays put. It must be
+  // re-asserted at the same 'floating' level the window was created with, one
+  // step below the avatar overlay (see the creation comment above).
   topReassertTimer = setInterval(() => {
-    if (todoWin && !todoWin.isDestroyed()) todoWin.setAlwaysOnTop(true, 'screen-saver');
+    if (todoWin && !todoWin.isDestroyed()) todoWin.setAlwaysOnTop(true, 'floating');
   }, CONFIG.TOP_REASSERT_MS);
 
   return todoWin;
@@ -150,6 +190,18 @@ ipcMain.on('todo-resize', (_event, h) => {
   if (typeof h !== 'number' || !Number.isFinite(h)) return;
   contentHeight = Math.ceil(h);
   anchor();
+});
+
+// Feeds the frog's feet position from the overlay so anchor() can follow the
+// frog. Sent on placement (startup, resize) and on every drag move, throttled
+// in the overlay renderer so this cannot flood IPC.
+ipcMain.on('avatar-position', (_event, feet) => {
+  if (!feet || typeof feet !== 'object') return;
+  if (typeof feet.x !== 'number' || typeof feet.y !== 'number' || !Number.isFinite(feet.x) || !Number.isFinite(feet.y)) return;
+  frogFeet = { x: Math.round(feet.x), y: Math.round(feet.y) };
+  // A hidden panel is re-anchored when it is shown, so only the visible one
+  // needs to move now.
+  if (getTodoWindow()) anchor();
 });
 
 ipcMain.on('todo-close', () => {

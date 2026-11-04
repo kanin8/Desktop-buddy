@@ -156,6 +156,37 @@ function isPointerOverFrog(x, y) {
   return getHitTargets().some((element) => rectsOverlap(x, y, element.getBoundingClientRect()));
 }
 
+// --- FROG POSITION FEED ---
+// The main process anchors the to-do panel under the frog's feet, so the
+// frog's position is forwarded here. The overlay window is frameless and
+// pinned to the top-left of the work area, so client coordinates equal
+// screen ones (same assumption as the cursor channel in main.js).
+//
+// Drag frames are throttled (controls/config.js) so they cannot flood IPC;
+// a drag's final drop and every non-drag placement are sent immediately.
+
+let lastPositionSend = 0;
+
+// The point under the frog's visible feet, in screen coordinates.
+function frogFeetPosition() {
+  const frog = getFrogRect();
+  return {
+    x: Math.round((frog.left + frog.right) / 2),
+    y: Math.round(frog.bottom),
+  };
+}
+
+function sendAvatarPosition(force) {
+  const now = performance.now();
+  if (!force && now - lastPositionSend < window.CONTROLS_CONFIG.frogFollowThrottleMs) return;
+  lastPositionSend = now;
+  window.electronAPI.pushAvatarPosition(frogFeetPosition());
+}
+
+// The overlay's rAF loop runs every frame; the chat fires this from a
+// transition end instead, so it is sent deliberately and forced.
+const sendAvatarPositionNow = () => sendAvatarPosition(true);
+
 // The smallest rectangle around the visible frog.
 function getFrogRect() {
   const rects = getHitTargets().map((element) => element.getBoundingClientRect());
@@ -222,7 +253,8 @@ const controls = createBuddyControls(
 const chatLayout = createChatLayout(
   { avatar, history: chatLog, form: chatForm, pill },
   getFrogRect,
-  isChatOpen
+  isChatOpen,
+  sendAvatarPositionNow
 );
 
 // The buddy's proactive message, in the chat history's spot. See
@@ -662,7 +694,10 @@ window.addEventListener('blur', () => {
 
 // Re-place on resize (e.g. a resolution change) so the frog can't end up off
 // screen; it keeps its saved spot when that still fits.
-window.addEventListener('resize', () => placeAvatar(avatar, placementParts));
+window.addEventListener('resize', () => {
+  placeAvatar(avatar, placementParts);
+  sendAvatarPositionNow();
+});
 
 enableAvatarDrag(avatar, placementParts, (dragging) => {
   isDragging = dragging;
@@ -670,9 +705,10 @@ enableAvatarDrag(avatar, placementParts, (dragging) => {
   if (dragging) chatLayout.forgetRestPosition();
   // Moving the frog away counts as brushing the nudge off.
   if (dragging) nudge.dismiss();
-});
+}, (_position, isFinal) => sendAvatarPosition(isFinal));
 
 // The sprite must have its size before placing, since placement measures it.
 spriteAnimator.play(DEFAULT_IMAGE_ANIMATION);
 placeAvatar(avatar, placementParts);
+sendAvatarPositionNow();
 update();

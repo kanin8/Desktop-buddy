@@ -44,6 +44,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // General purpose (for the mouse-ignore logic)
   setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),
+  // Feeds the frog's feet position to the main process, which anchors the
+  // to-do panel under it. The overlay sends placement and drag events; the
+  // throttle lives in the overlay, not here.
+  pushAvatarPosition: (feet) => ipcRenderer.send('avatar-position', feet),
   // Gives keyboard focus back to the app the user was in.
   releaseFocus: () => ipcRenderer.send('release-focus'),
 

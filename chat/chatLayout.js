@@ -8,7 +8,10 @@
 // - elements: { avatar, history, form, pill }
 // - getFrogRect(): the visible frog's rectangle
 // - isChatOpen(): whether the chat is currently shown
-function createChatLayout(elements, getFrogRect, isChatOpen) {
+// - onAvatarSettled(): optional. Runs when the frog's lift slide ends, so
+//   followers (the to-do panel) can anchor to the frog's rest position while
+//   it is lifted.
+function createChatLayout(elements, getFrogRect, isChatOpen, onAvatarSettled) {
   const { avatar, history, form, pill } = elements;
   const { historyMinHeightPx, revealAfterScrollMs } = window.CHAT_CONFIG;
 
@@ -66,7 +69,10 @@ function createChatLayout(elements, getFrogRect, isChatOpen) {
   // Only the frog box's own slide counts: fades inside it (e.g. the hover
   // indicator) also send transitionend up to it.
   avatar.addEventListener('transitionend', (event) => {
-    if (event.target === avatar && event.propertyName === 'top') stopSliding();
+    if (event.target === avatar && event.propertyName === 'top') {
+      stopSliding();
+      if (onAvatarSettled) onAvatarSettled();
+    }
   });
 
   // Called when the user starts dragging the frog mid-chat: wherever they
