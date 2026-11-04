@@ -35,6 +35,10 @@ const placementParts = [spriteElement, hoverIndicator, pill];
 // The animation shown while the frog is at rest.
 const DEFAULT_IMAGE_ANIMATION = 'idle';
 
+// Chat "speaking" reaction: while the buddy delivers a chat message, play the
+// matching talking loop for roughly as long as the message would take to say.
+const SPEAKING = window.AVATAR_SPRITE_CONFIG.speaking;
+
 // Decode every sheet up front and keep the Image objects alive. The typing
 // loop swaps background images every couple of seconds; an undecoded sheet
 // would show as an empty frame for a moment during that swap.
@@ -48,11 +52,35 @@ const preloadedSpriteSheets = Object.values(window.AVATAR_SPRITE_CONFIG.animatio
 );
 
 // One-shot reaction played on click; hands back to the rest state when it ends.
+// While seated at the desk, the frog glances up instead of doing the standing
+// reaction.
 const CLICK_ANIMATION = 'standingClicked';
+const SEATED_CLICK_ANIMATION = 'deskLookUp';
 
 // The last activity category reported by detection. null until the first
 // update, so an already-running category is not mistaken for a transition.
 let activityCategory = null;
+
+// True once the frog has sat down at the desk (the first productive
+// activity). It stays seated from then on, typing or judging, because there
+// is no stand-up animation. Kept apart from activityCategory because an
+// uncategorized app leaves the frog where it is.
+let isAtDesk = false;
+
+// True while the frog is judging the user for being in leisure. Lets a
+// return to productive work play the short stop pair instead of the full
+// sitting-down intro.
+let isJudging = false;
+
+// True while the frog sits at the desk typing (rather than judging).
+function isTyping() {
+  return isAtDesk && !isJudging;
+}
+
+// True while the seated "chat" pose is holding. Opening the chat at the desk
+// starts a look-over loop that only ends when the chat closes, so this flag
+// tells `closeChat` whether it owes the user a look-down before typing.
+let isChatPoseActive = false;
 
 // Incremented whenever a category sequence starts or is interrupted. Each
 // onComplete captures the value it was started with and bails when it is
@@ -244,8 +272,15 @@ function getFrogRect() {
 // The listener sits on #avatar because #avatar-sprite is pointer-events: none.
 avatar.addEventListener('click', (event) => {
   if (isFromControls(event)) return;
+  // Seated at work: run the look-up / look-over reaction before typing again.
+  // While the chat is open the look-over loop is already holding, so leave it
+  // running instead of interrupting it.
+  if (isTyping()) {
+    if (!isChatOpen()) playSeatedClickReaction();
+    return;
+  }
   ++sequenceToken;
-  spriteAnimator.play(CLICK_ANIMATION, {
+  spriteAnimator.play(isJudging ? SEATED_CLICK_ANIMATION : CLICK_ANIMATION, {
     onComplete: resumeRestAnimation,
   });
 });
@@ -274,8 +309,11 @@ const controls = createBuddyControls(
   {
     onChat: () => {
       nudge.dismiss();
-      if (isChatOpen()) closeChat();
-      else openChat();
+      if (isChatOpen()) {
+        closeChat();
+      } else {
+        openChat();
+      }
     },
     // The pill icon and the menu item switch the panel on and off, like Chat
     // does for its own panel.
@@ -320,9 +358,24 @@ const nudge = createNudge(
     close: nudgeElement.querySelector('.nudge-close'),
   },
   {
-    onReply: (id, text) => {
-      if (id === 'yes') acceptNudge(text);
-      else if (id === 'notNow') nudge.showBackOff();
+    // Every reply is saved to the chat history (nudge text, the clicked label
+    // as the user's line, then the buddy's answer). "Not now" and "I'm fine"
+    // don't open the chat and both start the quiet period (quietAfterNotNowMs).
+    onReply: (id, text, label) => {
+      const { helpLine, notFineLine, fineLine } = window.NUDGE_CONFIG;
+      if (id === 'yes') {
+        acceptNudge(text, label, helpLine);
+      } else if (id === 'notFine') {
+        acceptNudge(text, label, notFineLine);
+      } else if (id === 'notNow') {
+        const backOffLine = nudge.showBackOff();
+        logNudgeExchange(text, label, backOffLine, false);
+        lastNotNowAt = Date.now();
+      } else if (id === 'fine') {
+        nudge.showBriefly(fineLine);
+        logNudgeExchange(text, label, fineLine, false);
+        lastNotNowAt = Date.now();
+      }
     },
     // Not mid-drag: the overlay must keep catching the mouse until the drop.
     onHidden: () => {
@@ -331,26 +384,40 @@ const nudge = createNudge(
   }
 );
 
-// "Yes, help me!": opens the chat with the nudge and a follow-up already in
-// the history, so the user can answer straight away in the input.
+// "Yes, help me!" (or "I'm not"): opens the chat with the exchange already in
+// the history (nudge text, the user's reply, followUp), so the user can
+// answer straight away in the input. Only followUp is spoken: the nudge text
+// was already on screen.
 // The chat opens before the nudge closes, so closing it doesn't hand focus
 // back to the other app (onHidden -> releaseIfIdle).
-function acceptNudge(text) {
+function acceptNudge(text, label, followUp) {
   controls.showPill();
   openChat();
   nudge.dismiss();
-  addChatLine(text, 'buddy');
-  addChatLine(window.NUDGE_CONFIG.helpLine, 'buddy');
+  logNudgeExchange(text, label, followUp, true);
 }
 
-// A nudge from the main process (detection later, --test-nudge for now).
+// Adds a nudge exchange to the chat history: the nudge text (buddy, silent),
+// the clicked button's label (user), then the buddy's answer. speakFollowUp
+// decides whether the answer plays the talking animation; lines saved while
+// the chat is closed stay silent.
+function logNudgeExchange(text, label, followUp, speakFollowUp) {
+  addChatLine(text, 'buddy', { speak: false });
+  addChatLine(label, 'user');
+  addChatLine(followUp, 'buddy', { speak: speakFollowUp });
+}
+
+// A nudge from the main process (--test-nudge) or the judging timer below.
+// message: { text, replies }, both optional; without them the default text
+// and buttons from nudge/config.js are used.
 // The frog plays its cue first so the message doesn't pop up out of nowhere.
-// Skipped while the chat or menu is open: the user is already busy with the
-// buddy. The message waits for the cue's length rather than its onComplete,
-// because clicking the frog mid-cue restarts the animation with its own
-// callback and the message would be lost.
+// Skipped while the chat or menu is open (the user is already busy with the
+// buddy) or while a cooldown is running (canShowNudge). The message waits for
+// the cue's length rather than its onComplete, because clicking the frog
+// mid-cue restarts the animation with its own callback and the message would
+// be lost.
 function showNudge(message) {
-  if (isChatOpen() || controls.isMenuOpen()) return;
+  if (isChatOpen() || controls.isMenuOpen() || !canShowNudge()) return;
   const { cueAnimation, defaultText } = window.NUDGE_CONFIG;
   const text = message.text || defaultText;
   ++sequenceToken;
@@ -358,8 +425,83 @@ function showNudge(message) {
     onComplete: resumeRestAnimation,
   });
   setTimeout(() => {
-    if (!isChatOpen() && !controls.isMenuOpen()) nudge.show(text);
+    if (isChatOpen() || controls.isMenuOpen()) return;
+    nudge.show(text, message.replies);
+    recordNudgeShown();
   }, getAnimationLengthMs(cueAnimation));
+}
+
+// --- NUDGE TIMING ---
+// When the frog starts judging and the user is in leisure, a timer waits
+// judgingDelayMs before the frog says one of the judgingLines. Cooldowns keep
+// it from getting annoying. All values live in nudge/config.js and are read
+// when needed, so they can be tuned from the dev tools while the app runs.
+
+const ONE_HOUR_MS = 60 * 60 * 1000;
+
+let judgingNudgeTimer = null;
+// Index into judgingLines of the last line said, so it isn't repeated next.
+let lastJudgingLineIndex = -1;
+// When each nudge was shown, trimmed to the last hour (for maxPerHour).
+let nudgeShownTimes = [];
+// When "Not now" or "I'm fine" was last pressed; 0 means never.
+let lastNotNowAt = 0;
+
+// Starts the wait before a judging nudge. Does nothing if one is already
+// waiting, so going leisure -> uncategorized -> leisure doesn't restart it.
+function startJudgingNudgeTimer() {
+  if (judgingNudgeTimer) return;
+  judgingNudgeTimer = setTimeout(() => {
+    judgingNudgeTimer = null;
+    showJudgingNudge();
+  }, window.NUDGE_CONFIG.judgingDelayMs);
+}
+
+function cancelJudgingNudgeTimer() {
+  clearTimeout(judgingNudgeTimer);
+  judgingNudgeTimer = null;
+}
+
+// Says a random judging line (with its own buttons, if it has any), but only
+// if the user is still in leisure after the delay.
+function showJudgingNudge() {
+  if (activityCategory !== 'leisure') return;
+  const index = pickJudgingLineIndex();
+  lastJudgingLineIndex = index;
+  const line = window.NUDGE_CONFIG.judgingLines[index];
+  showNudge({ text: line.text, replies: line.replies });
+}
+
+// A random index into judgingLines, never the same as the last one (unless
+// there is only one line).
+function pickJudgingLineIndex() {
+  const count = window.NUDGE_CONFIG.judgingLines.length;
+  if (count <= 1) return 0;
+  let index;
+  do {
+    index = Math.floor(Math.random() * count);
+  } while (index === lastJudgingLineIndex);
+  return index;
+}
+
+// False while any cooldown is running: too soon after the last nudge, the
+// hourly limit is reached, or the user recently said "Not now" / "I'm fine".
+function canShowNudge() {
+  const { cooldownMs, maxPerHour, quietAfterNotNowMs } = window.NUDGE_CONFIG;
+  const now = Date.now();
+  nudgeShownTimes = nudgeShownTimes.filter((time) => now - time < ONE_HOUR_MS);
+  const lastShownAt = nudgeShownTimes[nudgeShownTimes.length - 1] || 0;
+
+  if (now - lastShownAt < cooldownMs) return false;
+  if (nudgeShownTimes.length >= maxPerHour) return false;
+  if (now - lastNotNowAt < quietAfterNotNowMs) return false;
+  return true;
+}
+
+// Counted only once the nudge is actually on screen, so a skipped one doesn't
+// use up the cooldown.
+function recordNudgeShown() {
+  nudgeShownTimes.push(Date.now());
 }
 
 // How long one play of a sprite animation takes (avatar/config.js). An
@@ -371,13 +513,76 @@ function getAnimationLengthMs(name) {
   return frameCount * animation.frameDurationMs;
 }
 
-// --- ACTIVITY-DRIVEN ANIMATIONS ---
-// Productive work gets a seated entrance and a typing loop; leaving it plays
-// a short desk-clearing sequence before returning to idle. The sequence names
-// live in avatar/config.js; this block only decides when to play them.
+// True while the frog is seated at the desk (typing or judging), so a message
+// should use the seated talking sprite instead of the standing one.
+function isSeatedState() {
+  return isAtDesk;
+}
 
-const { productiveIntro, productiveLoop, leaveProductive } =
-  window.AVATAR_SPRITE_CONFIG.activityAnimations;
+// Buddy lines added in the same tick (a nudge plus its follow-up, ...) are
+// combined so one speaking reaction covers all of them.
+let pendingSpeechText = '';
+let speechStartTimer = null;
+
+// Queues a buddy chat message for the talking animation. Empty placeholders
+// (the reply line starts empty while streaming) are ignored.
+function speakMessage(text) {
+  const message = String(text || '').trim();
+  if (!message) return;
+
+  pendingSpeechText = pendingSpeechText ? pendingSpeechText + ' ' + message : message;
+  if (speechStartTimer) return;
+
+  speechStartTimer = setTimeout(() => {
+    speechStartTimer = null;
+    const combined = pendingSpeechText;
+    pendingSpeechText = '';
+    startSpeech(combined);
+  }, 0);
+}
+
+// Plays the talking clip for a length proportional to `message`, then hands
+// back to whichever rest state applies (idle, typing, or judging).
+function startSpeech(message) {
+  const name = isSeatedState() ? SPEAKING.seatedAnimation : SPEAKING.idleAnimation;
+  const durationMs = Math.min(
+    SPEAKING.maxMs,
+    Math.max(SPEAKING.minMs, message.length * SPEAKING.msPerCharacter)
+  );
+  const cycles = Math.max(1, Math.ceil(durationMs / getAnimationLengthMs(name)));
+  const token = ++sequenceToken;
+
+  const step = (remaining) => {
+    if (!isCurrentSequence(token)) return;
+    if (remaining <= 0) {
+      resumeRestAnimation();
+      return;
+    }
+    spriteAnimator.play(name, { onComplete: () => step(remaining - 1) });
+  };
+  step(cycles);
+}
+
+// --- ACTIVITY-DRIVEN ANIMATIONS ---
+// Productive work gets a seated entrance and a typing loop. Switching to
+// leisure plays a judging sequence (look up, start judging, blink, stare a few
+// times) that loops until the user leaves leisure; then the frog stops judging
+// and resumes typing. The sequence names live in avatar/config.js; this block
+// only decides when to play them.
+
+const {
+  productiveIntro,
+  productiveLoop,
+  judgingIntro,
+  judgingBlink,
+  judgingStare,
+  judgingStareRepeats,
+  judgingExit,
+  seatedClickIntro,
+  seatedClickLook,
+  seatedClickLookRepeats,
+  seatedClickExit,
+} = window.AVATAR_SPRITE_CONFIG.activityAnimations;
 
 function isCurrentSequence(token) {
   return token === sequenceToken;
@@ -421,26 +626,149 @@ function startTypingLoop(token, startWithBlink = false) {
 // sheet, so the loop starts with the blink variant to avoid replaying it.
 function playProductiveIntro() {
   const token = ++sequenceToken;
+  isAtDesk = true;
+  isJudging = false;
   playSequence(productiveIntro, token, () => {
     if (!isCurrentSequence(token)) return;
-    startTypingLoop(token, true);
+    resumeProductiveRest(token, true);
   });
 }
 
-// Leaving productive work: look up, close the computer, stand up, then idle.
-function playLeaveProductive() {
+// Seated reaction to a click on the frog (with the chat closed): look up from
+// the keyboard, look over at the user for a while, then look back down and
+// resume typing.
+function playSeatedClickReaction() {
   const token = ++sequenceToken;
-  playSequence(leaveProductive, token, () => {
+  spriteAnimator.play(seatedClickIntro, {
+    onComplete: () => {
+      if (!isCurrentSequence(token)) return;
+      playLookingFix(token, seatedClickLookRepeats);
+    },
+  });
+}
+
+// Replays the look-at-user sheet `remaining` times, then looks back down and
+// returns to the typing loop.
+function playLookingFix(token, remaining) {
+  if (!isCurrentSequence(token)) return;
+  if (remaining <= 0) {
+    spriteAnimator.play(seatedClickExit, {
+      onComplete: () => {
+        if (!isCurrentSequence(token)) return;
+        startTypingLoop(token);
+      },
+    });
+    return;
+  }
+  spriteAnimator.play(seatedClickLook, {
+    onComplete: () => playLookingFix(token, remaining - 1),
+  });
+}
+
+// Opening the chat while seated: look up from the keyboard, then hold the
+// look-over loop until the chat closes.
+function playChatOpenReaction() {
+  const token = ++sequenceToken;
+  isChatPoseActive = true;
+  spriteAnimator.play(seatedClickIntro, {
+    onComplete: () => {
+      if (!isCurrentSequence(token)) return;
+      startSeatedChatLoop(token);
+    },
+  });
+}
+
+// Loops the look-over sheet indefinitely. Used while the chat is open so the
+// frog stays turned toward the user instead of typing behind the panel.
+function startSeatedChatLoop(token) {
+  if (!isCurrentSequence(token)) return;
+  spriteAnimator.play(seatedClickLook, {
+    onComplete: () => startSeatedChatLoop(token),
+  });
+}
+
+// Closing the chat while seated: look back down, then resume the typing loop.
+function playChatCloseReaction() {
+  const token = ++sequenceToken;
+  isChatPoseActive = false;
+  spriteAnimator.play(seatedClickExit, {
+    onComplete: () => {
+      if (!isCurrentSequence(token)) return;
+      startTypingLoop(token);
+    },
+  });
+}
+
+// Picks the productive rest pose: the look-over loop while the chat is open,
+// otherwise the typing loop. Also records that the chat pose is holding so
+// `closeChat` knows to play the look-down.
+function resumeProductiveRest(token, startWithBlink) {
+  if (isChatOpen()) {
+    isChatPoseActive = true;
+    startSeatedChatLoop(token);
+  } else {
+    startTypingLoop(token, startWithBlink);
+  }
+}
+
+// Switching to leisure: look up, start judging, then loop the judge poses
+// (blink once, stare a handful of times) until the user leaves leisure.
+function playJudgingSequence() {
+  const token = ++sequenceToken;
+  isJudging = true;
+
+  playSequence(judgingIntro, token, () => {
+    playJudgingLoop(token);
+  });
+}
+
+// One judge cycle: blink once, then stare `judgingStareRepeats` times. Repeats
+// forever; a return to productive work or an interruption takes the token.
+function playJudgingLoop(token) {
+  if (!isCurrentSequence(token)) return;
+  spriteAnimator.play(judgingBlink, {
+    onComplete: () => {
+      if (!isCurrentSequence(token)) return;
+      playStare(token, judgingStareRepeats);
+    },
+  });
+}
+
+// Replays the no-blink judge sheet `remaining` times, then starts another
+// judge cycle.
+function playStare(token, remaining) {
+  if (!isCurrentSequence(token)) return;
+  if (remaining <= 0) {
+    playJudgingLoop(token);
+    return;
+  }
+  spriteAnimator.play(judgingStare, {
+    onComplete: () => playStare(token, remaining - 1),
+  });
+}
+
+// Leaving leisure mid-judge (to productive or uncategorized): stop judging,
+// drop the glance, then pick the typing loop back up.
+function playLeaveJudging() {
+  const token = ++sequenceToken;
+  isJudging = false;
+  playSequence(judgingExit, token, () => {
     if (!isCurrentSequence(token)) return;
-    spriteAnimator.play(DEFAULT_IMAGE_ANIMATION);
+    resumeProductiveRest(token);
   });
 }
 
 // The pose shown when no one-off reaction is playing. A click or nudge uses
 // this to hand control back to whichever state the category calls for.
 function resumeRestAnimation() {
-  if (activityCategory === 'productive') {
-    startTypingLoop(++sequenceToken);
+  if (isTyping()) {
+    resumeProductiveRest(++sequenceToken);
+    return;
+  }
+  // Judging is itself a rest state: a click or nudge pauses it and hands back
+  // to the judge loop, not to idle.
+  if (isJudging) {
+    playJudgingLoop(++sequenceToken);
     return;
   }
   ++sequenceToken;
@@ -448,18 +776,26 @@ function resumeRestAnimation() {
 }
 
 // Reacts only to actual category changes, so switching apps while still in
-// the same category does not replay the entrance. Entering productive always
-// replays the intro; leaving it plays the desk-clearing sequence.
+// the same category does not replay the entrance.
+// - productive: sits the frog down the first time, or stops a judge.
+// - leisure: starts judging (once the frog is at the desk) and the nudge timer.
+// - uncategorized: detection doesn't know what the user is doing, so the frog
+//   never judges it. A judge stops and the frog goes back to typing. The
+//   nudge timer is left running, so a quick hop leisure -> uncategorized ->
+//   leisure doesn't restart the wait (showJudgingNudge only speaks in leisure).
 function setActivityCategory(next) {
   if (!next || next === activityCategory) return;
-
-  const previous = activityCategory;
   activityCategory = next;
 
   if (next === 'productive') {
-    playProductiveIntro();
-  } else if (previous === 'productive') {
-    playLeaveProductive();
+    cancelJudgingNudgeTimer();
+    if (isJudging) playLeaveJudging();
+    else if (!isAtDesk) playProductiveIntro();
+  } else if (next === 'leisure') {
+    if (isAtDesk && !isJudging) playJudgingSequence();
+    if (isJudging) startJudgingNudgeTimer();
+  } else if (isJudging) {
+    playLeaveJudging();
   }
 }
 
@@ -558,12 +894,18 @@ let activeReply = null;   // element showing the reply being streamed
 let activeReplyText = ''; // raw streamed text, before em dashes are replaced
 let activePending = null; // "..." placeholder shown until the first token
 
-function addChatLine(text, kind) {
+// Adds a line to the chat history. Buddy lines are "spoken" (talking
+// animation) unless options.speak is false, e.g. for lines saved while the
+// chat is closed.
+function addChatLine(text, kind, options = {}) {
+  const { speak = true } = options;
   const el = document.createElement('div');
   el.className = 'chat-entry ' + kind;
   el.textContent = text;
   chatLog.appendChild(el);
   chatLog.scrollTop = chatLog.scrollHeight;
+  // Spoken buddy lines play standing when idle, seated at the desk.
+  if (kind === 'buddy' && speak) speakMessage(text);
   return el;
 }
 
@@ -613,6 +955,25 @@ function showTaskConfirmation(parentText, subtasks) {
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
+// Chat line kinds the AI should remember, and the role each speaks as.
+// Errors and the "..." placeholder are left out: they aren't part of the talk.
+const CHAT_HISTORY_ROLES = { user: 'user', buddy: 'assistant' };
+
+// The conversation so far as [{ role, content }], oldest first, read from the
+// chat log itself. The log already holds everything the user saw: typed
+// messages, replies, nudges and the button the user pressed. So the AI
+// remembers exactly what's on screen, with no second copy to keep in sync.
+// The main process trims it to the configured length.
+function getChatHistory() {
+  const history = [];
+  for (const el of chatLog.querySelectorAll('.chat-entry')) {
+    const kind = Object.keys(CHAT_HISTORY_ROLES).find((name) => el.classList.contains(name));
+    const content = el.textContent.trim();
+    if (kind && content) history.push({ role: CHAT_HISTORY_ROLES[kind], content });
+  }
+  return history;
+}
+
 // The voice guide bans em dashes, but models still slip them in. Replaces each
 // one, and the spaces around it, with ", ".
 function replaceEmDashes(text) {
@@ -644,6 +1005,9 @@ function openChat() {
   // The chat is open, so the overlay must stay interactive even before the
   // pointer moves again.
   window.electronAPI.setIgnoreMouse(false);
+  // Seated at the desk: turn toward the user and keep the look-over loop alive
+  // for as long as the chat is open.
+  if (isTyping()) playChatOpenReaction();
 }
 
 function closeChat() {
@@ -652,6 +1016,15 @@ function closeChat() {
   controls.setChatActive(false);
   chatPanel.style.display = 'none';
   chatInput.value = '';
+  // Seated chats owe a look back down (and a return to typing); chats opened
+  // while standing or judging just close.
+  if (isChatPoseActive) {
+    if (isTyping()) {
+      playChatCloseReaction();
+    } else {
+      isChatPoseActive = false;
+    }
+  }
   releaseIfIdle();
 }
 
@@ -660,6 +1033,8 @@ function submitChat(e) {
   const goal = chatInput.value.trim();
   if (!goal) return;
 
+  // Read before the new line is added: the history is what came before it.
+  const history = getChatHistory();
   addChatLine(goal, 'user');
   chatInput.value = '';
   chatSend.disabled = true;
@@ -667,7 +1042,7 @@ function submitChat(e) {
   // An unconfirmed breakdown is stale from the moment a new message is sent.
   removeQuickReplies();
 
-  window.electronAPI.askAI(goal);
+  window.electronAPI.askAI(goal, history);
 }
 
 window.electronAPI.onAIStream(() => { ensureReplyElement(); });
@@ -682,7 +1057,13 @@ window.electronAPI.onAIStream((token) => {
 
 window.electronAPI.onAIStreamEnd((reply) => {
   // A model can finish without emitting content; show what it did send.
-  if (!activeReply && reply) addChatLine(replaceEmDashes(reply), 'buddy');
+  if (!activeReply && reply) {
+    addChatLine(reply, 'buddy');
+  } else if (activeReply) {
+    // The streamed reply was appended to an existing line, so speak the final
+    // text here (addChatLine only saw the empty placeholder).
+    speakMessage(activeReply.textContent);
+  }
   endExchange();
 });
 

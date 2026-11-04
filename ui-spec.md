@@ -104,9 +104,20 @@ Accessibility checks for every step:
 - Always dark grey, like the buddy (the panel's own light version was removed). It is its own solid window, so it uses `--panel-bg` (no transparency). The window's colour before the page paints (`backgroundColor` in `toDoList/todoWindow.js`) must match `--grey-900`.
 - Contrast on the panel grey: primary text 14.5:1, secondary 8.6:1, placeholder in the field 6.8:1, "Add" 7.2:1, the red delete × on hover 4.3:1 (icon, 3:1 needed).
 
+### 7. Settings
+- Its own solid window (opened from the tray or the More menu), dark grey like the to-do panel: `--panel-bg` with teal accents, every value from the theme file. The window's colour before the page paints (`backgroundColor` in `createSettingsWindow`, `main.js`) must match `--grey-900`.
+- Grouped cards, in order of how often they are used:
+  - **On screen:** "Show the buddy" and "To-do list", each an on/off switch with a one-line hint. The whole row can be clicked.
+  - **AI:** "Enable AI" switch with a small status badge: *Ready* (teal) or *Needs setup* (amber), no badge while off. The fields (provider, endpoint, model, API key) only show while AI is on, with labels above the fields so long URLs fit. A line under them says what is missing, or which model is in use.
+  - **Current activity:** a category badge (Productive teal, Leisure amber, Uncategorized grey) next to the app or website name.
+  - **Quit the buddy:** a secondary button at the bottom. Fully quits the app (frog, to-do panel, tray icon), the same as the tray's Quit.
+- The buddy switch stays in sync when the buddy is shown or hidden from elsewhere (tray, shortcut, snooze): the main process pushes the state to Settings after every change.
+- Window 360×660 (page area, not counting the title bar), so everything fits without scrolling while AI is off; the AI fields scroll.
+- Accessibility: switches are checkboxes with `role="switch"`, so screen readers announce them as switches; teal focus ring; status changes are announced (`aria-live`); animations turn off with reduced motion. Contrast on the panel grey: activity colours about 9–10:1, hints 8.6:1.
+- Files: `settings.html`, `settings.css`, `settings.js`; IPC in `main.js` and `preload.js`.
+
 ### If time
 - First-launch flow: short tutorial + data consent (coordinate with the group member responsible for GDPR/privacy).
-- Settings panel, including full quit.
 - Light mode (should only require a second set of theme values).
 
 ---
@@ -121,6 +132,7 @@ Accessibility checks for every step:
 | 4 | Chat input + fading history | Can send a message and scroll back through earlier ones |
 | 5 | Proactive message + quick replies + sprite change | Message appears after sprite cue, both buttons work, can be dismissed |
 | 6 | To-do styling | Existing component uses theme tokens |
+| 7 | Settings window | Uses theme tokens, switches stay in sync with the tray, Quit works |
 
 One Claude Code session and one commit per step. Screenshot before/after for the logbook.
 

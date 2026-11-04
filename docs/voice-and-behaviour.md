@@ -81,7 +81,7 @@ Fixed text also makes testing easier, because the exact words the user sees are 
 | Level | When | Example lines |
 |---|---|---|
 | 1 Idle check-in | Idle after startup | "Hey, still there? Wanna pick one tiny thing to start with?" |
-| 2 Gentle nudge | No progress for a while | Default: "Hey, how's it going?" / Only for obviously distracting sites (games etc.) after a long time: "Psst, still with me?" |
+| 2 Gentle nudge | No progress for a while | Default: "Hey, how's it going?" / Only for obviously distracting sites (games etc.) after a long time: "Psst, still with me?" **Not the same as the leisure nudge, see below.** |
 | 3 Concrete help | Still stuck | See "Level 3 lines" below |
 | 4 Back off | User declines help | "Cool, carry on, I'm just here vibing." / "Ok ok, zipping it. Shout if you need me." / "Say no more. Pretending I was never here." |
 
@@ -95,11 +95,14 @@ All timings are starting values **[TEST]**. Real numbers depend on what the dete
 | 3 Concrete help | About 15 more minutes with still no progress |
 | 4 Back off | Only when the user says "Not now" or declines |
 
+The ~20 minute level 2 rule is about no visible progress. It is separate from the 3 minute leisure rule in "Leisure nudge (when the frog is judging)" below, which only applies after the user switches from productive work to a leisure app. The two don't share a timer.
+
 Cooldowns, so it doesn't nag:
 - At least 10 minutes between buddy messages unless the user talks to it.
 - At most 3 nudges per hour.
 - If a nudge is ignored, it is not repeated. The buddy waits for the next trigger.
 - The user can set the buddy to quiet for the session.
+- In the prototype these cooldowns are in code for the leisure nudge (see below): 10 minutes between nudges, at most 3 per hour, 45 minutes of quiet after "Not now" or "I'm fine". Values are in `nudge/config.js`.
 
 Resets back to level 1:
 - The user checks off a to-do item
@@ -141,6 +144,45 @@ Reply options (quick-reply buttons for the prototype; free-text replies interpre
 Rules:
 - If the user ignores the opener, the buddy does not repeat it. It drops back to level 2 after the cooldown (see timing above).
 - Once a branch has been used in a session, the buddy picks the other line next time.
+
+### Leisure nudge (when the frog is judging)
+Built in the prototype (see `nudge/config.js` and `overlay.js`). This is its own rule, separate from the ~20 minute level 2 nudge above.
+
+**When:** the user switches from productive work to a leisure app, so the frog starts judging. If the user is still in leisure after **3 minutes**, the buddy says one judging line. Going back to productive work before then cancels it. Uncategorized apps make the frog judge but never trigger the nudge.
+
+**Timing (starting values [TEST], all in `nudge/config.js`):**
+
+| Rule | Value |
+|---|---|
+| Time in leisure before a nudge | 3 minutes |
+| Cooldown between nudges | 10 minutes |
+| Max nudges | 3 per hour |
+| Quiet after "Not now" or "I'm fine" | 45 minutes |
+
+A nudge that can't be shown (cooldown, chat or menu open, user no longer in leisure) is skipped, not repeated. Closing it with × or letting it fade does not start the quiet period.
+
+**Judging lines** (one at random, never the same one twice in a row; in the prototype used word for word):
+- "I'm not judging. Okay, I'm judging a little. Wanna pick one tiny thing?"
+- "Quick break or long break? No pressure, just checking."
+- "I've been sitting here alone for minutes. Could you please get back to work?"
+- "A frog can only stare dramatically for so long. Need a hand getting started?"
+- "Hopping in to check, how's it going?"
+- "This is fine. I'm fine. Are you fine?" (has its own buttons, see below)
+
+Tone: playful and a bit dramatic, never guilt-tripping.
+
+**Buttons and what they do:**
+
+| Button | What happens |
+|---|---|
+| Yes, help me! | Opens the chat. The buddy follows up with "Want me to split this into a few small steps? Just tell me what you're working on." |
+| Not now | One of the 3 level 4 back-off lines (at random), then it fades. Starts the 45 minute quiet period. |
+| I'm fine (only on "This is fine…") | "Great. We're both fine. Totally fine.", then it fades. Starts the 45 minute quiet period, like "Not now". |
+| I'm not (only on "This is fine…") | Opens the chat. The buddy follows up with "Fair. Some days are like that. Want to just pick one really small thing, or talk about what's in the way?" |
+
+**Chat history:** every button reply is saved to the chat history as: the nudge text, the button label as the user's own line, then the buddy's answer.
+- "Yes, help me!" and "I'm not" open the chat with this already in it. The frog only "talks" for the follow-up line, since the nudge text was already on screen.
+- "Not now" and "I'm fine" don't open the chat. The lines are saved silently and are there when the user opens the chat later.
 
 ### Task completed
 - "Let's go, that's another one down!"

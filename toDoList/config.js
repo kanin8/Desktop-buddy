@@ -75,6 +75,12 @@ module.exports = {
   // aiService.js resolves it against __dirname so the launch directory never matters.
   VOICE_GUIDE_PATH: '../docs/voice-prompt.md',
 
+  // Chat memory: how many earlier chat lines (user, buddy, nudges and button
+  // replies) go with each reply request, and how long each may be. More lines
+  // means a longer memory but a bigger, slower and pricier request.
+  AI_CHAT_HISTORY_MESSAGES: 20,
+  AI_CHAT_HISTORY_MAX_CHARS: 2000,
+
   // Input classification (task vs chat)
   AI_CLASSIFY_TEMPERATURE: 0.1,
   AI_CLASSIFY_MAX_TOKENS: 50,

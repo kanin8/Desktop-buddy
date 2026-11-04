@@ -62,8 +62,10 @@ function send(win, channel, payload) {
 /**
  * Runs one exchange: stream an in-character reply into the bubble, then classify
  * the input. If it's a task/goal, break it down and insert subtasks.
+ * `history` is the chat before `text` as [{ role, content }]; only the reply
+ * uses it (ai.js cleans and trims it).
  */
-async function askAndBreakdown(win, text) {
+async function askAndBreakdown(win, text, history) {
   const config = getSettings();
   const goal = String(text || '').trim();
   if (!goal) return;
@@ -82,7 +84,7 @@ async function askAndBreakdown(win, text) {
   try {
     // Only the visible reply gets the voice guide: the classify and breakdown
     // calls need strict JSON, and the guide would add ~4k tokens to each.
-    const reply = await ai.streamReply(Object.assign({ text: goal, voiceGuide: voiceGuide, onToken: t => send(win, 'ai-stream', t) }, base));
+    const reply = await ai.streamReply(Object.assign({ text: goal, voiceGuide: voiceGuide, history: history, onToken: t => send(win, 'ai-stream', t) }, base));
     send(win, 'ai-stream-end', reply || '');
   } catch (e) {
     send(win, 'ai-error', friendlyError(e));
@@ -201,7 +203,7 @@ async function classifyActivity(info) {
 function registerAiIpc() {
   voiceGuide = loadVoiceGuide();
 
-  ipcMain.handle('ai-ask', (event, text) => askAndBreakdown(overlayOf(event), text));
+  ipcMain.handle('ai-ask', (event, text, history) => askAndBreakdown(overlayOf(event), text, history));
 
   // Confirmation of a shown breakdown: "Add them" goes here, "Not now" just
   // drops the pending entry so nothing is ever added without a yes.

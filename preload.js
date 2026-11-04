@@ -4,6 +4,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Settings Window API
   toggleRunning: () => ipcRenderer.send('toggle-avatar'),
   getAvatarState: () => ipcRenderer.invoke('get-avatar-state'),
+  // The buddy can also be shown or hidden from the tray, the shortcut or a
+  // snooze, so the main process pushes the real state after every change.
+  onAvatarStateChanged: (callback) => ipcRenderer.on('avatar-state-changed', (event, state) => callback(state)),
+  quitApp: () => ipcRenderer.send('quit-app'),
 
   // To-Do List panel API
   toggleTodoList: () => ipcRenderer.send('toggle-todolist'),
@@ -18,7 +22,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // AI task breakdown. The overlay never holds an API key: it asks the main
   // process to run the request and receives the reply as stream events.
-  askAI: (text) => ipcRenderer.invoke('ai-ask', text),
+  // history is the chat so far as [{ role, content }], so the buddy remembers it.
+  askAI: (text, history) => ipcRenderer.invoke('ai-ask', text, history),
   cancelAI: () => ipcRenderer.invoke('ai-cancel'),
   onAIStream: (callback) => ipcRenderer.on('ai-stream', (event, token) => callback(token)),
   onAIStreamEnd: (callback) => ipcRenderer.on('ai-stream-end', (event, reply) => callback(reply)),

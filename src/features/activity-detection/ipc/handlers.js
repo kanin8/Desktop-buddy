@@ -1,6 +1,7 @@
 const { ipcMain, BrowserWindow } = require('electron');
 const { createDetector } = require('../detector/index.js');
 const { ActivityClassifier } = require('../classifier/index.js');
+const CONFIG = require('../../../../config');
 
 class ActivityIPCHandlers {
   // `aiClassify(info)` resolves a category for windows the rule list does not
@@ -12,6 +13,15 @@ class ActivityIPCHandlers {
     this.classifier = new ActivityClassifier();
     this.currentActivity = null;
     this.pollingInterval = null;
+
+    // True while a poll is running. A slow AI call can outlast the poll
+    // interval, and polls shouldn't pile up behind it.
+    this.isPolling = false;
+
+    // Earlier AI answers, keyed by aiCacheKey(). Polling every few seconds
+    // would otherwise ask the AI about the same window on every poll.
+    // Values: { category, retryAt }, where retryAt is null for a real answer.
+    this.aiCategoryCache = new Map();
 
     // Procrastination tracking
     this.leisureStartTime = null;
@@ -34,11 +44,17 @@ class ActivityIPCHandlers {
   }
 
   startPolling() {
-    // Changed loop time to 1 minute (60,000ms)
-    console.log('[Activity] Starting polling loop (every 60 seconds)...');
+    const intervalMs = CONFIG.ACTIVITY_POLL_MS;
+    console.log(`[Activity] Starting polling loop (every ${intervalMs / 1000} seconds)...`);
     this.pollingInterval = setInterval(async () => {
-      await this.updateLoop();
-    }, 60000);
+      if (this.isPolling) return;
+      this.isPolling = true;
+      try {
+        await this.updateLoop();
+      } finally {
+        this.isPolling = false;
+      }
+    }, intervalMs);
   }
 
   async updateLoop() {
@@ -47,7 +63,7 @@ class ActivityIPCHandlers {
       let category = this.classifier.classify(info);
 
       if (category === 'uncategorized') {
-        category = await this.aiClassify(info);
+        category = await this.classifyWithAI(info);
       }
 
       // For a browser on a known site, the site is the activity
@@ -72,6 +88,24 @@ class ActivityIPCHandlers {
     } catch (e) {
       console.error('[Activity] CRITICAL ERROR in updateLoop:', e);
     }
+  }
+
+  // Asks the AI about a window the rules don't know, reusing an earlier answer
+  // for the same app and site. A real answer is kept for the session; an
+  // 'uncategorized' one (AI off or the request failed) is retried after
+  // CONFIG.AI_ACTIVITY_RETRY_MS. Overrides and rules are checked before this,
+  // so a cached answer never hides a user's override.
+  async classifyWithAI(info) {
+    const key = aiCacheKey(info);
+    const cached = this.aiCategoryCache.get(key);
+    if (cached && (cached.retryAt === null || Date.now() < cached.retryAt)) {
+      return cached.category;
+    }
+
+    const category = await this.aiClassify(info);
+    const retryAt = category === 'uncategorized' ? Date.now() + CONFIG.AI_ACTIVITY_RETRY_MS : null;
+    this.aiCategoryCache.set(key, { category, retryAt });
+    return category;
   }
 
   trackProcrastination(event) {
@@ -111,6 +145,13 @@ class ActivityIPCHandlers {
       win.webContents.send('activity:status-update', event);
     });
   }
+}
+
+// Identifies a window for the AI cache. For a browser the site is what
+// matters; for other apps the app itself is the activity, so the window
+// title (a file name, a chat) is left out to avoid re-asking for every file.
+function aiCacheKey(info) {
+  return info.appName + '|' + (info.url || info.domain || info.site || '');
 }
 
 module.exports = { ActivityIPCHandlers };

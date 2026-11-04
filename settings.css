@@ -1,0 +1,342 @@
+/* Styles for the settings window (settings.html). Every value comes from the
+   shared theme in styles/tokens.css, so the window matches the buddy. */
+
+/* ============================
+   1. Variables
+   ============================
+   None of its own: all tokens live in styles/tokens.css. */
+
+/* ============================
+   2. Reset / base styles
+   ============================ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Tells Chromium to draw native parts (dropdown lists, scrollbars, model
+   suggestions) dark too, so they don't flash white on the grey window. */
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  overflow-y: auto;
+  font-family: var(--font);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height);
+  color: var(--text-primary);
+  background: var(--panel-bg);
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  user-select: none;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+/* Typed values (endpoint, model) stay selectable so they can be copied. */
+input {
+  user-select: text;
+}
+
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--space-half);
+}
+
+/* ============================
+   3. Layout containers
+   ============================ */
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* ============================
+   4. Components — page title
+   ============================ */
+.settings-title {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+}
+
+/* ============================
+   4. Components — group heading
+   ============================
+   Small and quiet: it names a group, the settings inside are the focus. */
+.group-heading {
+  padding: 0 var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* ============================
+   4. Components — card
+   ============================ */
+.card {
+  padding: var(--space-1) var(--space-3);
+  border: var(--border-width) solid var(--surface-border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+}
+
+/* ============================
+   4. Components — setting row
+   ============================
+   Label and hint on the left, switch on the right. The whole row is a
+   <label>, so clicking anywhere on it flips the switch. */
+.setting-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  cursor: pointer;
+}
+
+.setting-row + .setting-row {
+  border-top: var(--border-width) solid var(--divider);
+}
+
+.setting-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-half);
+  min-width: 0;
+}
+
+.setting-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+}
+
+.setting-hint {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+/* ============================
+   4. Components — switch
+   ============================
+   A checkbox with role="switch", drawn as a track with a sliding knob. */
+.switch {
+  position: relative;
+  flex: none;
+  width: var(--switch-width);
+  height: var(--switch-height);
+  margin: 0;
+  border-radius: var(--radius-pill);
+  background: var(--switch-track-off);
+  appearance: none;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+/* The knob, centred vertically in the track. */
+.switch::before {
+  content: "";
+  position: absolute;
+  top: calc((var(--switch-height) - var(--switch-knob-size)) / 2);
+  left: calc((var(--switch-height) - var(--switch-knob-size)) / 2);
+  width: var(--switch-knob-size);
+  height: var(--switch-knob-size);
+  border-radius: var(--radius-pill);
+  background: var(--text-secondary);
+  transition: transform var(--transition-fast), background var(--transition-fast);
+}
+
+/* ============================
+   4. Components — badge
+   ============================
+   A small tag: AI status and the activity category. Each colour variant
+   (see States) only sets --badge-color. */
+.badge {
+  --badge-color: var(--text-secondary);
+  padding: 0 var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--badge-color);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--badge-color) var(--badge-tint), transparent);
+}
+
+.badge:empty {
+  display: none;
+}
+
+/* ============================
+   4. Components — AI fields
+   ============================
+   Label above each field, so long values (endpoint URLs) get the full width. */
+.ai-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: var(--border-width) solid var(--divider);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.field-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.field-input {
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-width) solid var(--divider);
+  border-radius: var(--radius-sm);
+  background: var(--field-bg);
+  transition: border-color var(--transition-fast);
+}
+
+.field-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.field-input:hover {
+  border-color: var(--scrollbar-thumb);
+}
+
+/* The dropdown list is drawn by Chromium; give its options the panel grey. */
+.field-input option {
+  background: var(--panel-bg);
+}
+
+.ai-status {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.ai-status:empty {
+  display: none;
+}
+
+/* ============================
+   4. Components — current activity
+   ============================ */
+.activity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+}
+
+/* The app or website name, next to the category badge. */
+.activity-app {
+  min-width: 0;
+  color: var(--text-primary);
+}
+
+.activity .badge {
+  flex: none;
+}
+
+/* ============================
+   4. Components — footer and quit button
+   ============================ */
+.settings-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+}
+
+.button-secondary {
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
+  font-weight: 600;
+  color: var(--button-secondary-text);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--button-secondary-bg);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.button-secondary:hover {
+  background: var(--button-secondary-hover-bg);
+}
+
+/* ============================
+   5. Animations / transitions
+   ============================
+   Set on each component above (all use --transition-fast). Turned off for
+   people who ask their system for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before {
+    transition: none;
+  }
+}
+
+/* ============================
+   6. States
+   ============================ */
+
+/* Switch on: teal track, dark knob slid to the right. */
+.switch:checked {
+  background: var(--accent);
+}
+
+.switch:checked::before {
+  background: var(--accent-text);
+  transform: translateX(calc(var(--switch-width) - var(--switch-height)));
+}
+
+/* `display: flex` above would otherwise override the hidden attribute
+   (used to hide fields a provider does not need: the key for Ollama, the
+   endpoint for Claude, and every field while AI is off). */
+.field[hidden],
+.ai-fields[hidden] {
+  display: none;
+}
+
+/* Badge colours. */
+.badge.is-ready,
+.badge.is-productive {
+  --badge-color: var(--category-productive);
+}
+
+.badge.is-leisure,
+.badge.is-needs-setup {
+  --badge-color: var(--category-leisure);
+}
+
+.badge.is-uncategorized {
+  --badge-color: var(--category-uncategorized);
+}
