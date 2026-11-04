@@ -828,6 +828,25 @@ function removeChatLine(el) {
   if (el && el.parentNode) el.parentNode.removeChild(el);
 }
 
+// Chat line kinds the AI should remember, and the role each speaks as.
+// Errors and the "..." placeholder are left out: they aren't part of the talk.
+const CHAT_HISTORY_ROLES = { user: 'user', buddy: 'assistant' };
+
+// The conversation so far as [{ role, content }], oldest first, read from the
+// chat log itself. The log already holds everything the user saw: typed
+// messages, replies, nudges and the button the user pressed. So the AI
+// remembers exactly what's on screen, with no second copy to keep in sync.
+// The main process trims it to the configured length.
+function getChatHistory() {
+  const history = [];
+  for (const el of chatLog.querySelectorAll('.chat-entry')) {
+    const kind = Object.keys(CHAT_HISTORY_ROLES).find((name) => el.classList.contains(name));
+    const content = el.textContent.trim();
+    if (kind && content) history.push({ role: CHAT_HISTORY_ROLES[kind], content });
+  }
+  return history;
+}
+
 // The voice guide bans em dashes, but models still slip them in. Replaces each
 // one, and the spaces around it, with ", ".
 function replaceEmDashes(text) {
@@ -887,12 +906,14 @@ function submitChat(e) {
   const goal = chatInput.value.trim();
   if (!goal) return;
 
+  // Read before the new line is added: the history is what came before it.
+  const history = getChatHistory();
   addChatLine(goal, 'user');
   chatInput.value = '';
   chatSend.disabled = true;
   activePending = addChatLine('...', 'pending');
 
-  window.electronAPI.askAI(goal);
+  window.electronAPI.askAI(goal, history);
 }
 
 window.electronAPI.onAIStream(() => { ensureReplyElement(); });
