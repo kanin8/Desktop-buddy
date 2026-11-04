@@ -167,12 +167,15 @@ function isPointerOverFrog(x, y) {
 
 let lastPositionSend = 0;
 
-// The point under the frog's visible feet, in screen coordinates.
+// The point under the frog's visible feet, in screen coordinates. Measured
+// from the frog's box, whose centre is known to hold the feet exactly one
+// --avatar-feet-offset below it (see tokens.css). The hover indicator is not
+// counted: it sits below the feet and must not push the to-do panel down.
 function frogFeetPosition() {
-  const frog = getFrogRect();
+  const box = avatar.getBoundingClientRect();
   return {
-    x: Math.round((frog.left + frog.right) / 2),
-    y: Math.round(frog.bottom),
+    x: Math.round(box.left + box.width / 2),
+    y: Math.round(box.top + box.height / 2 + readLengthToken('--avatar-feet-offset')),
   };
 }
 

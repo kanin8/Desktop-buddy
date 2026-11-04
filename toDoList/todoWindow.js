@@ -33,14 +33,18 @@ function workArea() {
 }
 
 // Positions the panel relative to the frog when its position is known
-// (Desktop-buddy): the bottom edge rests on the frog's feet (minus a few
-// pixels of overlap, so the frog reads as sitting on the list) and the panel
-// grows upward from there. It is centred horizontally under the frog and
-// clamped to the work area. The height is capped so the bottom edge can stay
-// on the feet even when the frog is dragged far up; the list inside the
-// panel scrolls instead. If the frog was dragged very near the screen top,
-// the top edge stops at the work area and the panel hangs below the feet
-// again — the price of never letting a task list go off screen.
+// (Desktop-buddy): the bottom edge rests exactly on the frog's feet, so the
+// frog sits right on the panel's top line, and the panel grows upward from
+// there. It is centred horizontally under the frog and clamped to the work
+// area. The height is capped so the bottom edge can stay on the feet even
+// when the frog is dragged far up; the list inside the panel scrolls
+// instead. If the frog was dragged very near the screen top, the top edge
+// stops at the work area and the panel hangs below the feet again — the
+// price of never letting a task list go off screen.
+//
+// The frog position comes with no overlap into the panel's area, so the
+// panel never covers the frog regardless of how the window manager stacks
+// its always-on-top windows.
 //
 // Without a frog position (standalone run, overlay not yet loaded) the panel
 // anchors in the bottom-right corner, as it always has, and grows upward.
@@ -117,13 +121,10 @@ function createTodoWindow({ onClose } = {}) {
   });
 
   // 'screen-saver' level keeps the panel above fullscreen apps and the
-  // Desktop-buddy avatar overlay, which also sits at this level.
-  // One level below 'screen-saver': the Desktop-buddy avatar overlay sits at
-  // that level, and it must render the frog's feet ON TOP of the panel's
-  // top edge — the frog looks like it is sitting on the list. The trade-off
-  // is that macOS fullscreen apps, which 'screen-saver' wins over, can now
-  // cover the panel. The panel still sits above every normal window.
-  todoWin.setAlwaysOnTop(true, 'floating');
+  // Desktop-buddy avatar overlay, which also sits at this level. Covering
+  // the frog is not a concern: the follow anchored panel's top edge is
+  // exactly at the frog's feet, so the two windows do not overlap.
+  todoWin.setAlwaysOnTop(true, 'screen-saver');
   todoWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   todoWin.setMenuBarVisibility(false);
 
@@ -151,11 +152,9 @@ function createTodoWindow({ onClose } = {}) {
   });
 
   // Some window managers drop always-on-top after the window is mapped or after
-  // focus changes. Re-assert it periodically so the panel stays put. It must be
-  // re-asserted at the same 'floating' level the window was created with, one
-  // step below the avatar overlay (see the creation comment above).
+  // focus changes. Re-assert it periodically so the panel stays put.
   topReassertTimer = setInterval(() => {
-    if (todoWin && !todoWin.isDestroyed()) todoWin.setAlwaysOnTop(true, 'floating');
+    if (todoWin && !todoWin.isDestroyed()) todoWin.setAlwaysOnTop(true, 'screen-saver');
   }, CONFIG.TOP_REASSERT_MS);
 
   return todoWin;
