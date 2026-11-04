@@ -33,19 +33,19 @@ function workArea() {
 }
 
 // Positions the panel relative to the frog when its position is known
-// (Desktop-buddy): the bottom edge rests on the frog's feet minus a few
-// pixels of overlap, so the frog reads as sitting on the list, and the panel
-// grows upward from there. It is centred horizontally under the frog and
-// clamped to the work area. The height is capped so the bottom edge can stay
-// on the feet even when the frog is dragged far up; the list inside the
-// panel scrolls instead. If the frog was dragged very near the screen top,
-// the top edge stops at the work area and the panel hangs below the feet
-// again — the price of never letting a task list go off screen.
+// (Desktop-buddy): the bottom edge rests on the frog's feet, so the frog
+// stands entirely ABOVE the list, and the panel grows upward from there. It
+// is centred horizontally under the frog and clamped to the work area. The
+// height is capped so the bottom edge can stay on the feet even when the
+// frog is dragged far up; the list inside the panel scrolls instead. If the
+// frog was dragged very near the screen top, the top edge stops at the work
+// area and the panel hangs below the feet again — the price of never
+// letting a task list go off screen.
 //
-// Being under the frog is guaranteed by the host app re-raising the overlay
-// ('todo-panel-raised', handled in main.js): on X11 the window manager
-// stacks same-level always-on-top windows by map order, so the panel,
-// usually mapped later, would otherwise cover the frog.
+// The frog stays on top of the panel no matter what: the host app re-raises
+// the avatar overlay on every panel raise ('todo-panel-raised', handled in
+// main.js), because X11 window managers stack same-level always-on-top
+// windows by map order and the panel is usually mapped later.
 //
 // Without a frog position (standalone run, overlay not yet loaded) the panel
 // anchors in the bottom-right corner, as it always has, and grows upward.

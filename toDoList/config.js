@@ -8,11 +8,12 @@ module.exports = {
   DEFAULT_HEIGHT: 120,    // height on first paint, before the renderer reports its own
   MIN_HEIGHT: 60,         // floor so the header row is never clipped
   SCREEN_MARGIN: 16,      // gap between the panel and the screen edges
-  // How deep the frog's feet sink into the panel's top edge, so the list
-  // reads as something the frog is sitting on. The avatar overlay is kept
-  // above the panel (see 'todo-panel-raised' in the host app), so the feet
-  // are never covered by the list.
-  FOLLOW_FEET_OVERLAP: 8,
+  // 0 keeps the frog entirely above the list: the panel's top edge starts at
+  // the frog's feet line, so no part of the frog sits inside the panel (the
+  // avatar overlay is also kept above the panel via 'todo-panel-raised' in
+  // the host app, so the feet and their hover indicator are never covered).
+  // Raise the value to sink the feet into the panel instead.
+  FOLLOW_FEET_OVERLAP: 0,
 
   // Stacking
   TOP_REASSERT_MS: 5000,  // how often to re-assert always-on-top (see todoWindow.js)
