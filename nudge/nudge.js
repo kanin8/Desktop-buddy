@@ -5,7 +5,8 @@
 
 // Sets up the nudge and returns the functions the overlay uses.
 // - elements: { nudge, text, replies, close }
-// - actions: { onReply(id, text), onHidden }
+// - actions: { onReply(id, text, label), onHidden }
+//   onReply gets the reply's id, the nudge text and the button's label.
 //   onHidden runs every time the nudge hides, however it was closed.
 function createNudge(elements, actions) {
   const { nudge, text, replies, close } = elements;
@@ -46,10 +47,13 @@ function createNudge(elements, actions) {
     restartHideTimer(config().backOffVisibleMs);
   }
 
-  // "Not now": a random back-off line, no buttons, then it fades.
+  // "Not now": a random back-off line, no buttons, then it fades. Returns the
+  // line, so the overlay can add the same one to the chat history.
   function showBackOff() {
     const lines = config().backOffLines;
-    showBriefly(lines[Math.floor(Math.random() * lines.length)]);
+    const line = lines[Math.floor(Math.random() * lines.length)];
+    showBriefly(line);
+    return line;
   }
 
   function dismiss() {
@@ -83,7 +87,7 @@ function createNudge(elements, actions) {
     button.type = 'button';
     button.className = 'nudge-reply is-' + reply.style;
     button.textContent = reply.label;
-    button.addEventListener('click', () => actions.onReply(reply.id, text.textContent));
+    button.addEventListener('click', () => actions.onReply(reply.id, text.textContent, reply.label));
     return button;
   }
 

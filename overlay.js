@@ -262,18 +262,23 @@ const nudge = createNudge(
     close: nudgeElement.querySelector('.nudge-close'),
   },
   {
-    // "Not now" and "I'm fine" both start the quiet period (quietAfterNotNowMs).
-    onReply: (id, text) => {
+    // Every reply is saved to the chat history (nudge text, the clicked label
+    // as the user's line, then the buddy's answer). "Not now" and "I'm fine"
+    // don't open the chat and both start the quiet period (quietAfterNotNowMs).
+    onReply: (id, text, label) => {
+      const { helpLine, notFineLine, fineLine } = window.NUDGE_CONFIG;
       if (id === 'yes') {
-        acceptNudge(text);
+        acceptNudge(text, label, helpLine);
+      } else if (id === 'notFine') {
+        acceptNudge(text, label, notFineLine);
       } else if (id === 'notNow') {
-        nudge.showBackOff();
+        const backOffLine = nudge.showBackOff();
+        logNudgeExchange(text, label, backOffLine, false);
         lastNotNowAt = Date.now();
       } else if (id === 'fine') {
-        nudge.showBriefly(window.NUDGE_CONFIG.fineLine);
+        nudge.showBriefly(fineLine);
+        logNudgeExchange(text, label, fineLine, false);
         lastNotNowAt = Date.now();
-      } else if (id === 'notFine') {
-        acceptNudge(text, window.NUDGE_CONFIG.notFineLine);
       }
     },
     // Not mid-drag: the overlay must keep catching the mouse until the drop.
@@ -283,17 +288,27 @@ const nudge = createNudge(
   }
 );
 
-// "Yes, help me!" (or "I'm not"): opens the chat with the nudge and a
-// follow-up already in the history, so the user can answer straight away in
-// the input. followUp defaults to helpLine.
+// "Yes, help me!" (or "I'm not"): opens the chat with the exchange already in
+// the history (nudge text, the user's reply, followUp), so the user can
+// answer straight away in the input. Only followUp is spoken: the nudge text
+// was already on screen.
 // The chat opens before the nudge closes, so closing it doesn't hand focus
 // back to the other app (onHidden -> releaseIfIdle).
-function acceptNudge(text, followUp = window.NUDGE_CONFIG.helpLine) {
+function acceptNudge(text, label, followUp) {
   controls.showPill();
   openChat();
   nudge.dismiss();
-  addChatLine(text, 'buddy');
-  addChatLine(followUp, 'buddy');
+  logNudgeExchange(text, label, followUp, true);
+}
+
+// Adds a nudge exchange to the chat history: the nudge text (buddy, silent),
+// the clicked button's label (user), then the buddy's answer. speakFollowUp
+// decides whether the answer plays the talking animation; lines saved while
+// the chat is closed stay silent.
+function logNudgeExchange(text, label, followUp, speakFollowUp) {
+  addChatLine(text, 'buddy', { speak: false });
+  addChatLine(label, 'user');
+  addChatLine(followUp, 'buddy', { speak: speakFollowUp });
 }
 
 // A nudge from the main process (--test-nudge) or the judging timer below.
@@ -779,14 +794,18 @@ let activeReply = null;   // element showing the reply being streamed
 let activeReplyText = ''; // raw streamed text, before em dashes are replaced
 let activePending = null; // "..." placeholder shown until the first token
 
-function addChatLine(text, kind) {
+// Adds a line to the chat history. Buddy lines are "spoken" (talking
+// animation) unless options.speak is false, e.g. for lines saved while the
+// chat is closed.
+function addChatLine(text, kind, options = {}) {
+  const { speak = true } = options;
   const el = document.createElement('div');
   el.className = 'chat-entry ' + kind;
   el.textContent = text;
   chatLog.appendChild(el);
   chatLog.scrollTop = chatLog.scrollHeight;
-  // Every buddy line is "spoken": standing when idle, seated at the desk.
-  if (kind === 'buddy') speakMessage(text);
+  // Spoken buddy lines play standing when idle, seated at the desk.
+  if (kind === 'buddy' && speak) speakMessage(text);
   return el;
 }
 
