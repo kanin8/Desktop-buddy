@@ -21,11 +21,26 @@ let topReassertTimer = null;
 // Height reported by the renderer on the last `todo-resize` message.
 let contentHeight = CONFIG.DEFAULT_HEIGHT;
 // Latest frog feet position reported by the overlay on `avatar-position`, in
-// screen coordinates. Null for standalone runs and before the overlay has
-// reported once, which falls back to the bottom-right anchoring below.
+// screen coordinates. `clearance` is the height of the hover pill's slot
+// under the feet, which the pill (unlike the feet) always hangs into; it is
+// measured in the overlay (see controls.css) and kept with every position.
+// Null for standalone runs and before the overlay has reported once, which
+// falls back to the bottom-right anchoring below.
 let frogFeet = null;
+// Baseline for the rigid ride during a drag: the frog's feet and the panel's
+// bounds as they stood on the first dragging position. Only set while a drag
+// is in flight and the panel is visible; cleared on the drop, when anchor()
+// takes over and re-clamps everything as usual.
+let dragFrom = null;
 // Called when the panel's close button is used. Set by whichever app is hosting.
 let onCloseRequested = null;
+// Called after the panel's placement or visibility changes, with
+// { visible, x, y, width, height }. The host mirrors this to the overlay
+// renderer, which lifts the chat above the panel's top edge. Standalone runs
+// leave the hook unset and never emit.
+let onPanelPlaced = null;
+// Last emitted placement, as JSON, so equal bounds are not broadcast twice.
+let lastPlacement = '';
 
 // Excludes the taskbar/dock so the panel never anchors under it.
 function workArea() {
@@ -33,14 +48,21 @@ function workArea() {
 }
 
 // Positions the panel relative to the frog when its position is known
-// (Desktop-buddy): the TOP edge rests at the frog's feet (optionally a few
-// pixels above them, so the feet sink into the list), and the panel grows
-// DOWNWARD from there, so the frog stands fully above the list. It is
-// centred horizontally under the frog and clamped to the work area. The
-// height is capped so the bottom edge stays inside the work area; a longer
-// list scrolls inside the panel instead. If the frog was dragged very near
-// the screen bottom, the whole panel is pushed up a little so it still fits
-// — the price of never letting a task list go off screen.
+// (Desktop-buddy): the TOP edge rests on the bottom of the hover pill's slot
+// under the frog's feet (see the `clearance` on frogFeet), and the panel
+// grows DOWNWARD from there. The pill-menu therefore always sits above the
+// list, and the frog — whose feet hold the slot's top edge — floats just
+// above the list while it is open. The panel is centred horizontally under
+// the frog and clamped to the work area.
+//
+// The panel is ALWAYS its full content height in this mode, so the entire
+// expanded list is visible on screen: when there is not enough room below
+// the pill's slot (the frog near the screen bottom), the panel is pushed up
+// and bottom-aligned inside the work area instead of being clipped. The
+// overlay's lift (chat/chatLayout.js) then slides the frog — the pill riding
+// with it — up to rest on the list's top edge, so the pill-menu reads as
+// standing on the list wherever it is. A list taller than the work area
+// scrolls inside the panel, as ever.
 //
 // The frog stays on top of the panel no matter what: the host app re-raises
 // the avatar overlay on every panel raise ('todo-panel-raised', handled in
@@ -64,6 +86,7 @@ function anchor() {
       width: CONFIG.WINDOW_WIDTH,
       height: wantedHeight,
     });
+    notifyPlacement();
     return;
   }
 
@@ -71,18 +94,46 @@ function anchor() {
     Math.max(Math.round(frogFeet.x - CONFIG.WINDOW_WIDTH / 2), wa.x + CONFIG.SCREEN_MARGIN),
     wa.x + wa.width - CONFIG.WINDOW_WIDTH - CONFIG.SCREEN_MARGIN
   );
-  const top = Math.round(frogFeet.y) - CONFIG.FOLLOW_FEET_OVERLAP;
-  // Never let the panel's bottom edge leave the work area.
-  const height = Math.max(
-    CONFIG.MIN_HEIGHT,
-    Math.min(wantedHeight, wa.y + wa.height - CONFIG.SCREEN_MARGIN - top)
-  );
+  // The top edge rests where the pill's slot under the feet ends: the pill
+  // is what stands on the list, so the pill-menu is always above it and the
+  // frog appears lifted above the list by the slot whenever the list is open.
+  const top = Math.round(frogFeet.y + frogFeet.clearance) - CONFIG.FOLLOW_FEET_OVERLAP;
+  // The panel always shows its full height (the whole expanded list stays
+  // visible on screen). When the feet sit too low for that, the top edge
+  // gives way so the panel stays whole and inside the work area — the
+  // overlay's lift closes the resulting pin-gap between pill and list.
   todoWin.setBounds({
     x,
-    y: Math.min(top, wa.y + wa.height - CONFIG.SCREEN_MARGIN - height),
+    y: Math.max(wa.y + CONFIG.SCREEN_MARGIN, Math.min(top, wa.y + wa.height - CONFIG.SCREEN_MARGIN - wantedHeight)),
     width: CONFIG.WINDOW_WIDTH,
-    height,
+    height: wantedHeight,
   });
+  notifyPlacement();
+}
+
+// Announces the panel's current bounds — or its absence — to the host hook,
+// skipping repeats so dragging cannot flood the renderer.
+function notifyPlacement() {
+  if (!onPanelPlaced) return;
+  let info;
+  if (!todoWin || todoWin.isDestroyed() || !isTodoWindowVisible()) info = { visible: false };
+  else {
+    const bounds = todoWin.getBounds();
+    info = {
+      visible: true,
+      x: bounds.x, y: bounds.y,
+      width: bounds.width, height: bounds.height,
+    };
+  }
+  const signature = JSON.stringify(info);
+  if (signature === lastPlacement) return;
+  lastPlacement = signature;
+  onPanelPlaced(info);
+}
+
+/** Lets a host observe the panel placement; pass null to unsubscribe. */
+function setPanelPlacementListener(fn) {
+  onPanelPlaced = typeof fn === 'function' ? fn : null;
 }
 
 // Creates and shows the panel. Safe to call when the panel already exists —
@@ -97,6 +148,7 @@ function createTodoWindow({ onClose } = {}) {
     // existing here. Re-anchoring before showing avoids a flash at stale bounds.
     anchor();
     existing.show();
+    notifyPlacement();
     // Re-raised: the host should put the frog overlay back on top.
     ipcMain.emit('todo-panel-raised');
     return existing;
@@ -146,6 +198,7 @@ function createTodoWindow({ onClose } = {}) {
   todoWin.once('ready-to-show', () => {
     anchor();
     todoWin.show();
+    notifyPlacement();
     // First raise: the host should put the frog overlay back on top, so the
     // frog's feet sit on the list's top edge instead of behind the panel.
     ipcMain.emit('todo-panel-raised');
@@ -158,6 +211,7 @@ function createTodoWindow({ onClose } = {}) {
     clearInterval(topReassertTimer);
     topReassertTimer = null;
     todoWin = null;
+    notifyPlacement();
   });
 
   // Some window managers drop always-on-top after the window is mapped or after
@@ -187,6 +241,7 @@ function isTodoWindowVisible() {
 function hideTodoWindow() {
   const win = getTodoWindow();
   if (win) win.hide();
+  notifyPlacement();
 }
 
 // Closes the panel outright (used when the host app itself is shutting down).
@@ -211,10 +266,39 @@ ipcMain.on('todo-resize', (_event, h) => {
 ipcMain.on('avatar-position', (_event, feet) => {
   if (!feet || typeof feet !== 'object') return;
   if (typeof feet.x !== 'number' || typeof feet.y !== 'number' || !Number.isFinite(feet.x) || !Number.isFinite(feet.y)) return;
-  frogFeet = { x: Math.round(feet.x), y: Math.round(feet.y) };
-  // A hidden panel is re-anchored when it is shown, so only the visible one
-  // needs to move now.
-  if (getTodoWindow()) anchor();
+  // The pill's slot height is optional so older senders keep working; a
+  // missing or bogus one anchors the panel at the bare feet again.
+  const clearance =
+    typeof feet.clearance === 'number' && Number.isFinite(feet.clearance)
+      ? Math.max(0, Math.round(feet.clearance))
+      : 0;
+  frogFeet = { x: Math.round(feet.x), y: Math.round(feet.y), clearance };
+  const dragging = feet.dragging === true;
+  // A hidden panel is re-anchored when it is shown, so only visible ones
+  // move now.
+  const win = getTodoWindow();
+
+  // While the frog is dragged, ride along rigidly: translate the panel by
+  // exactly the frog's movement instead of re-anchoring, so the arrangement
+  // (the pill resting on the list) keeps its shape and can be carried
+  // anywhere. Wherever it is dropped, anchor() re-clamps as usual.
+  if (dragging) {
+    if (!win) return;
+    if (!dragFrom) dragFrom = { feet: frogFeet, bounds: win.getBounds() };
+    else {
+      const from = dragFrom;
+      win.setBounds({
+        x: Math.round(from.bounds.x + frogFeet.x - from.feet.x),
+        y: Math.round(from.bounds.y + frogFeet.y - from.feet.y),
+        width: from.bounds.width,
+        height: from.bounds.height,
+      });
+      notifyPlacement();
+    }
+    return;
+  }
+  if (dragFrom) dragFrom = null;
+  if (win) anchor();
 });
 
 ipcMain.on('todo-close', () => {
@@ -245,4 +329,5 @@ module.exports = {
   isTodoWindowVisible,
   hideTodoWindow,
   destroyTodoWindow,
+  setPanelPlacementListener,
 };

@@ -101,6 +101,9 @@ function getBubbleAnchorRect() {
 function update() {
   spriteAnimator.update(performance.now());
   chatLayout.update();
+  // Catch-up while a drag has stalled (see pendingPositionSend): one extra
+  // throttled send after the move events stop, then this goes quiet.
+  if (isDragging && pendingPositionSend) sendAvatarPosition();
   if (nudge.isVisible()) chatLayout.placeInColumn(nudgeElement);
   // After the chat and nudge, since the bubble goes above them.
   positionBubble();
@@ -167,11 +170,16 @@ function isPointerOverFrog(x, y) {
 // a drag's final drop and every non-drag placement are sent immediately.
 
 let lastPositionSend = 0;
+// Set when a throttled drag frame was skipped, so update() can send the
+// catch-up once the throttle allows: the pointer may stop moving entirely
+// well before it stops being held, and the last reported spot would
+// otherwise stay behind the frog until the drop.
+let pendingPositionSend = false;
 
 // The point under the frog's visible feet, in screen coordinates. Measured
 // from the frog's box, whose centre is known to hold the feet exactly one
-// --avatar-feet-offset below it (see tokens.css). The hover indicator is not
-// counted: it sits below the feet and must not push the to-do panel down.
+// --avatar-feet-offset below it (see tokens.css). The slot under the feet is
+// not part of the point itself; it is reported separately below.
 function frogFeetPosition() {
   const box = avatar.getBoundingClientRect();
   return {
@@ -180,11 +188,39 @@ function frogFeetPosition() {
   };
 }
 
-function sendAvatarPosition(force) {
+// The height of the slot the hover pill occupies just under the feet: the
+// gap, then the pill itself. The pill is always laid out (it only hides with
+// visibility, see controls.css), so its height can be read at any time. The
+// to-do panel anchors below this slot, which keeps the pill-menu above the
+// list — and the frog standing on it — whenever the list is open.
+function pillSlotClearance() {
+  return readLengthToken('--indicator-gap') + pill.offsetHeight;
+}
+
+function sendAvatarPosition(force, dragging) {
+  // While the chat is open the to-do panel must not chase the feet: the frog
+  // lifts above the panel when chatting, and a following panel would be
+  // dragged up with it again. Closing the chat settles the frog and sends a
+  // forced update, which is where the follow resumes. Exception: while the
+  // frog is dragged, the whole arrangement (panel and chat together) rides
+  // along, and the drop's send ends the ride right there.
+  const isDrop = force === true && dragging === false;
+  if (isChatOpen() && dragging !== true && !isDrop) return;
   const now = performance.now();
-  if (!force && now - lastPositionSend < window.CONTROLS_CONFIG.frogFollowThrottleMs) return;
+  if (!force && now - lastPositionSend < window.CONTROLS_CONFIG.frogFollowThrottleMs) {
+    pendingPositionSend = true;
+    return;
+  }
+  pendingPositionSend = false;
   lastPositionSend = now;
-  window.electronAPI.pushAvatarPosition(frogFeetPosition());
+  window.electronAPI.pushAvatarPosition({
+    ...frogFeetPosition(),
+    clearance: pillSlotClearance(),
+    // Tells the panel's host when to ride rigidly along with the drag
+    // instead of re-anchoring. The drop lands through the last callback
+    // before the drag state itself clears, so its send already says false.
+    dragging: dragging === true,
+  });
 }
 
 // The overlay's rAF loop runs every frame; the chat fires this from a
@@ -254,13 +290,24 @@ const controls = createBuddyControls(
   }
 );
 
+// Where the to-do panel window is, mirrored from the main process so the
+// chat lift can rise above the list. Null while the panel is hidden. Every
+// change lets chatLayout run its deferred post-drop lift re-check against
+// the bounds just settled.
+let todoPanelRect = null;
+window.electronAPI.onTodoPanelPlacement((info) => {
+  todoPanelRect = info && info.visible ? info : null;
+  chatLayout.notePanelPlacement();
+});
+
 // Places the chat around the frog: the input bar under the pill and the
 // history above the frog. See chat/chatLayout.js.
 const chatLayout = createChatLayout(
   { avatar, history: chatLog, form: chatForm, pill },
   getFrogRect,
   isChatOpen,
-  sendAvatarPositionNow
+  sendAvatarPositionNow,
+  () => todoPanelRect
 );
 
 // The buddy's proactive message, in the chat history's spot. See
@@ -707,11 +754,15 @@ window.addEventListener('resize', () => {
 
 enableAvatarDrag(avatar, placementParts, (dragging) => {
   isDragging = dragging;
+  chatLayout.setDragging(dragging);
   // Dragging mid-chat: the drop spot wins over sliding back afterwards.
   if (dragging) chatLayout.forgetRestPosition();
   // Moving the frog away counts as brushing the nudge off.
   if (dragging) nudge.dismiss();
-}, (_position, isFinal) => sendAvatarPosition(isFinal));
+  // First position of the ride: reported unthrottled so the panel (and the
+  // chat's rigid ride in chatLayout) capture the baseline before any move.
+  if (dragging) sendAvatarPositionNow();
+}, (_position, isFinal) => sendAvatarPosition(isFinal, isDragging && !isFinal));
 
 // The sprite must have its size before placing, since placement measures it.
 spriteAnimator.play(DEFAULT_IMAGE_ANIMATION);

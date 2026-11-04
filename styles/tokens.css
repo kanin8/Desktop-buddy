@@ -194,6 +194,8 @@
   --done-opacity: 0.7;
   /* The row being dragged, so the drop marker stands out. */
   --dragging-opacity: 0.4;
+  /* Brief teal highlight when a task is added or completed. */
+  --flash-duration: 900ms;
 }
 
 /* ============================

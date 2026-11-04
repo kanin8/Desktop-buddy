@@ -48,6 +48,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // to-do panel under it. The overlay sends placement and drag events; the
   // throttle lives in the overlay, not here.
   pushAvatarPosition: (feet) => ipcRenderer.send('avatar-position', feet),
+  // Subscribe to the to-do panel's bounds ({ visible, x, y, width, height }),
+  // mirrored from the panel window, so the chat lift can rise above the list.
+  onTodoPanelPlacement: (callback) => {
+    ipcRenderer.on('todo-panel-placement', (_event, info) => callback(info));
+  },
   // Gives keyboard focus back to the app the user was in.
   releaseFocus: () => ipcRenderer.send('release-focus'),
 

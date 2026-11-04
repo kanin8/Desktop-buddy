@@ -67,6 +67,40 @@ li.done .t{color:var(--muted);text-decoration:line-through}
 [hidden]{display:none!important}
 
 /* ============================
+   To-do list — finished tasks group
+   ============================ */
+
+/* Completed top-level tasks collect under a collapsible "Done (n)" header at
+   the bottom of the list. The whole header is one button, so it is easy to
+   hit; the caret reuses the row twisty's open-back arrow mask and rotates
+   open like theirs on aria-expanded. */
+.done-group{
+  border-top:var(--border-width) solid var(--line);
+  padding:var(--space-half) var(--space-half);
+}
+.done-toggle{
+  display:flex;
+  align-items:center;
+  gap:var(--space-2);
+  padding:var(--space-half) var(--space-2);
+  background:none;
+  border:0;
+  color:var(--muted);
+  border-radius:var(--radius-sm);
+  transition:background-color var(--transition-fast),color var(--transition-fast);
+}
+.done-toggle:hover{
+  color:var(--ink);
+  background:var(--surface-hover);
+}
+.done-toggle[aria-expanded="true"] .twisty::before{
+  transform:rotate(90deg);
+}
+.done-label{
+  font-size:var(--font-size-sm);
+}
+
+/* ============================
    To-do list — subtask progress
    ============================ */
 
@@ -136,6 +170,23 @@ li.item[draggable=true]{
 }
 .twisty[aria-expanded="true"]::before{
   transform:rotate(90deg);
+}
+
+/* ============================
+   To-do list — teal flash
+   ============================ */
+
+/* One-shot highlight so a task drawing attention once when it arrives or
+   completes: the row starts in the accent tint and fades back. The class is
+   added for a single render and consumed there, so a re-render (reorder,
+   drag) never replays it. Rows are rebuilt each render, which restages the
+   animation on fresh nodes, so no reflow tricks are needed. */
+li.item.is-flash{
+  animation:flash var(--flash-duration) ease-out;
+}
+@keyframes flash{
+  from{background-color:var(--accent-tint)}
+  to{background-color:transparent}
 }
 
 /* ============================

@@ -6,6 +6,7 @@ const {
   createTodoWindow,
   isTodoWindowVisible,
   hideTodoWindow,
+  setPanelPlacementListener,
 } = require('./toDoList/todoWindow');
 const { registerAiIpc, classifyActivity } = require('./toDoList/aiService');
 const { flushStore } = require('./toDoList/todoService');
@@ -83,6 +84,20 @@ function emitCursorPosition(x, y) {
 
 // One-shot read of the current pointer, used for the initial sync on load and
 // as the fallback poll body.
+// Where the to-do panel is, mirrored to the overlay renderer: the chat lift
+// needs the panel's top edge so it can rise above the list. The panel window
+// lives in toDoList/, which knows nothing about the overlay, hence the relay.
+let lastPanelPlacement = { visible: false };
+setPanelPlacementListener((info) => {
+  lastPanelPlacement = info;
+  mirrorPanelPlacement(info);
+});
+
+function mirrorPanelPlacement(info) {
+  if (!overlayWin || overlayWin.isDestroyed()) return;
+  overlayWin.webContents.send('todo-panel-placement', info);
+}
+
 function sendCursorPosition() {
   if (!overlayWin || overlayWin.isDestroyed()) return;
   const { x, y } = screen.getCursorScreenPoint();
@@ -203,10 +218,13 @@ function createOverlayWindow() {
   // depending on forwarded DOM mouse events.
   startCursorPolling();
 
-  // The renderer attaches its listener while loading, which can be after the
-  // first poll. Send the current position once it is ready so the overlay never
-  // starts blind.
-  overlayWin.webContents.on('did-finish-load', sendCursorPosition);
+  // The renderer attaches its listeners while loading, which can be after the
+  // first messages. Send the current state once it is ready so the overlay
+  // never starts blind.
+  overlayWin.webContents.on('did-finish-load', () => {
+    sendCursorPosition();
+    mirrorPanelPlacement(lastPanelPlacement);
+  });
 
   overlayWin.on('closed', () => {
     overlayWin = null;
