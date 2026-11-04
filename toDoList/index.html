@@ -15,7 +15,7 @@
    styles/tokens.css so the panel matches the rest of the app. Change the
    look there, not here. Always dark for now, like the buddy; a light mode
    only needs a second set of theme values. */
-:root{--bg:var(--field-bg);--panel:var(--panel-bg);--ink:var(--text-primary);--muted:var(--text-secondary);--line:var(--divider);--accent-ink:var(--accent-text);--indent:var(--space-4)}
+:root{--bg:var(--field-bg);--panel:var(--panel-bg);--ink:var(--text-primary);--muted:var(--text-secondary);--line:var(--divider);--accent-ink:var(--accent-text);--indent:var(--todo-indent)}
 
 /* ============================
    To-do list — base and layout
@@ -67,6 +67,40 @@ li.done .t{color:var(--muted);text-decoration:line-through}
 [hidden]{display:none!important}
 
 /* ============================
+   To-do list — finished tasks group
+   ============================ */
+
+/* Completed top-level tasks collect under a collapsible "Done (n)" header at
+   the bottom of the list. The whole header is one button, so it is easy to
+   hit; the caret reuses the row twisty's open-back arrow mask and rotates
+   open like theirs on aria-expanded. */
+.done-group{
+  border-top:var(--border-width) solid var(--line);
+  padding:var(--space-half) var(--space-half);
+}
+.done-toggle{
+  display:flex;
+  align-items:center;
+  gap:var(--space-2);
+  padding:var(--space-half) var(--space-2);
+  background:none;
+  border:0;
+  color:var(--muted);
+  border-radius:var(--radius-sm);
+  transition:background-color var(--transition-fast),color var(--transition-fast);
+}
+.done-toggle:hover{
+  color:var(--ink);
+  background:var(--surface-hover);
+}
+.done-toggle[aria-expanded="true"] .twisty::before{
+  transform:rotate(90deg);
+}
+.done-label{
+  font-size:var(--font-size-sm);
+}
+
+/* ============================
    To-do list — subtask progress
    ============================ */
 
@@ -101,20 +135,58 @@ li.item[draggable=true]{
    To-do list — subtask disclosure
    ============================ */
 
+/* The disclosure button is a full 24x24 clickable field with its own hover,
+   so the small arrow does not ask for precise aiming. The arrow is the
+   buddy's open-back triangle (twisty.svg) used as a mask, so the glyph
+   follows the button's colour on hover and stays small inside the field.
+   The glyph is drawn symmetric in the SVG, so rotating the element spins
+   the tip from right (collapsed) to down (expanded) with no offset needed. */
 .twisty{
   flex:none;
-  width:var(--icon-size);
-  height:var(--checkbox-size);
+  width:var(--twisty-size);
+  height:var(--twisty-size);
   padding:0;
+  display:grid;
+  place-items:center;
   background:none;
   border:0;
   color:var(--muted);
-  font-size:var(--font-size-sm);
   line-height:1;
   border-radius:var(--radius-sm);
+  transition:background-color var(--transition-fast),color var(--transition-fast);
 }
 .twisty:hover{
   color:var(--ink);
+  background:var(--surface-hover);
+}
+.twisty::before{
+  content:"";
+  width:var(--space-3);
+  height:var(--space-3);
+  background-color:currentColor;
+  -webkit-mask:url("twisty.svg") center / contain no-repeat;
+          mask:url("twisty.svg") center / contain no-repeat;
+  transition:transform var(--transition-fast);
+}
+.twisty[aria-expanded="true"]::before{
+  transform:rotate(90deg);
+}
+
+/* ============================
+   To-do list — teal flash
+   ============================ */
+
+/* One-shot highlight so a task drawing attention once when it arrives or
+   completes: the row starts in the accent tint and fades back. The class is
+   added for a single render and consumed there, so a re-render (reorder,
+   drag) never replays it. Rows are rebuilt each render, which restages the
+   animation on fresh nodes, so no reflow tricks are needed. */
+li.item.is-flash{
+  animation:flash var(--flash-duration) ease-out;
+}
+@keyframes flash{
+  from{background-color:var(--accent-tint)}
+  to{background-color:transparent}
 }
 
 /* ============================

@@ -1,13 +1,17 @@
 // Lets the user drag the frog around the screen and remembers where it was
 // dropped. Short pointer movements still count as clicks, so the click
 // reaction keeps working.
-
+//
 // Sets up dragging on the #avatar box.
+
 // - visibleParts: the elements that make up the visible frog, used to keep it
 //   fully on screen.
 // - onDragStateChange(isDragging): told when a drag starts and ends, so the
 //   overlay doesn't make itself click-through in the middle of a drag.
-function enableAvatarDrag(avatar, visibleParts, onDragStateChange) {
+// - onMoved(position, isFinal): optional. Told the box's new top-left corner
+//   on every applied drag frame and once more when a drag ends (isFinal), so
+//   followers (the to-do panel) can settle on the drop spot.
+function enableAvatarDrag(avatar, visibleParts, onDragStateChange, onMoved) {
   const { dragStartThresholdPx } = window.CONTROLS_CONFIG;
 
   let pointerStart = null; // where the button went down; null when not pressed
@@ -44,11 +48,13 @@ function enableAvatarDrag(avatar, visibleParts, onDragStateChange) {
     const offsets = getVisibleOffsets(avatar, visibleParts);
     currentPosition = clampToScreen({ left: boxStart.left + dx, top: boxStart.top + dy }, offsets);
     moveAvatarTo(avatar, currentPosition);
+    if (onMoved) onMoved(currentPosition, false);
   });
 
   avatar.addEventListener('pointerup', () => {
     if (isDragging) {
       savePosition(currentPosition);
+      if (onMoved) onMoved(currentPosition, true);
       // The browser follows this pointerup with a click; that click belongs
       // to the drag, not to the frog. Reset right after in case it never comes.
       shouldSwallowClick = true;
@@ -59,7 +65,10 @@ function enableAvatarDrag(avatar, visibleParts, onDragStateChange) {
 
   // The system took the pointer away (e.g. a notification grabbed focus).
   avatar.addEventListener('pointercancel', () => {
-    if (isDragging) savePosition(currentPosition);
+    if (isDragging) {
+      savePosition(currentPosition);
+      if (onMoved) onMoved(currentPosition, true);
+    }
     endPointer();
   });
 

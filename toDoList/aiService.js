@@ -19,6 +19,9 @@ const { getStore, broadcastItems } = require('./todoService');
 let settings = null;
 // In-flight request per requesting window, so a closed overlay can cancel work.
 const inFlight = new Map();
+// Task breakdowns waiting for the user's confirmation, keyed like inFlight.
+// Nothing lands on the list before the user confirms.
+const pendingAdditions = new Map();
 // Voice guide text, read once at startup. Empty means "fall back to the short persona".
 let voiceGuide = '';
 
@@ -74,6 +77,8 @@ async function askAndBreakdown(win, text, history) {
 
   const controller = new AbortController();
   inFlight.set(eventKey(win), controller);
+  // A new question makes an unconfirmed breakdown stale.
+  pendingAdditions.delete(eventKey(win));
   const base = Object.assign(config.connection(), { signal: controller.signal });
 
   try {
@@ -113,10 +118,18 @@ async function askAndBreakdown(win, text, history) {
   try {
     const breakdown = await ai.breakdownGoal(Object.assign({ text: goal, openItems: openItems }, base));
     const parentText = (breakdown.parent || goal).trim();
-    const inserted = getStore().addSubtasks({ parentText: parentText, subtasks: breakdown.subtasks });
+    if (breakdown.subtasks.length) {
+      // Steps are shown with quick replies first; only the user's confirm
+      // (ai-confirm-tasks) adds them to the list.
+      pendingAdditions.set(eventKey(win), { parentText: parentText, subtasks: breakdown.subtasks });
+      send(win, 'ai-breakdown', { parentText: parentText, subtasks: breakdown.subtasks });
+      return;
+    }
+    // No steps to confirm: the plain goal goes straight onto the list.
+    const inserted = getStore().addSubtasks({ parentText: parentText, subtasks: [] });
     if (inserted) {
       broadcastItems(getStore().getItems());
-      send(win, 'ai-tasks-added', { parentText: parentText, count: inserted.itemIds.length - 1 });
+      send(win, 'ai-tasks-added');
     }
   } catch (e) {
     // The reply already streamed fine, so this is a partial success: tell the
@@ -125,6 +138,24 @@ async function askAndBreakdown(win, text, history) {
   } finally {
     inFlight.delete(eventKey(win));
   }
+}
+
+/**
+ * Adds the task breakdown the user has just confirmed for this window.
+ * Returns whether a pending breakdown existed; without one the click is
+ * simply ignored, since the user saw no steps to add.
+ */
+function confirmPendingTasks(win) {
+  const pending = pendingAdditions.get(eventKey(win));
+  pendingAdditions.delete(eventKey(win));
+  if (!pending) return false;
+
+  const inserted = getStore().addSubtasks({ parentText: pending.parentText, subtasks: pending.subtasks });
+  if (inserted) {
+    broadcastItems(getStore().getItems());
+    send(win, 'ai-tasks-added');
+  }
+  return true;
 }
 
 function eventKey(win) {
@@ -173,6 +204,14 @@ function registerAiIpc() {
   voiceGuide = loadVoiceGuide();
 
   ipcMain.handle('ai-ask', (event, text, history) => askAndBreakdown(overlayOf(event), text, history));
+
+  // Confirmation of a shown breakdown: "Add them" goes here, "Not now" just
+  // drops the pending entry so nothing is ever added without a yes.
+  ipcMain.handle('ai-confirm-tasks', (event) => confirmPendingTasks(overlayOf(event)));
+  ipcMain.handle('ai-cancel-tasks', (event) => {
+    pendingAdditions.delete(eventKey(overlayOf(event)));
+    return true;
+  });
 
   ipcMain.handle('ai-get-settings', () => getSettings().read());
 

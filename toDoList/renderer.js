@@ -27,6 +27,15 @@
   var hasLiveItems = false;   // true once a push from the store has been seen
   var drag = { id: null, targetId: null, mode: null };
   var grab = { id: null };
+  // Collapsed by default and not remembered between opens: the section is
+  // space-saving on the way in ("13 left" matters), but the user looks in it
+  // rarely enough that starting open would waste room instead.
+  var groupOpen = false;
+  // Ids waiting for their row to appear so it can flash teal once, for
+  // example after being added or completed. Applied in buildRow, which is
+  // also where the entry is consumed: a row inside a closed section keeps
+  // the flash pending until its section is opened.
+  var flashIds = {};
   var announceTimer = null;
   var canUndo = false;
 
@@ -65,6 +74,18 @@
     return items.filter(function (it) { return !it.done; }).length;
   }
 
+  /** True when `id` and everything nested under it are done. Such a task
+   * moves into the "Done" group whole; a checked task with undone subtasks
+   * stays in the main list so its remaining work keeps its context. */
+  function isFullyDoneSubtree(id) {
+    var it = findById(id);
+    if (!it || !it.done) return false;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].id !== id && isSelfOrDescendant(id, items[i].id) && !items[i].done) return false;
+    }
+    return true;
+  }
+
   // ----------------------------------------------------------------- text ---
 
   // Human label for announcements, e.g. "Buy milk (2 of 3 done)".
@@ -98,68 +119,23 @@
       list.appendChild(empty);
     }
 
-    // Depth of a collapsed task: everything nested below it is skipped until we
-    // come back out to its own level.
-    var skipBelow = -1;
-
-    for (var i = 0; i < items.length; i++) {
-      var it = items[i];
-      var depth = depthOf(it);
-      if (skipBelow >= 0) {
-        if (depth > skipBelow) continue;
-        skipBelow = -1;
+    // Finished top-level tasks collect in a collapsible section at the bottom.
+    // Everything not in that section renders first, then the group header,
+    // then the group's rows when it is open.
+    // Counted from top-level members only: their fully done subtasks render
+    // inside the group, so counting every done item would double them up.
+    var groupCount = 0;
+    renderMain(list);
+    var groupHeader = null;
+    for (var g = 0; g < items.length; g++) {
+      if (!items[g].parentId && items[g].done && isFullyDoneSubtree(items[g].id)) {
+        groupCount += subtreeSize(items[g].id);
       }
-      if (it.collapsed) skipBelow = depth;
-
-      var kids = childIds(it.id);
-      var row = document.createElement('li');
-      row.className = 'item' + (it.done ? ' done' : '');
-      row.draggable = true;
-      row.tabIndex = 0;
-      row.setAttribute('aria-grabbed', 'false');
-      row.setAttribute('data-id', it.id);
-      row.style.setProperty('--depth', String(depth));
-
-      // Only tasks with subtasks get a disclosure toggle and a progress count.
-      var twisty = null;
-      if (kids.length) {
-        twisty = document.createElement('button');
-        twisty.className = 'twisty';
-        twisty.type = 'button';
-        twisty.textContent = it.collapsed ? '▸' : '▾';
-        twisty.setAttribute('aria-expanded', it.collapsed ? 'false' : 'true');
-        twisty.setAttribute('aria-label',
-          (it.collapsed ? 'Expand subtasks of ' : 'Collapse subtasks of ') + it.text);
-      }
-
-      var cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.checked = it.done;
-      cb.setAttribute('aria-label', (it.done ? 'Reopen: ' : 'Complete: ') + it.text);
-
-      var text = document.createElement('span');
-      text.className = 't';
-      text.textContent = it.text;
-
-      if (kids.length) {
-        var doneKids = kids.filter(function (cid) { return findById(cid).done; }).length;
-        var progress = document.createElement('span');
-        progress.className = 'progress';
-        progress.textContent = doneKids + '/' + kids.length;
-        progress.setAttribute('aria-label', doneKids + ' of ' + kids.length + ' subtasks done');
-      }
-
-      var del = document.createElement('button');
-      del.className = 'icon del';
-      del.type = 'button';
-      del.textContent = '×';
-      del.setAttribute('aria-label', 'Delete: ' + it.text + (kids.length ? ' and its subtasks' : ''));
-
-      if (twisty) row.appendChild(twisty);
-      row.appendChild(cb); row.appendChild(text);
-      if (kids.length) row.appendChild(progress);
-      row.appendChild(del);
-      list.appendChild(row);
+    }
+    if (groupCount) {
+      groupHeader = buildGroupHeader(groupCount);
+      list.appendChild(groupHeader);
+      if (groupOpen) renderGroup(list);
     }
 
     var open = pendingCount();
@@ -170,9 +146,163 @@
     if (grab.id) restoreGrab();
   }
 
+  /** Builds one task row (twisty, checkbox, text, progress, delete). */
+  function buildRow(it) {
+    var kids = childIds(it.id);
+    var row = document.createElement('li');
+    row.className = 'item' + (it.done ? ' done' : '');
+    if (flashIds[it.id]) {
+      row.classList.add('is-flash');
+      delete flashIds[it.id];
+    }
+    row.draggable = true;
+    row.tabIndex = 0;
+    row.setAttribute('aria-grabbed', 'false');
+    row.setAttribute('data-id', it.id);
+    row.style.setProperty('--depth', String(depthOf(it)));
+
+    // Only tasks with subtasks get a disclosure toggle and a progress count.
+    if (kids.length) {
+      var twisty = document.createElement('button');
+      twisty.className = 'twisty';
+      twisty.type = 'button';
+      twisty.setAttribute('aria-expanded', it.collapsed ? 'false' : 'true');
+      twisty.setAttribute('aria-label',
+        (it.collapsed ? 'Expand subtasks of ' : 'Collapse subtasks of ') + it.text);
+      row.appendChild(twisty);
+    }
+
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = it.done;
+    cb.setAttribute('aria-label', (it.done ? 'Reopen: ' : 'Complete: ') + it.text);
+    row.appendChild(cb);
+
+    var text = document.createElement('span');
+    text.className = 't';
+    text.textContent = it.text;
+    row.appendChild(text);
+
+    if (kids.length) {
+      var doneKids = kids.filter(function (cid) { return findById(cid).done; }).length;
+      var progress = document.createElement('span');
+      progress.className = 'progress';
+      progress.textContent = doneKids + '/' + kids.length;
+      progress.setAttribute('aria-label', doneKids + ' of ' + kids.length + ' subtasks done');
+      row.appendChild(progress);
+    }
+
+    var del = document.createElement('button');
+    del.className = 'icon del';
+    del.type = 'button';
+    del.textContent = '×';
+    del.setAttribute('aria-label', 'Delete: ' + it.text + (kids.length ? ' and its subtasks' : ''));
+    row.appendChild(del);
+    return row;
+  }
+
+  /** A "member" of the Done group: a top-level task whose whole subtree is
+   * finished. Descent rows live in the group too, but they are found by
+   * walking with the member as root (renderGroup keeps the last member's
+   * id), not by this check. */
+  function isGroupMember(it) {
+    return !!it.parentId === false && it.done === true && isFullyDoneSubtree(it.id);
+  }
+
+  /** Renders the main list: everything except whole subtrees that live in
+   * the Done group. Walk order mirrors the flat store order, where subtasks
+   * directly follow their parents, and rows below a collapsed task are
+   * skipped until depth comes back out (`skipBelow`). */
+  function renderMain(container) {
+    var skipBelow = -1;
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      var depth = depthOf(it);
+      if (skipBelow >= 0) {
+        if (depth > skipBelow) continue;
+        skipBelow = -1;
+      }
+      // A task bound for the Done group also leaves its subtree behind:
+      // none of its rows belong in the main flow.
+      if (!it.parentId && isGroupMember(it)) {
+        skipBelow = depth;
+        continue;
+      }
+      if (it.collapsed) skipBelow = depth;
+      container.appendChild(buildRow(it));
+    }
+  }
+
+  /** Renders the Done group's rows under its header: each top-level done
+   * task with a fully done subtree, followed by the rest of its subtree. */
+  function renderGroup(container) {
+    var skipBelow = -1;
+    var memberRoot = null;
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      var depth = depthOf(it);
+      if (skipBelow >= 0) {
+        if (depth > skipBelow) continue;
+        skipBelow = -1;
+      }
+      memberRoot = (!it.parentId && isGroupMember(it)) ? it.id : (it.parentId ? memberRoot : null);
+      if (it.collapsed) skipBelow = depth;
+      if (memberRoot) container.appendChild(buildRow(it));
+    }
+  }
+
+  function buildGroupHeader(groupCount) {
+    var header = document.createElement('li');
+    header.className = 'done-group';
+
+    var toggle = document.createElement('button');
+    toggle.className = 'done-toggle';
+    toggle.type = 'button';
+    toggle.setAttribute('aria-expanded', groupOpen ? 'true' : 'false');
+    toggle.setAttribute('aria-label', 'Finished tasks: ' + groupCount);
+
+    var caret = document.createElement('span');
+    caret.className = 'twisty';
+    caret.setAttribute('aria-hidden', 'true');
+
+    var label = document.createElement('span');
+    label.className = 'done-label';
+    label.textContent = 'Done (' + groupCount + ')';
+
+    toggle.appendChild(caret);
+    toggle.appendChild(label);
+    header.appendChild(toggle);
+    return header;
+  }
+
+  /** Rows under a group member, the member itself included. */
+  function subtreeSize(id) {
+    var size = 0;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].id === id || isSelfOrDescendant(id, items[i].id)) size++;
+    }
+    return size;
+  }
+
+  // Flags tasks for a one-time flash by comparing the incoming list against
+  // the previous one: a task that is new, or that changed from not done to
+  // done, flashes teal. Skipped on first paint, or a fresh panel would light
+  // up its whole list.
+  function rememberFlashes(before, after) {
+    if (!before.length) return;
+    var state = {};
+    for (var b = 0; b < before.length; b++) state[before[b].id] = before[b].done;
+    for (var a = 0; a < after.length; a++) {
+      if (!(after[a].id in state)) flashIds[after[a].id] = true;
+      else if (!state[after[a].id] && after[a].done) flashIds[after[a].id] = true;
+    }
+  }
+
   /** Applies a fresh authoritative list from the main process. */
   function setItems(next) {
-    items = Array.isArray(next) ? next : [];
+    var incoming = Array.isArray(next) ? next : [];
+    rememberFlashes(items, incoming);
+    items = incoming;
     // A grabbed task may have been deleted underneath us.
     if (grab.id && !findById(grab.id)) grab.id = null;
     render();
@@ -398,6 +528,14 @@
     if (row && e.target.type === 'checkbox') window.todoApp.toggle(row.getAttribute('data-id'), e.target.checked);
   }, false);
   list.addEventListener('click', function (e) {
+    // The Done header opens and closes its section.
+    var toggle = e.target.closest ? e.target.closest('.done-toggle') : null;
+    if (toggle) {
+      groupOpen = !groupOpen;
+      announce(groupOpen ? 'Showing finished tasks' : 'Hiding finished tasks');
+      render();
+      return;
+    }
     var row = rowFromEvent(e);
     if (!row) return;
     var id = row.getAttribute('data-id');

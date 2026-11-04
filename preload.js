@@ -30,6 +30,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onAIError: (callback) => ipcRenderer.on('ai-error', (event, message) => callback(message)),
   onAITasksAdded: (callback) => ipcRenderer.on('ai-tasks-added', (event, info) => callback(info)),
   onAITasksFailed: (callback) => ipcRenderer.on('ai-tasks-failed', (event, message) => callback(message)),
+  // The breakdown is shown first; only after the user confirms one of the
+  // quick replies does it reach the to-do list.
+  onAIBreakdown: (callback) => ipcRenderer.on('ai-breakdown', (event, info) => callback(info)),
+  confirmAITasks: () => ipcRenderer.invoke('ai-confirm-tasks'),
+  declineAITasks: () => ipcRenderer.invoke('ai-cancel-tasks'),
   getAISettings: () => ipcRenderer.invoke('ai-get-settings'),
   setAISettings: (patch) => ipcRenderer.invoke('ai-set-settings', patch),
 
@@ -44,6 +49,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // General purpose (for the mouse-ignore logic)
   setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),
+  // Feeds the frog's feet position to the main process, which anchors the
+  // to-do panel under it. The overlay sends placement and drag events; the
+  // throttle lives in the overlay, not here.
+  pushAvatarPosition: (feet) => ipcRenderer.send('avatar-position', feet),
+  // Subscribe to the to-do panel's bounds ({ visible, x, y, width, height }),
+  // mirrored from the panel window, so the chat lift can rise above the list.
+  onTodoPanelPlacement: (callback) => {
+    ipcRenderer.on('todo-panel-placement', (_event, info) => callback(info));
+  },
   // Gives keyboard focus back to the app the user was in.
   releaseFocus: () => ipcRenderer.send('release-focus'),
 

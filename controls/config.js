@@ -13,4 +13,10 @@ window.CONTROLS_CONFIG = {
   // How long the hover pill stays after the pointer leaves the frog, so the
   // pointer can travel to it (or to the menu) without it vanishing.
   pillHideDelayMs: 400,
+
+  // How often the frog's position is pushed to the main process while being
+  // dragged. The to-do panel is anchored under the frog's feet, and sending
+  // every pointermove would flood IPC: ~60 ms keeps the panel glued to the
+  // frog without a message per animation frame.
+  frogFollowThrottleMs: 60,
 };

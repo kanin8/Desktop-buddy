@@ -181,6 +181,11 @@
   --radius-sm: 6px;
   /* Half a spacing step, for small nudges in tight rows. */
   --space-half: 2px;
+  /* Clickable field of the disclosure button in front of parent tasks. */
+  --twisty-size: 24px;
+  /* How far right one nesting level starts, so subtasks clearly read as
+     children of the parent above them. */
+  --todo-indent: 48px;
   /* The × and – glyphs in the panel header. */
   --icon-glyph-size: 18px;
   --checkbox-size: 20px;
@@ -190,6 +195,9 @@
   --done-opacity: 0.7;
   /* The row being dragged, so the drop marker stands out. */
   --dragging-opacity: 0.4;
+  /* Brief teal highlight when a task is added or completed. */
+  --flash-duration: 900ms;
+
 
   /* Settings window (settings.html). Its own solid window like the to-do
      panel, so it sits on --panel-bg. If --grey-900 changes, update

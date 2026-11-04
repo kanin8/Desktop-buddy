@@ -8,6 +8,7 @@ const bubble = document.getElementById('speech-bubble');
 const hoverIndicator = document.getElementById('hover-indicator');
 const pill = document.getElementById('buddy-pill');
 const pillChatButton = document.getElementById('pill-chat');
+const pillTodoButton = document.getElementById('pill-todo');
 const pillMoreButton = document.getElementById('pill-more');
 const buddyMenu = document.getElementById('buddy-menu');
 const chatPanel = document.getElementById('chat-panel');
@@ -128,6 +129,9 @@ function getBubbleAnchorRect() {
 function update() {
   spriteAnimator.update(performance.now());
   chatLayout.update();
+  // Catch-up while a drag has stalled (see pendingPositionSend): one extra
+  // throttled send after the move events stop, then this goes quiet.
+  if (isDragging && pendingPositionSend) sendAvatarPosition();
   if (nudge.isVisible()) chatLayout.placeInColumn(nudgeElement);
   // After the chat and nudge, since the bubble goes above them.
   positionBubble();
@@ -184,6 +188,73 @@ function isPointerOverFrog(x, y) {
   return getHitTargets().some((element) => rectsOverlap(x, y, element.getBoundingClientRect()));
 }
 
+// --- FROG POSITION FEED ---
+// The main process anchors the to-do panel under the frog's feet, so the
+// frog's position is forwarded here. The overlay window is frameless and
+// pinned to the top-left of the work area, so client coordinates equal
+// screen ones (same assumption as the cursor channel in main.js).
+//
+// Drag frames are throttled (controls/config.js) so they cannot flood IPC;
+// a drag's final drop and every non-drag placement are sent immediately.
+
+let lastPositionSend = 0;
+// Set when a throttled drag frame was skipped, so update() can send the
+// catch-up once the throttle allows: the pointer may stop moving entirely
+// well before it stops being held, and the last reported spot would
+// otherwise stay behind the frog until the drop.
+let pendingPositionSend = false;
+
+// The point under the frog's visible feet, in screen coordinates. Measured
+// from the frog's box, whose centre is known to hold the feet exactly one
+// --avatar-feet-offset below it (see tokens.css). The slot under the feet is
+// not part of the point itself; it is reported separately below.
+function frogFeetPosition() {
+  const box = avatar.getBoundingClientRect();
+  return {
+    x: Math.round(box.left + box.width / 2),
+    y: Math.round(box.top + box.height / 2 + readLengthToken('--avatar-feet-offset')),
+  };
+}
+
+// The height of the slot the hover pill occupies just under the feet: the
+// gap, then the pill itself. The pill is always laid out (it only hides with
+// visibility, see controls.css), so its height can be read at any time. The
+// to-do panel anchors below this slot, which keeps the pill-menu above the
+// list — and the frog standing on it — whenever the list is open.
+function pillSlotClearance() {
+  return readLengthToken('--indicator-gap') + pill.offsetHeight;
+}
+
+function sendAvatarPosition(force, dragging) {
+  // While the chat is open the to-do panel must not chase the feet: the frog
+  // lifts above the panel when chatting, and a following panel would be
+  // dragged up with it again. Closing the chat settles the frog and sends a
+  // forced update, which is where the follow resumes. Exception: while the
+  // frog is dragged, the whole arrangement (panel and chat together) rides
+  // along, and the drop's send ends the ride right there.
+  const isDrop = force === true && dragging === false;
+  if (isChatOpen() && dragging !== true && !isDrop) return;
+  const now = performance.now();
+  if (!force && now - lastPositionSend < window.CONTROLS_CONFIG.frogFollowThrottleMs) {
+    pendingPositionSend = true;
+    return;
+  }
+  pendingPositionSend = false;
+  lastPositionSend = now;
+  window.electronAPI.pushAvatarPosition({
+    ...frogFeetPosition(),
+    clearance: pillSlotClearance(),
+    // Tells the panel's host when to ride rigidly along with the drag
+    // instead of re-anchoring. The drop lands through the last callback
+    // before the drag state itself clears, so its send already says false.
+    dragging: dragging === true,
+  });
+}
+
+// The overlay's rAF loop runs every frame; the chat fires this from a
+// transition end instead, so it is sent deliberately and forced.
+const sendAvatarPositionNow = () => sendAvatarPosition(true);
+
 // The smallest rectangle around the visible frog.
 function getFrogRect() {
   const rects = getHitTargets().map((element) => element.getBoundingClientRect());
@@ -230,10 +301,10 @@ avatar.addEventListener('click', (event) => {
 
 const isChatOpen = () => chatPanel.style.display === 'flex';
 
-// The pill and menu. Chat toggles Maike's chat panel; the menu items call the
-// main process. See controls/controls.js.
+// The pill and menu. Chat toggles Maike's chat panel; the to-do button and
+// the menu items call the main process. See controls/controls.js.
 const controls = createBuddyControls(
-  { avatar, pill, chatButton: pillChatButton, moreButton: pillMoreButton, menu: buddyMenu },
+  { avatar, pill, chatButton: pillChatButton, todoButton: pillTodoButton, moreButton: pillMoreButton, menu: buddyMenu },
   getFrogRect,
   {
     onChat: () => {
@@ -244,7 +315,9 @@ const controls = createBuddyControls(
         openChat();
       }
     },
-    onTodo: () => window.electronAPI.showTodoList(),
+    // The pill icon and the menu item switch the panel on and off, like Chat
+    // does for its own panel.
+    onTodo: () => window.electronAPI.toggleTodoList(),
     onSettings: () => window.electronAPI.showSettings(),
     onSnooze: (choice) => {
       nudge.dismiss();
@@ -255,12 +328,24 @@ const controls = createBuddyControls(
   }
 );
 
+// Where the to-do panel window is, mirrored from the main process so the
+// chat lift can rise above the list. Null while the panel is hidden. Every
+// change lets chatLayout run its deferred post-drop lift re-check against
+// the bounds just settled.
+let todoPanelRect = null;
+window.electronAPI.onTodoPanelPlacement((info) => {
+  todoPanelRect = info && info.visible ? info : null;
+  chatLayout.notePanelPlacement();
+});
+
 // Places the chat around the frog: the input bar under the pill and the
 // history above the frog. See chat/chatLayout.js.
 const chatLayout = createChatLayout(
   { avatar, history: chatLog, form: chatForm, pill },
   getFrogRect,
-  isChatOpen
+  isChatOpen,
+  sendAvatarPositionNow,
+  () => todoPanelRect
 );
 
 // The buddy's proactive message, in the chat history's spot. See
@@ -828,6 +913,48 @@ function removeChatLine(el) {
   if (el && el.parentNode) el.parentNode.removeChild(el);
 }
 
+// Removes unconsumed confirmation buttons, so an old yes cannot add a
+// breakdown whose pending entry was already dropped in the main process.
+function removeQuickReplies() {
+  chatLog.querySelectorAll('.chat-quick-replies').forEach((row) => removeChatLine(row));
+}
+
+// Shows the breakdown steps plus two quick replies. Nothing lands on the
+// list until the user clicks one of them; the wording is fixed so testing
+// knows exactly what was shown (docs/voice-and-behaviour.md, section 4).
+function showTaskConfirmation(parentText, subtasks) {
+  removeQuickReplies();
+  const steps = subtasks.map((step, i) => (i + 1) + '. ' + step).join('\n');
+  addChatLine('Okay, here\'s a way in for "' + parentText + '":\n' + steps, 'buddy');
+  addChatLine('Should I add these to your list?', 'buddy');
+
+  const row = document.createElement('div');
+  row.className = 'chat-quick-replies';
+
+  const add = document.createElement('button');
+  add.type = 'button';
+  add.className = 'chat-quick-reply is-primary';
+  add.textContent = 'Add them';
+  add.addEventListener('click', () => {
+    removeQuickReplies();
+    window.electronAPI.confirmAITasks();
+  });
+
+  const skip = document.createElement('button');
+  skip.type = 'button';
+  skip.className = 'chat-quick-reply';
+  skip.textContent = 'Not now';
+  skip.addEventListener('click', () => {
+    removeQuickReplies();
+    window.electronAPI.declineAITasks();
+  });
+
+  row.appendChild(add);
+  row.appendChild(skip);
+  chatLog.appendChild(row);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
 // Chat line kinds the AI should remember, and the role each speaks as.
 // Errors and the "..." placeholder are left out: they aren't part of the talk.
 const CHAT_HISTORY_ROLES = { user: 'user', buddy: 'assistant' };
@@ -912,6 +1039,8 @@ function submitChat(e) {
   chatInput.value = '';
   chatSend.disabled = true;
   activePending = addChatLine('...', 'pending');
+  // An unconfirmed breakdown is stale from the moment a new message is sent.
+  removeQuickReplies();
 
   window.electronAPI.askAI(goal, history);
 }
@@ -943,13 +1072,10 @@ window.electronAPI.onAIError((message) => {
   endExchange();
 });
 
-window.electronAPI.onAITasksAdded((info) => {
-  addChatLine(
-    info.count > 1
-      ? 'Done, ' + info.count + ' small steps on your list.'
-      : "Done, it's on your list.",
-    'buddy'
-  );
+window.electronAPI.onAIBreakdown((info) => showTaskConfirmation(info.parentText, info.subtasks));
+
+window.electronAPI.onAITasksAdded(() => {
+  addChatLine("Done, it's on your list.", 'buddy');
 });
 
 window.electronAPI.onAITasksFailed((message) => {
@@ -1002,17 +1128,25 @@ window.addEventListener('blur', () => {
 
 // Re-place on resize (e.g. a resolution change) so the frog can't end up off
 // screen; it keeps its saved spot when that still fits.
-window.addEventListener('resize', () => placeAvatar(avatar, placementParts));
+window.addEventListener('resize', () => {
+  placeAvatar(avatar, placementParts);
+  sendAvatarPositionNow();
+});
 
 enableAvatarDrag(avatar, placementParts, (dragging) => {
   isDragging = dragging;
+  chatLayout.setDragging(dragging);
   // Dragging mid-chat: the drop spot wins over sliding back afterwards.
   if (dragging) chatLayout.forgetRestPosition();
   // Moving the frog away counts as brushing the nudge off.
   if (dragging) nudge.dismiss();
-});
+  // First position of the ride: reported unthrottled so the panel (and the
+  // chat's rigid ride in chatLayout) capture the baseline before any move.
+  if (dragging) sendAvatarPositionNow();
+}, (_position, isFinal) => sendAvatarPosition(isFinal, isDragging && !isFinal));
 
 // The sprite must have its size before placing, since placement measures it.
 spriteAnimator.play(DEFAULT_IMAGE_ANIMATION);
 placeAvatar(avatar, placementParts);
+sendAvatarPositionNow();
 update();
