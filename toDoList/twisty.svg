@@ -1,8 +1,9 @@
-<!-- Open-backed disclosure arrow: the two strokes that meet at the tip are
-     drawn, the back edge is left open, like the buddy's to-do twisty.
-     The triangle is equilateral (all three sides equally long) and the glyph
-     is symmetric inside the 12x12 box, so rotating the element that holds
-     this mask spins the tip without any offset to re-centre it. -->
+<!-- Disclosure chevron in the Firefox style: a thin, open "V" turned so the
+     tip points at the row. The stroke is thin and the caps are rounded, like
+     the chevrons Firefox draws in its menus and panels. The glyph is
+     symmetric inside the 12x12 box, so rotating the element that holds this
+     mask spins the tip from right (collapsed) to down (expanded) with no
+     offset needed to re-centre it. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12">
-  <path d="M1.7 1 L10.3 6 L1.7 11" fill="none" stroke="#000" stroke-width="1" stroke-linejoin="miter"/>
+  <path d="M3.2 2.4 L8.6 6 L3.2 9.6" fill="none" stroke="#000" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
