@@ -25,6 +25,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onAIError: (callback) => ipcRenderer.on('ai-error', (event, message) => callback(message)),
   onAITasksAdded: (callback) => ipcRenderer.on('ai-tasks-added', (event, info) => callback(info)),
   onAITasksFailed: (callback) => ipcRenderer.on('ai-tasks-failed', (event, message) => callback(message)),
+  // The breakdown is shown first; only after the user confirms one of the
+  // quick replies does it reach the to-do list.
+  onAIBreakdown: (callback) => ipcRenderer.on('ai-breakdown', (event, info) => callback(info)),
+  confirmAITasks: () => ipcRenderer.invoke('ai-confirm-tasks'),
+  declineAITasks: () => ipcRenderer.invoke('ai-cancel-tasks'),
   getAISettings: () => ipcRenderer.invoke('ai-get-settings'),
   setAISettings: (patch) => ipcRenderer.invoke('ai-set-settings', patch),
 

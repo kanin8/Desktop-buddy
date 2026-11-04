@@ -486,6 +486,48 @@ function removeChatLine(el) {
   if (el && el.parentNode) el.parentNode.removeChild(el);
 }
 
+// Removes unconsumed confirmation buttons, so an old yes cannot add a
+// breakdown whose pending entry was already dropped in the main process.
+function removeQuickReplies() {
+  chatLog.querySelectorAll('.chat-quick-replies').forEach((row) => removeChatLine(row));
+}
+
+// Shows the breakdown steps plus two quick replies. Nothing lands on the
+// list until the user clicks one of them; the wording is fixed so testing
+// knows exactly what was shown (docs/voice-and-behaviour.md, section 4).
+function showTaskConfirmation(parentText, subtasks) {
+  removeQuickReplies();
+  const steps = subtasks.map((step, i) => (i + 1) + '. ' + step).join('\n');
+  addChatLine('Okay, here\'s a way in for "' + parentText + '":\n' + steps, 'buddy');
+  addChatLine('Should I add these to your list?', 'buddy');
+
+  const row = document.createElement('div');
+  row.className = 'chat-quick-replies';
+
+  const add = document.createElement('button');
+  add.type = 'button';
+  add.className = 'chat-quick-reply is-primary';
+  add.textContent = 'Add them';
+  add.addEventListener('click', () => {
+    removeQuickReplies();
+    window.electronAPI.confirmAITasks();
+  });
+
+  const skip = document.createElement('button');
+  skip.type = 'button';
+  skip.className = 'chat-quick-reply';
+  skip.textContent = 'Not now';
+  skip.addEventListener('click', () => {
+    removeQuickReplies();
+    window.electronAPI.declineAITasks();
+  });
+
+  row.appendChild(add);
+  row.appendChild(skip);
+  chatLog.appendChild(row);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
 // The voice guide bans em dashes, but models still slip them in. Replaces each
 // one, and the spaces around it, with ", ".
 function replaceEmDashes(text) {
@@ -537,6 +579,8 @@ function submitChat(e) {
   chatInput.value = '';
   chatSend.disabled = true;
   activePending = addChatLine('...', 'pending');
+  // An unconfirmed breakdown is stale from the moment a new message is sent.
+  removeQuickReplies();
 
   window.electronAPI.askAI(goal);
 }
@@ -562,13 +606,10 @@ window.electronAPI.onAIError((message) => {
   endExchange();
 });
 
-window.electronAPI.onAITasksAdded((info) => {
-  addChatLine(
-    info.count > 1
-      ? 'Done, ' + info.count + ' small steps on your list.'
-      : "Done, it's on your list.",
-    'buddy'
-  );
+window.electronAPI.onAIBreakdown((info) => showTaskConfirmation(info.parentText, info.subtasks));
+
+window.electronAPI.onAITasksAdded(() => {
+  addChatLine("Done, it's on your list.", 'buddy');
 });
 
 window.electronAPI.onAITasksFailed((message) => {
