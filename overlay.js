@@ -341,10 +341,6 @@ const controls = createBuddyControls(
   }
 );
 
-// The AI can open the to-do list when the user asks for it in chat. Opening
-// (not toggling) keeps an already-visible panel open.
-window.electronAPI.onOpenTodo(() => window.electronAPI.showTodoList());
-
 // The panel may already be open when the overlay (re)loads, and the placement
 // event below only fires on a change, so read the state once at startup to
 // light the To-do icon.
@@ -997,33 +993,45 @@ function removeQuickReplies() {
 function showTaskConfirmation(parentText) {
   removeQuickReplies();
   const bubble = addChatLine('Should I add the steps for "' + parentText + '" to your to-do list?', 'buddy');
+  showConfirmButtons(bubble, 'Yes', 'No');
+}
 
-// Adds the yes/no quick replies for whatever change is pending in the main
-// process. Yes applies it (confirmAITasks), no drops it (declineAITasks).
-function showConfirmButtons(yesLabel, noLabel) {
+// Asks before removing tasks, since a removed task can't be brought back.
+// Same yes/no flow as the breakdown: nothing is removed without "Remove".
+function showRemovalConfirmation(taskTexts) {
+  removeQuickReplies();
+  const tasks = taskTexts.map((text) => '- ' + text).join('\n');
+  const bubble = addChatLine('Remove ' + (taskTexts.length === 1 ? 'this' : 'these') + ' from your list?\n' + tasks, 'buddy');
+  showConfirmButtons(bubble, 'Remove', 'Keep');
+}
+
+// Adds the yes/no quick replies inside the question's bubble, for whatever
+// change is pending in the main process. Yes applies it (confirmAITasks), no
+// drops it (declineAITasks).
+function showConfirmButtons(bubble, yesLabel, noLabel) {
   const row = document.createElement('div');
   row.className = 'chat-quick-replies';
 
-  const add = document.createElement('button');
-  add.type = 'button';
-  add.className = 'chat-quick-reply is-primary';
-  add.textContent = 'Yes';
-  add.addEventListener('click', () => {
+  const yes = document.createElement('button');
+  yes.type = 'button';
+  yes.className = 'chat-quick-reply is-primary';
+  yes.textContent = yesLabel;
+  yes.addEventListener('click', () => {
     removeQuickReplies();
     window.electronAPI.confirmAITasks();
   });
 
-  const skip = document.createElement('button');
-  skip.type = 'button';
-  skip.className = 'chat-quick-reply';
-  skip.textContent = 'No';
-  skip.addEventListener('click', () => {
+  const no = document.createElement('button');
+  no.type = 'button';
+  no.className = 'chat-quick-reply';
+  no.textContent = noLabel;
+  no.addEventListener('click', () => {
     removeQuickReplies();
     window.electronAPI.declineAITasks();
   });
 
-  row.appendChild(add);
-  row.appendChild(skip);
+  row.appendChild(yes);
+  row.appendChild(no);
   bubble.appendChild(row);
   chatLog.scrollTop = chatLog.scrollHeight;
 }
