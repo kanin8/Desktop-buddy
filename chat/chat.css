@@ -101,19 +101,14 @@
 /* ============================
    4. Components — quick replies
    ============================
-   The confirm/decline pair under a task breakdown. The row is its own
-   buddy bubble, so the buttons sit inside a box like every other message
-   and steps only reach the to-do list once the user clicks "Add them". */
+   The confirm/decline pair sits inside the buddy's question bubble, so the
+   steps only reach the to-do list once the user clicks "Yes". */
 .chat-quick-replies {
   display: flex;
-  flex: 0 0 auto;
   flex-wrap: wrap;
   gap: var(--space-2);
-  align-self: flex-start;
-  padding: var(--space-2);
-  border: var(--border-width) solid var(--surface-border);
-  border-radius: var(--radius);
-  background-color: var(--bubble-buddy-bg);
+  margin-top: var(--space-2);
+  white-space: normal;
 }
 
 .chat-quick-reply {

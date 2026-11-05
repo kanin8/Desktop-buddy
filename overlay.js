@@ -341,6 +341,10 @@ const controls = createBuddyControls(
   }
 );
 
+// The AI can open the to-do list when the user asks for it in chat. Opening
+// (not toggling) keeps an already-visible panel open.
+window.electronAPI.onOpenTodo(() => window.electronAPI.showTodoList());
+
 // The panel may already be open when the overlay (re)loads, and the placement
 // event below only fires on a change, so read the state once at startup to
 // light the To-do icon.
@@ -954,14 +958,12 @@ function removeQuickReplies() {
   chatLog.querySelectorAll('.chat-quick-replies').forEach((row) => removeChatLine(row));
 }
 
-// Shows the breakdown steps plus two quick replies. Nothing lands on the
-// list until the user clicks one of them; the wording is fixed so testing
-// knows exactly what was shown (docs/voice-and-behaviour.md, section 4).
-function showTaskConfirmation(parentText, subtasks) {
+// Asks whether to add the pending breakdown, without listing its steps. Nothing
+// lands on the list until the user confirms. The Yes/No pair lives inside the
+// question's bubble.
+function showTaskConfirmation(parentText) {
   removeQuickReplies();
-  const steps = subtasks.map((step, i) => (i + 1) + '. ' + step).join('\n');
-  addChatLine('Okay, here\'s a way in for "' + parentText + '":\n' + steps, 'buddy');
-  addChatLine('Should I add these to your list?', 'buddy');
+  const bubble = addChatLine('Should I add the steps for "' + parentText + '" to your to-do list?', 'buddy');
 
   const row = document.createElement('div');
   row.className = 'chat-quick-replies';
@@ -969,7 +971,7 @@ function showTaskConfirmation(parentText, subtasks) {
   const add = document.createElement('button');
   add.type = 'button';
   add.className = 'chat-quick-reply is-primary';
-  add.textContent = 'Add them';
+  add.textContent = 'Yes';
   add.addEventListener('click', () => {
     removeQuickReplies();
     window.electronAPI.confirmAITasks();
@@ -978,7 +980,7 @@ function showTaskConfirmation(parentText, subtasks) {
   const skip = document.createElement('button');
   skip.type = 'button';
   skip.className = 'chat-quick-reply';
-  skip.textContent = 'Not now';
+  skip.textContent = 'No';
   skip.addEventListener('click', () => {
     removeQuickReplies();
     window.electronAPI.declineAITasks();
@@ -986,7 +988,7 @@ function showTaskConfirmation(parentText, subtasks) {
 
   row.appendChild(add);
   row.appendChild(skip);
-  chatLog.appendChild(row);
+  bubble.appendChild(row);
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
@@ -1085,14 +1087,16 @@ function submitChat(e) {
   const goal = chatInput.value.trim();
   if (!goal) return;
 
+  // An unconfirmed breakdown is stale from the moment a new message is sent.
+  // Drop its buttons first so their labels don't leak into the history read
+  // just below (the question bubble itself stays).
+  removeQuickReplies();
   // Read before the new line is added: the history is what came before it.
   const history = getChatHistory();
   addChatLine(goal, 'user');
   chatInput.value = '';
   chatSend.disabled = true;
   activePending = addChatLine('...', 'pending');
-  // An unconfirmed breakdown is stale from the moment a new message is sent.
-  removeQuickReplies();
 
   window.electronAPI.askAI(goal, history);
 }
@@ -1124,7 +1128,7 @@ window.electronAPI.onAIError((message) => {
   endExchange();
 });
 
-window.electronAPI.onAIBreakdown((info) => showTaskConfirmation(info.parentText, info.subtasks));
+window.electronAPI.onAIBreakdown((info) => showTaskConfirmation(info.parentText));
 
 window.electronAPI.onAITasksAdded(() => {
   addChatLine("Done, it's on your list.", 'buddy');
