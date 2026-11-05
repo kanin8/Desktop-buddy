@@ -11,6 +11,7 @@ const {
 } = require('./toDoList/todoWindow');
 const { registerAiIpc, classifyActivity } = require('./toDoList/aiService');
 const { flushStore } = require('./toDoList/todoService');
+const { initAppearance, registerAppearanceIpc, getWindowBackgroundColor } = require('./appearance/appearanceService');
 const CONFIG = require('./config');
 
 // --- HARDWARE ACCELERATION ---
@@ -243,8 +244,8 @@ function createSettingsWindow() {
     resizable: false,
     skipTaskbar: false,
     // Shown before the page paints, so it can't read the CSS theme yet: the
-    // same grey as --grey-900 in styles/tokens.css. Update both together.
-    backgroundColor: '#1c1c1e',
+    // panel grey of the current theme (see PANEL_BG_* in config.js).
+    backgroundColor: getWindowBackgroundColor(),
     // Hidden at launch so it doesn't pop up every start; opened from the tray.
     show: false,
     webPreferences: {
@@ -601,12 +602,18 @@ ipcMain.on('todolist-state-changed', broadcastTodoState);
 // classifyActivity directly (see app.whenReady below).
 registerAiIpc();
 
+// --- APPEARANCE ---
+// Theme (System / Light / Dark) and message transparency, set in Settings.
+registerAppearanceIpc();
+
 // A debounced task write could still be pending when the app quits.
 app.on('before-quit', flushStore);
 
 app.whenReady().then(() => {
   console.log('Electron is ready');
   console.log('nativeImage:', nativeImage);
+  // Before any window opens, so they all start in the saved theme.
+  initAppearance();
   createSettingsWindow();
   createTray();
 

@@ -34,6 +34,29 @@
       </div>
     </section>
 
+    <!-- Appearance: theme and how see-through the buddy's messages are -->
+    <section class="settings-group" aria-labelledby="appearanceHeading">
+      <h2 class="group-heading" id="appearanceHeading">Appearance</h2>
+      <div class="card">
+        <label class="field appearance-field">
+          <span class="field-label">Theme</span>
+          <select class="field-input" id="themeSelect">
+            <option value="system">Match system</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+        <label class="field appearance-field">
+          <span class="field-label field-label-row">
+            Message opacity
+            <output class="range-value" id="opacityValue" for="opacityRange"></output>
+          </span>
+          <input type="range" class="range" id="opacityRange" aria-describedby="opacityHint">
+          <span class="setting-hint" id="opacityHint">How solid the buddy's messages and menus are: 100% is fully solid. Lower is more see-through, which can be harder to read on busy backgrounds.</span>
+        </label>
+      </div>
+    </section>
+
     <!-- AI: one section for every AI feature -->
     <section class="settings-group" aria-labelledby="aiHeading">
       <h2 class="group-heading" id="aiHeading">AI</h2>

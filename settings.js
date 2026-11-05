@@ -100,6 +100,47 @@ todoToggle.addEventListener('change', () => {
   syncTodoState();
 });
 
+// --- APPEARANCE ---
+// Theme and message opacity. Both save as soon as they change; the main
+// process applies them and pushes the result to every window.
+const themeSelect = document.getElementById('themeSelect');
+const opacityRange = document.getElementById('opacityRange');
+const opacityValue = document.getElementById('opacityValue');
+
+// Shows an opacity (0.7–1) as a whole percentage, e.g. "90%".
+function formatOpacity(opacity) {
+  return Math.round(opacity * 100) + '%';
+}
+
+// Redraws the section from the main process's settings, including the
+// slider limits (they live in config.js, which this window can't read).
+function renderAppearance(appearance) {
+  const { min, max, step } = appearance.surfaceOpacityRange;
+  themeSelect.value = appearance.theme;
+  opacityRange.min = min;
+  opacityRange.max = max;
+  opacityRange.step = step;
+  opacityRange.value = appearance.surfaceOpacity;
+  opacityValue.textContent = formatOpacity(appearance.surfaceOpacity);
+}
+
+async function syncAppearance() {
+  renderAppearance(await window.electronAPI.getAppearance());
+}
+
+window.electronAPI.onAppearanceChanged(renderAppearance);
+
+themeSelect.addEventListener('change', () => {
+  window.electronAPI.setAppearance({ theme: themeSelect.value });
+});
+
+// 'input' rather than 'change', so the buddy's messages update while the
+// slider is still being dragged.
+opacityRange.addEventListener('input', () => {
+  opacityValue.textContent = formatOpacity(Number(opacityRange.value));
+  window.electronAPI.setAppearance({ surfaceOpacity: Number(opacityRange.value) });
+});
+
 // --- AI ---
 // One section configures every AI feature. Fields save as soon as they change.
 
@@ -213,3 +254,4 @@ syncAvatarState();
 syncTodoState();
 syncAiSettings();
 syncActivity();
+syncAppearance();

@@ -899,6 +899,19 @@ function reevaluateHover() {
   }
 }
 
+// --- APPEARANCE ---
+// The theme switches by itself (prefers-color-scheme in styles/tokens.css).
+// Message transparency is a user setting, so the overlay applies it here.
+
+// Sets how solid the buddy's messages and menus are. An inline style on the
+// root, because the value comes from Settings and can't live in a stylesheet.
+function applyAppearance(settings) {
+  document.documentElement.style.setProperty('--surface-opacity', settings.surfaceOpacity);
+}
+
+window.electronAPI.getAppearance().then(applyAppearance);
+window.electronAPI.onAppearanceChanged(applyAppearance);
+
 // --- AI CHAT ---
 // Stream listeners are registered once at startup rather than per message, so
 // repeated exchanges cannot leak handlers. They read this state:

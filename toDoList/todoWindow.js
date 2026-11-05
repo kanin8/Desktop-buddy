@@ -13,6 +13,7 @@ const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const path = require('path');
 const CONFIG = require('./config');
 const { registerTodoIpc } = require('./todoService');
+const { getWindowBackgroundColor } = require('../appearance/appearanceService');
 
 // The live panel window, or null when it has been closed.
 let todoWin = null;
@@ -168,8 +169,8 @@ function createTodoWindow({ onClose } = {}) {
     alwaysOnTop: true,
     fullscreenable: false,
     // Shown before the page paints, so it can't read the CSS theme yet: the
-    // same grey as --grey-900 in styles/tokens.css. Update both together.
-    backgroundColor: '#1c1c1e',
+    // panel grey of the current theme (see PANEL_BG_* in the root config.js).
+    backgroundColor: getWindowBackgroundColor(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

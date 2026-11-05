@@ -16,6 +16,13 @@
   --grey-300: #b8b8b8;
   --red-500: #e5484d;
   --amber-300: #f2c46d;
+  /* Light theme only: a soft off-white panel grey, a mid grey for quiet text,
+     and darker teal/amber so they stay readable on light backgrounds. */
+  --grey-50: #f4f4f6;
+  --grey-600: #5a5a60;
+  --teal-600: #16917f;
+  --teal-700: #0f7a6c;
+  --amber-700: #8a5a00;
   --white: #ffffff;
   --black: #000000;
 }
@@ -30,7 +37,11 @@
      90% opacity, because 80% let busy or white backgrounds show through
      so much that text dropped below the readable contrast level (WCAG AA).
      No blur: the buddy lives in one see-through window covering the whole
-     screen, and CSS blur can't reach the desktop behind it. */
+     screen, and CSS blur can't reach the desktop behind it.
+     The user can change the opacity in Settings (Message transparency); the
+     overlay then sets --surface-opacity itself. 0.9 is only the fallback
+     until that saved value arrives, and must match
+     SURFACE_OPACITY_DEFAULT in config.js. */
   --surface-opacity: 0.9;
   --surface: color-mix(in srgb, var(--grey-900) calc(var(--surface-opacity) * 100%), transparent);
 
@@ -220,6 +231,67 @@
   --category-uncategorized: var(--text-secondary);
   /* Small labelled tags ("Ready", "Productive"): a tint of their colour. */
   --badge-tint: 15%;
+}
+
+/* ============================
+   1. Variables — light theme tokens
+   ============================
+   The same names as above with light values. Only colours change; sizes,
+   spacing and timings are shared. Electron sets prefers-color-scheme for
+   every window from the Theme choice in Settings (System / Light / Dark),
+   so no window needs its own code to switch.
+
+   Contrast is measured against --surface at the default 90% opacity, over
+   a black page (the worst case for a light panel): primary text about
+   13.6:1, secondary about 5.5:1, secondary on a hovered menu row about
+   4.8:1. AA needs 4.5:1. */
+@media (prefers-color-scheme: light) {
+  :root {
+    /* Glass panels: white instead of dark grey, same opacity. */
+    --surface: color-mix(in srgb, var(--white) calc(var(--surface-opacity) * 100%), transparent);
+
+    /* A faint dark edge and a lighter shadow: a dark shadow looks heavy
+       under a white panel. */
+    --surface-border: color-mix(in srgb, var(--black) 10%, transparent);
+    --surface-shadow: 0 8px 24px color-mix(in srgb, var(--black) 18%, transparent);
+
+    --text-primary: var(--grey-900);
+    --text-secondary: var(--grey-600);
+
+    /* The teal button keeps its colour and dark-teal text (7.2:1). Hover
+       goes a step darker instead of lighter, so it still shows on white. */
+    --accent-hover: var(--teal-600);
+
+    /* Secondary button: a dark tint instead of a light one. Primary text on
+       it is about 11.5:1. */
+    --button-secondary-bg: color-mix(in srgb, var(--black) 8%, transparent);
+    --button-secondary-hover-bg: color-mix(in srgb, var(--black) 14%, transparent);
+
+    /* Lighter tints than dark mode: a strong tint muddies a white bubble.
+       Primary text on both is above 11:1. */
+    --bubble-user-bg: color-mix(in srgb, var(--teal-400) 20%, var(--surface));
+    --bubble-error-bg: color-mix(in srgb, var(--red-500) 15%, var(--surface));
+
+    /* The light teal is only 2.2:1 on white; this one is 3.6:1 (outlines
+       need 3:1). */
+    --focus-ring: var(--teal-600);
+
+    /* Solid windows (to-do panel, Settings). If --grey-50 changes, update
+       PANEL_BG_LIGHT in config.js too (shown before the page has painted). */
+    --panel-bg: var(--grey-50);
+    --field-bg: color-mix(in srgb, var(--black) 5%, transparent);
+    --card-bg: color-mix(in srgb, var(--white) 70%, transparent);
+
+    --surface-hover: color-mix(in srgb, var(--black) 6%, transparent);
+    --divider: color-mix(in srgb, var(--black) 10%, transparent);
+    --scrollbar-thumb: color-mix(in srgb, var(--black) 25%, transparent);
+    --switch-track-off: color-mix(in srgb, var(--black) 15%, transparent);
+
+    /* Category text on the light panel: productive about 4.8:1, leisure
+       about 5.4:1. The dark-mode teal and amber are under 2:1 here. */
+    --category-productive: var(--teal-700);
+    --category-leisure: var(--amber-700);
+  }
 }
 
 /* ============================
