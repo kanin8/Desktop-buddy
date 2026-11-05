@@ -187,8 +187,6 @@
      children of the parent above them. */
   /* How far right one nesting level starts: half the parent's checkbox, so a
      subtask begins right after the half-way mark of the task it hangs from. */
-  /* How far right one nesting level starts: half the parent's checkbox, so a
-     subtask begins right after the half-way mark of the task it hangs from. */
   --todo-indent: 10px;
   /* The × and – glyphs in the panel header. */
   --icon-glyph-size: 18px;
