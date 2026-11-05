@@ -23,7 +23,7 @@
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--panel);color:var(--ink);font-family:var(--font);font-size:var(--font-size-md);overflow:hidden}
 #app{border:var(--border-width) solid var(--surface-border);padding:var(--space-3) var(--space-4) var(--space-3)}
-header{display:flex;align-items:baseline;gap:var(--space-2);margin-bottom:var(--space-2)}
+header{display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2)}
 h1{font-size:var(--font-size-lg);margin:0;font-weight:700}
 #count{color:var(--muted);flex:1}
 
@@ -31,8 +31,11 @@ h1{font-size:var(--font-size-lg);margin:0;font-weight:700}
    To-do list — buttons and add form
    ============================ */
 button{font:inherit;cursor:pointer}
-.icon{background:none;border:0;color:var(--muted);font-size:var(--icon-glyph-size);line-height:1;padding:var(--space-half) var(--space-2);border-radius:var(--radius-sm)}
+.icon{display:inline-flex;align-items:center;justify-content:center;background:none;border:0;color:var(--muted);font-size:var(--icon-glyph-size);line-height:1;padding:var(--space-half) var(--space-2);border-radius:var(--radius-sm)}
 .icon:hover{color:var(--ink)}
+/* The maximize square rides inside the row: centered horizontally by the
+   button's flex, so it matches the – and × next to it. */
+.icon svg{display:block}
 form{display:flex;gap:var(--space-2);margin-bottom:var(--space-2)}
 input[type=text]{flex:1;min-width:0;font:inherit;color:var(--ink);background:var(--bg);border:var(--border-width) solid var(--line);border-radius:var(--radius-pill);padding:var(--space-2) var(--space-3)}
 input[type=text]::placeholder{color:var(--muted)}
@@ -44,7 +47,9 @@ input[type=text]::placeholder{color:var(--muted)}
    To-do list — task rows
    ============================ */
 #list{list-style:none;margin:0;padding:0;max-height:var(--todo-list-max-height);overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--scrollbar-thumb) transparent}
-li{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-half);border-top:var(--border-width) solid var(--line)}
+/* flex-wrap lets a parent task carry a second line (its subtasks toggle) inside
+   the same li, so the drag/drop logic still sees one row per task. */
+li{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);row-gap:var(--space-1);padding:var(--space-2) var(--space-half);border-top:var(--border-width) solid var(--line)}
 li:first-child{border-top:0}
 li input[type=checkbox]{appearance:none;-webkit-appearance:none;flex:none;width:var(--checkbox-size);height:var(--checkbox-size);margin:0;border:var(--space-half) solid var(--muted);border-radius:var(--radius-sm);cursor:pointer;display:grid;place-content:center}
 li input[type=checkbox]:checked{background:var(--accent);border-color:var(--accent)}
@@ -71,50 +76,76 @@ li.done .t{color:var(--muted);text-decoration:line-through}
    ============================ */
 
 /* Completed top-level tasks collect under a collapsible "Done (n)" header at
-   the bottom of the list. The whole header is one button, so it is easy to
-   hit; the caret reuses the row twisty's open-back arrow mask and rotates
-   open like theirs on aria-expanded. */
+   the bottom of the list. The header is one line in the list, styled like the
+   rows around it (same padding, same text size), but idles muted, keeps no
+   hover highlight, and the whole line is one button so it is easy to hit. The caret reuses the row chevron mask and rotates open like
+   theirs on aria-expanded. */
 .done-group{
   border-top:var(--border-width) solid var(--line);
-  padding:var(--space-half) var(--space-half);
+  padding:var(--space-2) var(--space-half);
 }
 .done-toggle{
   display:flex;
   align-items:center;
   gap:var(--space-2);
-  padding:var(--space-half) var(--space-2);
+  width:100%;
+  padding:0;
   background:none;
   border:0;
   color:var(--muted);
   border-radius:var(--radius-sm);
   transition:background-color var(--transition-fast),color var(--transition-fast);
 }
+/* No hover highlight on this row: the group idles muted even under the
+   pointer (the button stays clickable); placed after the generic :hover rule
+   in the sheet anyway, in case that rule ever starts matching these too. */
 .done-toggle:hover{
+  color:var(--muted);
+  background:none;
+}
+
+.done-toggle:focus-visible{
   color:var(--ink);
-  background:var(--surface-hover);
 }
 .done-toggle[aria-expanded="true"] .twisty::before{
   transform:rotate(90deg);
 }
 .done-label{
-  font-size:var(--font-size-sm);
+  font-size:var(--font-size-md);
 }
 
 /* ============================
    To-do list — subtask progress
    ============================ */
 
+/* "Subtasks n/x", n subtasks done of x total. Plain muted text riding the
+   disclosure line (see below); no pill of its own any more, now that it no
+   longer has to fit on the parent's own line. */
 .progress{
-  flex:none;
   color:var(--muted);
   font-size:var(--font-size-sm);
   font-variant-numeric:tabular-nums;
-  padding:var(--border-width) var(--space-2);
-  border:var(--border-width) solid var(--line);
-  border-radius:var(--radius-pill);
 }
 li.done .progress{
   opacity:var(--done-opacity);
+}
+
+/* ============================
+   To-do list — parent disclosure line
+   ============================ */
+
+/* The parent keeps only checkbox, text and delete on its own line; the
+   disclosure sits on a second line inside the same li, directly under the
+   parent task and above the subtask rows. The arrow starts in one line with
+   the subtask checkboxes (indented one level past the half-checkbox base) and
+   "Subtasks n/x" follows it. The line wraps inside the same li, so the row's
+   drag/drop zones stay intact. */
+.twist-line{
+  flex-basis:100%;
+  display:flex;
+  align-items:center;
+  gap:var(--space-2);
+  padding-left:-12px;
 }
 
 /* ============================
@@ -123,6 +154,7 @@ li.done .progress{
 
 /* Subtasks are indented by --depth, which render.js writes on each row. */
 li.item{
+  position:relative;
   padding-left:calc(var(--space-half) + var(--depth,0) * var(--indent));
   transition:background-color var(--transition-fast) ease,opacity var(--transition-fast) ease;
 }
@@ -137,10 +169,10 @@ li.item[draggable=true]{
 
 /* The disclosure button is a full 24x24 clickable field with its own hover,
    so the small arrow does not ask for precise aiming. The arrow is the
-   buddy's open-back triangle (twisty.svg) used as a mask, so the glyph
-   follows the button's colour on hover and stays small inside the field.
-   The glyph is drawn symmetric in the SVG, so rotating the element spins
-   the tip from right (collapsed) to down (expanded) with no offset needed. */
+   Firefox-style chevron (twisty.svg) used as a mask, so the glyph follows
+   the button's colour on hover and stays small inside the field. The glyph
+   is drawn symmetric in the SVG, so rotating the element spins the tip from
+   right (collapsed) to down (expanded) with no offset needed. */
 .twisty{
   flex:none;
   width:var(--twisty-size);

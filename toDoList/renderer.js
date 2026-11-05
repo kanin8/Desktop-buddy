@@ -146,7 +146,9 @@
     if (grab.id) restoreGrab();
   }
 
-  /** Builds one task row (twisty, checkbox, text, progress, delete). */
+  /** Builds one task row: checkbox, text and delete on the parent's line;
+   * tasks with subtasks get a second line inside the same li holding the
+   * disclosure arrow and the "Subtasks n/x" progress. */
   function buildRow(it) {
     var kids = childIds(it.id);
     var row = document.createElement('li');
@@ -161,17 +163,6 @@
     row.setAttribute('data-id', it.id);
     row.style.setProperty('--depth', String(depthOf(it)));
 
-    // Only tasks with subtasks get a disclosure toggle and a progress count.
-    if (kids.length) {
-      var twisty = document.createElement('button');
-      twisty.className = 'twisty';
-      twisty.type = 'button';
-      twisty.setAttribute('aria-expanded', it.collapsed ? 'false' : 'true');
-      twisty.setAttribute('aria-label',
-        (it.collapsed ? 'Expand subtasks of ' : 'Collapse subtasks of ') + it.text);
-      row.appendChild(twisty);
-    }
-
     var cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.checked = it.done;
@@ -183,21 +174,38 @@
     text.textContent = it.text;
     row.appendChild(text);
 
-    if (kids.length) {
-      var doneKids = kids.filter(function (cid) { return findById(cid).done; }).length;
-      var progress = document.createElement('span');
-      progress.className = 'progress';
-      progress.textContent = doneKids + '/' + kids.length;
-      progress.setAttribute('aria-label', doneKids + ' of ' + kids.length + ' subtasks done');
-      row.appendChild(progress);
-    }
-
     var del = document.createElement('button');
     del.className = 'icon del';
     del.type = 'button';
     del.textContent = '×';
     del.setAttribute('aria-label', 'Delete: ' + it.text + (kids.length ? ' and its subtasks' : ''));
     row.appendChild(del);
+
+    // Tasks with subtasks carry their disclosure on a line of its own, directly
+    // under the parent task (CSS wrap puts .twist-line there): the arrow and
+    // the "Subtasks n/x" count. Inside the same li, so it stays within the
+    // parent's row for dragging and indenting.
+    if (kids.length) {
+      var twist = document.createElement('div');
+      twist.className = 'twist-line';
+
+      var twisty = document.createElement('button');
+      twisty.className = 'twisty';
+      twisty.type = 'button';
+      twisty.setAttribute('aria-expanded', it.collapsed ? 'false' : 'true');
+      twisty.setAttribute('aria-label',
+        (it.collapsed ? 'Expand subtasks of ' : 'Collapse subtasks of ') + it.text);
+      twist.appendChild(twisty);
+
+      var doneKids = kids.filter(function (cid) { return findById(cid).done; }).length;
+      var progress = document.createElement('span');
+      progress.className = 'progress';
+      progress.textContent = 'Subtasks ' + doneKids + '/' + kids.length;
+      progress.setAttribute('aria-label', doneKids + ' of ' + kids.length + ' subtasks done');
+      twist.appendChild(progress);
+
+      row.appendChild(twist);
+    }
     return row;
   }
 
@@ -540,12 +548,24 @@
     if (!row) return;
     var id = row.getAttribute('data-id');
     if (e.target.classList.contains('del')) window.todoApp.remove(id);
-    else if (e.target.classList.contains('twisty')) window.todoApp.toggleExpanded(id);
+    else if (e.target.closest && e.target.closest('.twist-line')) window.todoApp.toggleExpanded(id);
   }, false);
+
+  // The collapsed state's icon is the expand-arrows glyph, drawn as an inline
+  // SVG like the – and × (not a font glyph), so it does not depend on the
+  // system font. Two shafts with L-shaped heads point NE and SW, the common
+  // "expand window" look, in currentColor to match the row.
+  var EXPAND_ARROWS =
+    '<svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true" fill="none" ' +
+    'stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M7 6 L10.5 2.5 M10.5 2.5 h-2.5 M10.5 2.5 v2.5"/>' +
+    '<path d="M6 7 L2.5 10.5 M2.5 10.5 h2.5 M2.5 10.5 v-2.5"/>' +
+    '</svg>';
 
   function setCollapsed(v) {
     body.hidden = v;
-    collapseBtn.textContent = v ? '+' : '–';
+    if (v) collapseBtn.innerHTML = EXPAND_ARROWS;
+    else collapseBtn.textContent = '–';
     collapseBtn.title = collapseBtn.ariaLabel = v ? 'Expand' : 'Collapse';
     try { localStorage.setItem(COLLAPSE_KEY, v ? '1' : '0'); } catch (e) {}
     if (!v) input.focus();
