@@ -19,21 +19,30 @@ const { callClaudeApi } = require('./anthropicClient');
 // fixed messages (e.g. tier 3, three sentences) through the length limit.
 const PERSONA =
   'Keep replies short, usually one or two sentences. No lists or markdown. ' +
-  'If you have been given a message to send word for word, send exactly that. ' +
-  'If the user asks you to open their to-do list, say you are opening it for them.';
+  'If you have been given a message to send word for word, send exactly that.';
 
-// Classification prompt: determines if user input is a task/goal (needs subtasks)
-// or casual chat (question, greeting, follow-up, venting). It also spots a
-// request to open the to-do list, so the buddy can do that for the user.
+// Classification prompt: decides whether the user's message is casual chat, a
+// goal to break into steps, or a change to their to-do list. Tasks are named
+// by their number in the list sent with the message (see taskEdits.js).
 const CLASSIFY_PERSONA =
-  'Classify the user\'s message as "task" (goal, plan, or request to break into steps) ' +
-  'or "chat" (greeting, question, follow-up, venting, casual talk). ' +
-  'If the user asks to open, show or view their to-do list, add "action":"open-todo". ' +
-  'Examples: "plan a website"->{"type":"task"}, "write a script"->{"type":"task"}, ' +
-  '"hello"->{"type":"chat"}, "how are you"->{"type":"chat"}, ' +
-  '"open my to-do list"->{"type":"chat","action":"open-todo"}. ' +
-  'Reply with JSON only, in the shape {"type": "task"} or {"type": "chat"}; ' +
-  'add "action":"open-todo" only when the user asks to open the list.';
+  'Decide what the user wants from their latest message. Reply with JSON only, one of:\n' +
+  '{"type": "chat"}: greeting, question, follow-up, venting, casual talk, or anything that does not change the list.\n' +
+  '{"type": "task"}: a goal or plan they want broken into steps.\n' +
+  '{"type": "edit", "actions": [...]}: they want to change their to-do list, or open or close it. Each action is one of:\n' +
+  '  {"op": "open_list"} open (show) the to-do list window\n' +
+  '  {"op": "close_list"} close (hide) the to-do list window\n' +
+  '  {"op": "complete", "task": N} cross off a task or mark it done\n' +
+  '  {"op": "reopen", "task": N} mark a done task as not done\n' +
+  '  {"op": "rename", "task": N, "text": "new wording"} edit or reword a task\n' +
+  '  {"op": "delete", "task": N} remove a task\n' +
+  '  {"op": "add", "text": "..."} add one task as they wrote it; add "task": N to put it under task N\n' +
+  'N is the task\'s number in their list. Only use numbers that are in the list. ' +
+  'Use the recent chat to work out what "it" or "that one" means. ' +
+  'If you cannot tell which task they mean, reply {"type": "chat"}.\n' +
+  'Examples: "plan a website"->task, "write a script"->task, "hello"->chat, "how are you"->chat, ' +
+  '"I finished the reading"->complete the matching task, "change 2 to call mom at 5"->rename task 2, ' +
+  '"add buy milk"->add, "get rid of the gym one"->delete the matching task, ' +
+  '"show me my list"->open_list, "hide the to-do list"->close_list.';
 
 // Activity prompt: decides whether the window the user is looking at is work
 // or entertainment. Only used for apps the local rule list does not know.
@@ -422,9 +431,26 @@ async function breakdownGoal({ provider, baseUrl, apiKey, model, text, openItems
 var EDIT_OPS = ['complete', 'reopen', 'rename', 'delete', 'add', 'open_list', 'close_list'];
 
 /**
- * Parses the classification response into { type: 'task' | 'chat', action? }.
- * `action` is 'open-todo' when the user asked to see the list. Returns null if
- * there is nothing usable.
+ * Keeps the well-formed edit actions as { op, task, text }. Only the shape is
+ * checked here; taskEdits.resolveActions checks them against the real list.
+ */
+function parseEditActions(rawActions) {
+  if (!Array.isArray(rawActions)) return [];
+  return rawActions
+    .filter(function (a) { return a && typeof a === 'object' && EDIT_OPS.indexOf(a.op) >= 0; })
+    .map(function (a) {
+      return {
+        op: a.op,
+        task: Number.isInteger(Number(a.task)) ? Number(a.task) : null,
+        text: typeof a.text === 'string' ? a.text : '',
+      };
+    });
+}
+
+/**
+ * Parses the classification response into { type: 'task' | 'chat' }, or
+ * { type: 'edit', actions } for list edits.
+ * Returns null if parsing fails or an edit has no usable actions.
  */
 function parseClassification(raw) {
   var candidate = stripCodeFences(raw);
@@ -440,15 +466,13 @@ function parseClassification(raw) {
   if (!parsed || typeof parsed !== 'object') return null;
 
   var type = typeof parsed.type === 'string' ? parsed.type.toLowerCase() : '';
-  var action = typeof parsed.action === 'string' ? parsed.action.toLowerCase() : '';
+  if (type === 'edit') {
+    var actions = parseEditActions(parsed.actions);
+    return actions.length ? { type: 'edit', actions: actions } : null;
+  }
+  if (type !== 'task' && type !== 'chat') return null;
 
-  var result = {};
-  if (type === 'task' || type === 'chat') result.type = type;
-  if (action === 'open-todo') result.action = 'open-todo';
-  if (!result.type && !result.action) return null;
-  // An action on its own still means chat, so the turn stays conversational.
-  result.type = result.type || 'chat';
-  return result;
+  return { type: type };
 }
 
 /**

@@ -68,8 +68,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onTodoPanelPlacement: (callback) => {
     ipcRenderer.on('todo-panel-placement', (_event, info) => callback(info));
   },
-  // The AI asked for the to-do list to be shown (the user asked in chat).
-  onOpenTodo: (callback) => ipcRenderer.on('ai-open-todo', () => callback()),
   // Gives keyboard focus back to the app the user was in.
   releaseFocus: () => ipcRenderer.send('release-focus'),
 

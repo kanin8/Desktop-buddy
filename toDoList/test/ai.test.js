@@ -409,32 +409,6 @@ test('parseClassification returns null for unusable output', () => {
   assert.strictEqual(ai.parseClassification('{"other":"key"}'), null);
 });
 
-test('parseClassification reads the open-todo action', () => {
-  assert.deepStrictEqual(
-    ai.parseClassification('{"type":"chat","action":"open-todo"}'),
-    { type: 'chat', action: 'open-todo' }
-  );
-});
-
-test('parseClassification treats a lone open-todo action as chat', () => {
-  assert.deepStrictEqual(
-    ai.parseClassification('{"action":"open-todo"}'),
-    { type: 'chat', action: 'open-todo' }
-  );
-});
-
-test('parseClassification ignores unknown actions', () => {
-  assert.deepStrictEqual(
-    ai.parseClassification('{"type":"chat","action":"delete-list"}'),
-    { type: 'chat' }
-  );
-});
-
-test('buildClassifyMessages asks for the open-todo action', () => {
-  const messages = ai.buildClassifyMessages('open my to-do list');
-  assert.match(messages[0].content, /open-todo/);
-});
-
 test('classifyInput returns task for a task-like goal', async () => {
   await withFetch(async () => jsonResponse({ choices: [{ message: { content: '{"type":"task"}' } }] }, {}), () => {
     return ai.classifyInput({
@@ -462,16 +436,6 @@ test('classifyInput defaults to chat when parsing fails', async () => {
     });
   }).then((result) => {
     assert.deepStrictEqual(result, { type: 'chat' });
-  });
-});
-
-test('classifyInput passes the open-todo action through', async () => {
-  await withFetch(async () => jsonResponse({ choices: [{ message: { content: '{"type":"chat","action":"open-todo"}' } }] }, {}), () => {
-    return ai.classifyInput({
-      baseUrl: 'https://example.test/v1', apiKey: 'k', model: 'm', text: 'open my to-do list',
-    });
-  }).then((result) => {
-    assert.deepStrictEqual(result, { type: 'chat', action: 'open-todo' });
   });
 });
 // ------------------------------------------------- activity classification ---
