@@ -322,6 +322,16 @@ function createTodoStore({ filePath, debounceMs = CONFIG.STORE_DEBOUNCE_MS } = {
     return true;
   }
 
+  /** Changes a task's wording. Blank text is rejected, so a task is never emptied. */
+  function rename(id, text) {
+    var item = findById(id);
+    var value = String(text == null ? '' : text).trim().slice(0, CONFIG.MAX_ITEM_LENGTH);
+    if (!item || !value || item.text === value) return false;
+    item.text = value;
+    markChanged();
+    return true;
+  }
+
   function toggleExpanded(id) {
     var item = findById(id);
     if (!item) return false;
@@ -457,6 +467,7 @@ function createTodoStore({ filePath, debounceMs = CONFIG.STORE_DEBOUNCE_MS } = {
     add,
     addSubtasks,
     toggle,
+    rename,
     toggleExpanded,
     remove,
     clearCompleted,

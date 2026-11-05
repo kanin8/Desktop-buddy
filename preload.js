@@ -30,6 +30,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onAIError: (callback) => ipcRenderer.on('ai-error', (event, message) => callback(message)),
   onAITasksAdded: (callback) => ipcRenderer.on('ai-tasks-added', (event, info) => callback(info)),
   onAITasksFailed: (callback) => ipcRenderer.on('ai-tasks-failed', (event, message) => callback(message)),
+  // List edits the app made from a chat message, as lines to show, and tasks
+  // the user asked to remove, which wait for a yes (confirmAITasks).
+  onAITasksEdited: (callback) => ipcRenderer.on('ai-tasks-edited', (event, lines) => callback(lines)),
+  onAIConfirmRemoval: (callback) => ipcRenderer.on('ai-confirm-removal', (event, texts) => callback(texts)),
   // The breakdown is shown first; only after the user confirms one of the
   // quick replies does it reach the to-do list.
   onAIBreakdown: (callback) => ipcRenderer.on('ai-breakdown', (event, info) => callback(info)),

@@ -464,3 +464,43 @@ test('classifyActivity sends the window details and parses the reply', async () 
   assert.match(userMessage, /Title: Funny cats/);
   assert.strictEqual(sentBody.stream, false);
 });
+
+// ----------------------------------------------------------- list edits ---
+
+test('buildClassifyMessages sends the numbered list and recent chat', () => {
+  const messages = ai.buildClassifyMessages('cross that off', '1. Essay\n2. Gym', [
+    { role: 'assistant', content: 'How did the gym go?' },
+  ]);
+  assert.match(messages[0].content, /"op": "complete"/);
+  assert.match(messages[1].content, /Buddy: How did the gym go\?/);
+  assert.match(messages[1].content, /To-do list:\n1\. Essay\n2\. Gym/);
+  assert.match(messages[1].content, /Latest message: cross that off$/);
+});
+
+test('buildClassifyMessages marks an empty list', () => {
+  const messages = ai.buildClassifyMessages('add milk', '');
+  assert.match(messages[1].content, /To-do list:\n\(empty\)/);
+});
+
+test('parseClassification reads list edits and drops unknown ops', () => {
+  const parsed = ai.parseClassification(
+    '{"type":"edit","actions":[{"op":"complete","task":2},{"op":"fly","task":1},{"op":"add","text":"Buy milk"}]}'
+  );
+  assert.deepStrictEqual(parsed, {
+    type: 'edit',
+    actions: [
+      { op: 'complete', task: 2, text: '' },
+      { op: 'add', task: null, text: 'Buy milk' },
+    ],
+  });
+});
+
+test('parseClassification rejects an edit with no usable actions', () => {
+  assert.strictEqual(ai.parseClassification('{"type":"edit","actions":[]}'), null);
+  assert.strictEqual(ai.parseClassification('{"type":"edit"}'), null);
+});
+
+test('buildReplyMessages puts the list context between the voice guide and the persona', () => {
+  const messages = ai.buildReplyMessages('hi', 'GUIDE', null, 'LIST');
+  assert.match(messages[0].content, /^GUIDE\n\nLIST\n\n/);
+});

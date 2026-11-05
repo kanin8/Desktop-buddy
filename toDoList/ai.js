@@ -21,13 +21,25 @@ const PERSONA =
   'Keep replies short, usually one or two sentences. No lists or markdown. ' +
   'If you have been given a message to send word for word, send exactly that.';
 
-// Classification prompt: determines if user input is a task/goal (needs subtasks)
-// or casual chat (question, greeting, follow-up, venting).
+// Classification prompt: decides whether the user's message is casual chat, a
+// goal to break into steps, or a change to their to-do list. Tasks are named
+// by their number in the list sent with the message (see taskEdits.js).
 const CLASSIFY_PERSONA =
-  'Classify the user\'s message as "task" (goal, plan, or request to break into steps) ' +
-  'or "chat" (greeting, question, follow-up, venting, casual talk). ' +
-  'Examples: "plan a website"->task, "write a script"->task, "hello"->chat, "how are you"->chat. ' +
-  'Reply with JSON only: {"type": "task"} or {"type": "chat"}.';
+  'Decide what the user wants from their latest message. Reply with JSON only, one of:\n' +
+  '{"type": "chat"}: greeting, question, follow-up, venting, casual talk, or anything that does not change the list.\n' +
+  '{"type": "task"}: a goal or plan they want broken into steps.\n' +
+  '{"type": "edit", "actions": [...]}: they want to change their to-do list. Each action is one of:\n' +
+  '  {"op": "complete", "task": N} cross off a task or mark it done\n' +
+  '  {"op": "reopen", "task": N} mark a done task as not done\n' +
+  '  {"op": "rename", "task": N, "text": "new wording"} edit or reword a task\n' +
+  '  {"op": "delete", "task": N} remove a task\n' +
+  '  {"op": "add", "text": "..."} add one task as they wrote it; add "task": N to put it under task N\n' +
+  'N is the task\'s number in their list. Only use numbers that are in the list. ' +
+  'Use the recent chat to work out what "it" or "that one" means. ' +
+  'If you cannot tell which task they mean, reply {"type": "chat"}.\n' +
+  'Examples: "plan a website"->task, "write a script"->task, "hello"->chat, "how are you"->chat, ' +
+  '"I finished the reading"->complete the matching task, "change 2 to call mom at 5"->rename task 2, ' +
+  '"add buy milk"->add, "get rid of the gym one"->delete the matching task.';
 
 // Activity prompt: decides whether the window the user is looking at is work
 // or entertainment. Only used for apps the local rule list does not know.
@@ -96,9 +108,12 @@ function toAlternatingTurns(lines) {
  * `history` (optional) is the chat so far as [{ role, content }], oldest
  * first, including nudges and the user's button replies, so the buddy knows
  * what it just asked.
+ * `listContext` (optional) describes the to-do list and what the app just did
+ * to it, so the buddy can talk about the tasks without claiming edits itself.
  */
-function buildReplyMessages(text, voiceGuide, history) {
-  var systemPrompt = voiceGuide ? voiceGuide + '\n\n' + PERSONA : PERSONA;
+function buildReplyMessages(text, voiceGuide, history, listContext) {
+  var parts = [voiceGuide, listContext, PERSONA].filter(Boolean);
+  var systemPrompt = parts.join('\n\n');
   var lines = cleanChatHistory(history).concat([
     { role: 'user', content: String(text || '').trim() },
   ]);
@@ -107,11 +122,25 @@ function buildReplyMessages(text, voiceGuide, history) {
 
 /**
  * Messages for input classification.
+ * `listText` (optional) is the numbered to-do list from taskEdits.describeList.
+ * `history` (optional) is the chat before `text`; only the last few lines are
+ * sent, enough to know what "that one" refers to.
+ * With neither, the user turn is just the message.
  */
-function buildClassifyMessages(text) {
+function buildClassifyMessages(text, listText, history) {
+  var message = String(text || '').trim();
+  var recent = cleanChatHistory(history).slice(-CONFIG.AI_CLASSIFY_HISTORY_MESSAGES)
+    .map(function (line) { return (line.role === 'user' ? 'User: ' : 'Buddy: ') + line.content; })
+    .join('\n');
+
+  var context = [];
+  if (recent) context.push('Recent chat:\n' + recent);
+  if (listText !== undefined) context.push('To-do list:\n' + (listText || '(empty)'));
+  var content = context.length ? context.join('\n\n') + '\n\nLatest message: ' + message : message;
+
   return [
     { role: 'system', content: CLASSIFY_PERSONA },
-    { role: 'user', content: String(text || '').trim() },
+    { role: 'user', content: content },
   ];
 }
 
@@ -343,13 +372,13 @@ function callModel(options) {
 }
 
 /** Streamed reply for the speech bubble. */
-async function streamReply({ provider, baseUrl, apiKey, model, text, voiceGuide, history, onToken, signal }) {
+async function streamReply({ provider, baseUrl, apiKey, model, text, voiceGuide, history, listContext, onToken, signal }) {
   return callModel({
     provider: provider,
     baseUrl: baseUrl,
     apiKey: apiKey,
     model: model,
-    messages: buildReplyMessages(text, voiceGuide, history),
+    messages: buildReplyMessages(text, voiceGuide, history, listContext),
     stream: true,
     temperature: CONFIG.AI_TEMPERATURE,
     maxTokens: CONFIG.AI_MAX_TOKENS,
@@ -394,9 +423,30 @@ async function breakdownGoal({ provider, baseUrl, apiKey, model, text, openItems
   return { parent: String(text || '').trim(), subtasks: [] };
 }
 
+// List edits the classifier may ask for (see CLASSIFY_PERSONA).
+var EDIT_OPS = ['complete', 'reopen', 'rename', 'delete', 'add'];
+
 /**
- * Parses the classification response into { type: 'task' | 'chat' }.
- * Returns null if parsing fails.
+ * Keeps the well-formed edit actions as { op, task, text }. Only the shape is
+ * checked here; taskEdits.resolveActions checks them against the real list.
+ */
+function parseEditActions(rawActions) {
+  if (!Array.isArray(rawActions)) return [];
+  return rawActions
+    .filter(function (a) { return a && typeof a === 'object' && EDIT_OPS.indexOf(a.op) >= 0; })
+    .map(function (a) {
+      return {
+        op: a.op,
+        task: Number.isInteger(Number(a.task)) ? Number(a.task) : null,
+        text: typeof a.text === 'string' ? a.text : '',
+      };
+    });
+}
+
+/**
+ * Parses the classification response into { type: 'task' | 'chat' }, or
+ * { type: 'edit', actions } for list edits.
+ * Returns null if parsing fails or an edit has no usable actions.
  */
 function parseClassification(raw) {
   var candidate = stripCodeFences(raw);
@@ -412,17 +462,22 @@ function parseClassification(raw) {
   if (!parsed || typeof parsed !== 'object') return null;
 
   var type = typeof parsed.type === 'string' ? parsed.type.toLowerCase() : '';
+  if (type === 'edit') {
+    var actions = parseEditActions(parsed.actions);
+    return actions.length ? { type: 'edit', actions: actions } : null;
+  }
   if (type !== 'task' && type !== 'chat') return null;
 
   return { type: type };
 }
 
 /**
- * Classifies user input as 'task' (wants subtasks) or 'chat' (casual).
- * Uses a fast, low-temperature call to avoid latency.
+ * Classifies user input as 'task' (wants subtasks), 'chat' (casual) or 'edit'
+ * (changes to the to-do list). `listText` and `history` are explained at
+ * buildClassifyMessages. Uses a fast, low-temperature call to avoid latency.
  */
-async function classifyInput({ provider, baseUrl, apiKey, model, text, signal }) {
-  var messages = buildClassifyMessages(text);
+async function classifyInput({ provider, baseUrl, apiKey, model, text, listText, history, signal }) {
+  var messages = buildClassifyMessages(text, listText, history);
 
   var raw = await callModel({
     provider: provider,

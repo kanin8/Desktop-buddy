@@ -15,13 +15,15 @@ const CONFIG = require('./config');
 const { createSettingsStore } = require('./appSettings');
 const fs = require('fs');
 const { getStore, broadcastItems } = require('./todoService');
+const { describeList, resolveActions, applyEdits } = require('./taskEdits');
 
 let settings = null;
 // In-flight request per requesting window, so a closed overlay can cancel work.
 const inFlight = new Map();
-// Task breakdowns waiting for the user's confirmation, keyed like inFlight.
-// Nothing lands on the list before the user confirms.
-const pendingAdditions = new Map();
+// List changes waiting for the user's yes, keyed like inFlight: a task
+// breakdown, or tasks the user asked to remove. Each entry is { apply }.
+// Neither happens before the user confirms.
+const pendingConfirmations = new Map();
 // Voice guide text, read once at startup. Empty means "fall back to the short persona".
 let voiceGuide = '';
 
@@ -60,10 +62,12 @@ function send(win, channel, payload) {
 }
 
 /**
- * Runs one exchange: stream an in-character reply into the bubble, then classify
- * the input. If it's a task/goal, break it down and insert subtasks.
- * `history` is the chat before `text` as [{ role, content }]; only the reply
- * uses it (ai.js cleans and trims it).
+ * Runs one exchange: work out what the message wants (chat, a goal to break
+ * down, or list edits), make any list edits, stream an in-character reply
+ * that knows what changed, then offer a breakdown for a goal.
+ * Classifying first costs a moment before the reply starts, but means the
+ * buddy never talks about an edit that didn't happen.
+ * `history` is the chat before `text` as [{ role, content }].
  */
 async function askAndBreakdown(win, text, history) {
   const config = getSettings();
@@ -77,38 +81,116 @@ async function askAndBreakdown(win, text, history) {
 
   const controller = new AbortController();
   inFlight.set(eventKey(win), controller);
-  // A new question makes an unconfirmed breakdown stale.
-  pendingAdditions.delete(eventKey(win));
+  // A new message makes an unconfirmed breakdown or removal stale.
+  pendingConfirmations.delete(eventKey(win));
   const base = Object.assign(config.connection(), { signal: controller.signal });
 
   try {
+    const list = describeList(getStore().getItems(), CONFIG.MAX_CONTEXT_ITEMS);
+    const intent = await classifyMessage(goal, list.text, history, base);
+    const listUpdate = intent.type === 'edit' ? applyListEdits(win, intent.actions, list.idsByNumber) : null;
+
+    const replied = await streamBuddyReply(win, goal, history, listUpdate, base);
+    // Shown even if the reply failed: the edits already happened.
+    if (listUpdate) announceListUpdate(win, listUpdate);
+    if (replied && intent.type === 'task') await offerBreakdown(win, goal, base);
+  } finally {
+    inFlight.delete(eventKey(win));
+  }
+}
+
+/** Classifies the message. Any failure counts as chat, so nothing changes by accident. */
+async function classifyMessage(goal, listText, history, base) {
+  try {
+    const intent = await ai.classifyInput(Object.assign({ text: goal, listText: listText, history: history }, base));
+    console.log('[AI] Classification result:', JSON.stringify(intent), 'for:', goal);
+    return intent;
+  } catch (e) {
+    console.warn('[AI] Classification failed:', e);
+    return { type: 'chat' };
+  }
+}
+
+/**
+ * Makes the list edits the AI found. Removals are held back until the user
+ * confirms (ai-confirm-tasks), since a removed task can't be brought back.
+ * Side effect: changes the store, and may set a pending confirmation.
+ * Returns { doneLines, removalTexts } for the reply and the chat.
+ */
+function applyListEdits(win, actions, idsByNumber) {
+  const store = getStore();
+  const edits = resolveActions(actions, idsByNumber, store.getItems());
+  const removals = edits.filter((edit) => edit.op === 'delete');
+  const doneLines = applyEdits(store, edits.filter((edit) => edit.op !== 'delete'));
+
+  const removalTexts = removals
+    .map((edit) => (store.getItems().find((item) => item.id === edit.id) || {}).text)
+    .filter(Boolean);
+  if (removalTexts.length) {
+    pendingConfirmations.set(eventKey(win), {
+      apply: () => send(win, 'ai-tasks-edited', applyEdits(getStore(), removals)),
+    });
+  }
+  return { doneLines: doneLines, removalTexts: removalTexts };
+}
+
+/**
+ * Tells the reply what the list looks like and what the app just did to it,
+ * so the buddy can react without claiming it made the change itself.
+ */
+function describeListForReply(listUpdate) {
+  const listText = describeList(getStore().getItems(), CONFIG.MAX_CONTEXT_ITEMS).text;
+  const parts = [listText ? 'The user\'s to-do list right now:\n' + listText : 'The user\'s to-do list is empty.'];
+  if (!listUpdate) return parts[0];
+
+  if (listUpdate.doneLines.length) {
+    parts.push('For their latest message the app has just made these changes: ' + listUpdate.doneLines.join(' '));
+  }
+  if (listUpdate.removalTexts.length) {
+    parts.push('The app is asking the user to confirm removing: "' + listUpdate.removalTexts.join('", "') + '".');
+  }
+  if (!listUpdate.doneLines.length && !listUpdate.removalTexts.length) {
+    parts.push('They asked to change the list, but the app could not tell which task they meant. Briefly ask which one.');
+  } else {
+    parts.push('The app shows its own confirmation, so react in a few words and don\'t repeat the details.');
+  }
+  return parts.join('\n\n');
+}
+
+/**
+ * Streams the in-character reply into the chat. Returns whether it finished;
+ * on failure the error is already shown.
+ */
+async function streamBuddyReply(win, goal, history, listUpdate, base) {
+  try {
     // Only the visible reply gets the voice guide: the classify and breakdown
     // calls need strict JSON, and the guide would add ~4k tokens to each.
-    const reply = await ai.streamReply(Object.assign({ text: goal, voiceGuide: voiceGuide, history: history, onToken: t => send(win, 'ai-stream', t) }, base));
+    const reply = await ai.streamReply(Object.assign({
+      text: goal,
+      voiceGuide: voiceGuide,
+      history: history,
+      listContext: describeListForReply(listUpdate),
+      onToken: (token) => send(win, 'ai-stream', token),
+    }, base));
     send(win, 'ai-stream-end', reply || '');
+    return true;
   } catch (e) {
     send(win, 'ai-error', friendlyError(e));
-    inFlight.delete(eventKey(win));
-    return;
+    return false;
   }
+}
 
-  // Classify the input: only break down if it's a task/goal, not casual chat.
-  let classification;
-  try {
-    classification = await ai.classifyInput(Object.assign({ text: goal }, base));
-    console.log('[AI] Classification result:', classification, 'for:', goal);
-  } catch (e) {
-    // If classification fails, assume chat to avoid unwanted subtasks
-    console.warn('[AI] Classification failed:', e);
-    classification = { type: 'chat' };
-  }
+/** Shows the fixed confirmation lines for the edits, and asks about removals. */
+function announceListUpdate(win, listUpdate) {
+  if (listUpdate.doneLines.length) send(win, 'ai-tasks-edited', listUpdate.doneLines);
+  if (listUpdate.removalTexts.length) send(win, 'ai-confirm-removal', listUpdate.removalTexts);
+}
 
-  if (classification.type !== 'task') {
-    // Casual chat - reply was already streamed, nothing more to do
-    inFlight.delete(eventKey(win));
-    return;
-  }
-
+/**
+ * Breaks a goal into steps and shows them for confirmation; a goal without
+ * steps goes straight onto the list.
+ */
+async function offerBreakdown(win, goal, base) {
   // Only unfinished tasks are sent, so the model can avoid re-suggesting them.
   const openItems = getStore().getItems()
     .filter(function (it) { return !it.done; })
@@ -121,40 +203,40 @@ async function askAndBreakdown(win, text, history) {
     if (breakdown.subtasks.length) {
       // Steps are shown with quick replies first; only the user's confirm
       // (ai-confirm-tasks) adds them to the list.
-      pendingAdditions.set(eventKey(win), { parentText: parentText, subtasks: breakdown.subtasks });
+      pendingConfirmations.set(eventKey(win), {
+        apply: () => addBreakdown(win, parentText, breakdown.subtasks),
+      });
       send(win, 'ai-breakdown', { parentText: parentText, subtasks: breakdown.subtasks });
       return;
     }
     // No steps to confirm: the plain goal goes straight onto the list.
-    const inserted = getStore().addSubtasks({ parentText: parentText, subtasks: [] });
-    if (inserted) {
-      broadcastItems(getStore().getItems());
-      send(win, 'ai-tasks-added');
-    }
+    addBreakdown(win, parentText, []);
   } catch (e) {
     // The reply already streamed fine, so this is a partial success: tell the
     // user the goal could not be broken down rather than failing the whole turn.
     send(win, 'ai-tasks-failed', friendlyError(e));
-  } finally {
-    inFlight.delete(eventKey(win));
   }
 }
 
-/**
- * Adds the task breakdown the user has just confirmed for this window.
- * Returns whether a pending breakdown existed; without one the click is
- * simply ignored, since the user saw no steps to add.
- */
-function confirmPendingTasks(win) {
-  const pending = pendingAdditions.get(eventKey(win));
-  pendingAdditions.delete(eventKey(win));
-  if (!pending) return false;
-
-  const inserted = getStore().addSubtasks({ parentText: pending.parentText, subtasks: pending.subtasks });
+/** Adds a goal and its steps to the list and tells the chat. */
+function addBreakdown(win, parentText, subtasks) {
+  const inserted = getStore().addSubtasks({ parentText: parentText, subtasks: subtasks });
   if (inserted) {
     broadcastItems(getStore().getItems());
     send(win, 'ai-tasks-added');
   }
+}
+
+/**
+ * Applies the change the user has just confirmed for this window (a
+ * breakdown or a removal). Returns whether one was pending; without one the
+ * click is simply ignored, since the user saw nothing to confirm.
+ */
+function confirmPendingTasks(win) {
+  const pending = pendingConfirmations.get(eventKey(win));
+  pendingConfirmations.delete(eventKey(win));
+  if (!pending) return false;
+  pending.apply();
   return true;
 }
 
@@ -205,11 +287,12 @@ function registerAiIpc() {
 
   ipcMain.handle('ai-ask', (event, text, history) => askAndBreakdown(overlayOf(event), text, history));
 
-  // Confirmation of a shown breakdown: "Add them" goes here, "Not now" just
-  // drops the pending entry so nothing is ever added without a yes.
+  // Confirmation of a shown breakdown or removal: "Add them" / "Remove" go
+  // here, "Not now" / "Keep" just drop the pending entry, so nothing is added
+  // or removed without a yes.
   ipcMain.handle('ai-confirm-tasks', (event) => confirmPendingTasks(overlayOf(event)));
   ipcMain.handle('ai-cancel-tasks', (event) => {
-    pendingAdditions.delete(eventKey(overlayOf(event)));
+    pendingConfirmations.delete(eventKey(overlayOf(event)));
     return true;
   });
 

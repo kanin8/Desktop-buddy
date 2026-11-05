@@ -953,30 +953,44 @@ function showTaskConfirmation(parentText, subtasks) {
   const steps = subtasks.map((step, i) => (i + 1) + '. ' + step).join('\n');
   addChatLine('Okay, here\'s a way in for "' + parentText + '":\n' + steps, 'buddy');
   addChatLine('Should I add these to your list?', 'buddy');
+  showConfirmButtons('Add them', 'Not now');
+}
 
+// Asks before removing tasks, since a removed task can't be brought back.
+// Same yes/no flow as the breakdown: nothing is removed without "Remove".
+function showRemovalConfirmation(taskTexts) {
+  removeQuickReplies();
+  const tasks = taskTexts.map((text) => '- ' + text).join('\n');
+  addChatLine('Remove ' + (taskTexts.length === 1 ? 'this' : 'these') + ' from your list?\n' + tasks, 'buddy');
+  showConfirmButtons('Remove', 'Keep');
+}
+
+// Adds the yes/no quick replies for whatever change is pending in the main
+// process. Yes applies it (confirmAITasks), no drops it (declineAITasks).
+function showConfirmButtons(yesLabel, noLabel) {
   const row = document.createElement('div');
   row.className = 'chat-quick-replies';
 
-  const add = document.createElement('button');
-  add.type = 'button';
-  add.className = 'chat-quick-reply is-primary';
-  add.textContent = 'Add them';
-  add.addEventListener('click', () => {
+  const yes = document.createElement('button');
+  yes.type = 'button';
+  yes.className = 'chat-quick-reply is-primary';
+  yes.textContent = yesLabel;
+  yes.addEventListener('click', () => {
     removeQuickReplies();
     window.electronAPI.confirmAITasks();
   });
 
-  const skip = document.createElement('button');
-  skip.type = 'button';
-  skip.className = 'chat-quick-reply';
-  skip.textContent = 'Not now';
-  skip.addEventListener('click', () => {
+  const no = document.createElement('button');
+  no.type = 'button';
+  no.className = 'chat-quick-reply';
+  no.textContent = noLabel;
+  no.addEventListener('click', () => {
     removeQuickReplies();
     window.electronAPI.declineAITasks();
   });
 
-  row.appendChild(add);
-  row.appendChild(skip);
+  row.appendChild(yes);
+  row.appendChild(no);
   chatLog.appendChild(row);
   chatLog.scrollTop = chatLog.scrollHeight;
 }
@@ -1120,6 +1134,14 @@ window.electronAPI.onAIBreakdown((info) => showTaskConfirmation(info.parentText,
 window.electronAPI.onAITasksAdded(() => {
   addChatLine("Done, it's on your list.", 'buddy');
 });
+
+// One line per edit, worded by the app, so the chat always says exactly what
+// changed (the buddy's own reply only reacts to it).
+window.electronAPI.onAITasksEdited((lines) => {
+  if (lines && lines.length) addChatLine(lines.join('\n'), 'buddy');
+});
+
+window.electronAPI.onAIConfirmRemoval((taskTexts) => showRemovalConfirmation(taskTexts));
 
 window.electronAPI.onAITasksFailed((message) => {
   addChatLine('Could not break that down: ' + message, 'error');

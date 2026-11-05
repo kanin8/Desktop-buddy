@@ -398,3 +398,10 @@ test('random operations keep the tree valid', () => {
     }
   }
 });
+test('rename changes the text and rejects blank or unknown tasks', () => {
+  const { store, parent } = seeded();
+  assert.strictEqual(store.rename(parent.id, '  Renamed  '), true);
+  assert.ok(texts(store).includes('Renamed'));
+  assert.strictEqual(store.rename(parent.id, '   '), false);
+  assert.strictEqual(store.rename('nope', 'x'), false);
+});
