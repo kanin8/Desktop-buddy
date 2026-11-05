@@ -96,3 +96,8 @@ test('no more than MAX_EDIT_ACTIONS edits are kept', () => {
   const list = describeList([], 50);
   assert.strictEqual(resolveActions(actions, list.idsByNumber, []).length, CONFIG.MAX_EDIT_ACTIONS);
 });
+
+test('opening or closing the list is not a task edit', () => {
+  const store = seeded();
+  assert.deepStrictEqual(run(store, [{ op: 'open_list', task: null }, { op: 'close_list', task: null }]), []);
+});

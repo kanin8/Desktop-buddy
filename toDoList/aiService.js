@@ -16,6 +16,7 @@ const { createSettingsStore } = require('./appSettings');
 const fs = require('fs');
 const { getStore, broadcastItems } = require('./todoService');
 const { describeList, resolveActions, applyEdits } = require('./taskEdits');
+const { isTodoWindowVisible } = require('./todoWindow');
 
 let settings = null;
 // In-flight request per requesting window, so a closed overlay can cancel work.
@@ -122,6 +123,10 @@ function applyListEdits(win, actions, idsByNumber) {
   const edits = resolveActions(actions, idsByNumber, store.getItems());
   const removals = edits.filter((edit) => edit.op === 'delete');
   const doneLines = applyEdits(store, edits.filter((edit) => edit.op !== 'delete'));
+  if (edits.some((edit) => edit.op === 'add')) showListPanel();
+  // After the auto-open above, so "add milk and close the list" ends closed.
+  const panelLine = applyPanelAction(actions);
+  if (panelLine) doneLines.push(panelLine);
 
   const removalTexts = removals
     .map((edit) => (store.getItems().find((item) => item.id === edit.id) || {}).text)
@@ -132,6 +137,32 @@ function applyListEdits(win, actions, idsByNumber) {
     });
   }
   return { doneLines: doneLines, removalTexts: removalTexts };
+}
+
+/**
+ * Opens the to-do panel if it is closed, so new tasks are seen right away.
+ * Goes through the host app's 'show-todolist' channel (main.js), which also
+ * updates the tray menu and the Settings checkbox.
+ */
+function showListPanel() {
+  ipcMain.emit('show-todolist');
+}
+
+/**
+ * Opens or closes the panel when the user asked for it in the chat. If both
+ * were asked, the last one wins. Side effect: shows or hides the panel.
+ * Returns the chat line for it, or '' when neither was asked.
+ */
+function applyPanelAction(actions) {
+  const panelActions = actions.filter((a) => a.op === 'open_list' || a.op === 'close_list');
+  if (!panelActions.length) return '';
+
+  const wantOpen = panelActions[panelActions.length - 1].op === 'open_list';
+  if (isTodoWindowVisible() === wantOpen) {
+    return wantOpen ? 'Your to-do list is already open.' : 'Your to-do list is already closed.';
+  }
+  ipcMain.emit(wantOpen ? 'show-todolist' : 'hide-todolist');
+  return wantOpen ? 'Opened your to-do list.' : 'Closed your to-do list.';
 }
 
 /**
@@ -218,11 +249,12 @@ async function offerBreakdown(win, goal, base) {
   }
 }
 
-/** Adds a goal and its steps to the list and tells the chat. */
+/** Adds a goal and its steps to the list, opens the panel and tells the chat. */
 function addBreakdown(win, parentText, subtasks) {
   const inserted = getStore().addSubtasks({ parentText: parentText, subtasks: subtasks });
   if (inserted) {
     broadcastItems(getStore().getItems());
+    showListPanel();
     send(win, 'ai-tasks-added');
   }
 }

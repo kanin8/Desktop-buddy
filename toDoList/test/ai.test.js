@@ -504,3 +504,11 @@ test('buildReplyMessages puts the list context between the voice guide and the p
   const messages = ai.buildReplyMessages('hi', 'GUIDE', null, 'LIST');
   assert.match(messages[0].content, /^GUIDE\n\nLIST\n\n/);
 });
+
+test('parseClassification reads opening and closing the list', () => {
+  assert.deepStrictEqual(ai.parseClassification('{"type":"edit","actions":[{"op":"open_list"}]}'), {
+    type: 'edit',
+    actions: [{ op: 'open_list', task: null, text: '' }],
+  });
+  assert.strictEqual(ai.parseClassification('{"type":"edit","actions":[{"op":"close_list"}]}').actions[0].op, 'close_list');
+});

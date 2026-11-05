@@ -28,7 +28,9 @@ const CLASSIFY_PERSONA =
   'Decide what the user wants from their latest message. Reply with JSON only, one of:\n' +
   '{"type": "chat"}: greeting, question, follow-up, venting, casual talk, or anything that does not change the list.\n' +
   '{"type": "task"}: a goal or plan they want broken into steps.\n' +
-  '{"type": "edit", "actions": [...]}: they want to change their to-do list. Each action is one of:\n' +
+  '{"type": "edit", "actions": [...]}: they want to change their to-do list, or open or close it. Each action is one of:\n' +
+  '  {"op": "open_list"} open (show) the to-do list window\n' +
+  '  {"op": "close_list"} close (hide) the to-do list window\n' +
   '  {"op": "complete", "task": N} cross off a task or mark it done\n' +
   '  {"op": "reopen", "task": N} mark a done task as not done\n' +
   '  {"op": "rename", "task": N, "text": "new wording"} edit or reword a task\n' +
@@ -39,7 +41,8 @@ const CLASSIFY_PERSONA =
   'If you cannot tell which task they mean, reply {"type": "chat"}.\n' +
   'Examples: "plan a website"->task, "write a script"->task, "hello"->chat, "how are you"->chat, ' +
   '"I finished the reading"->complete the matching task, "change 2 to call mom at 5"->rename task 2, ' +
-  '"add buy milk"->add, "get rid of the gym one"->delete the matching task.';
+  '"add buy milk"->add, "get rid of the gym one"->delete the matching task, ' +
+  '"show me my list"->open_list, "hide the to-do list"->close_list.';
 
 // Activity prompt: decides whether the window the user is looking at is work
 // or entertainment. Only used for apps the local rule list does not know.
@@ -423,8 +426,9 @@ async function breakdownGoal({ provider, baseUrl, apiKey, model, text, openItems
   return { parent: String(text || '').trim(), subtasks: [] };
 }
 
-// List edits the classifier may ask for (see CLASSIFY_PERSONA).
-var EDIT_OPS = ['complete', 'reopen', 'rename', 'delete', 'add'];
+// List edits the classifier may ask for (see CLASSIFY_PERSONA). open_list and
+// close_list show or hide the panel instead of changing tasks.
+var EDIT_OPS = ['complete', 'reopen', 'rename', 'delete', 'add', 'open_list', 'close_list'];
 
 /**
  * Keeps the well-formed edit actions as { op, task, text }. Only the shape is
