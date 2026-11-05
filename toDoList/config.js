@@ -81,9 +81,13 @@ module.exports = {
   AI_CHAT_HISTORY_MESSAGES: 20,
   AI_CHAT_HISTORY_MAX_CHARS: 2000,
 
-  // Input classification (task vs chat)
+  // Input classification (chat, a goal to break down, or edits to the list)
   AI_CLASSIFY_TEMPERATURE: 0.1,
-  AI_CLASSIFY_MAX_TOKENS: 50,
+  AI_CLASSIFY_MAX_TOKENS: 300,           // room for a few list edits in one reply
+  // Recent chat lines sent with the classification, so "cross that one off"
+  // can be matched to the task the buddy just talked about.
+  AI_CLASSIFY_HISTORY_MESSAGES: 6,
+  MAX_EDIT_ACTIONS: 10,                  // list edits applied from one message
 
   // Activity classification (productive vs leisure for the active window)
   AI_ACTIVITY_TEMPERATURE: 0,            // same window should get the same answer

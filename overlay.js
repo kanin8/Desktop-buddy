@@ -998,6 +998,9 @@ function showTaskConfirmation(parentText) {
   removeQuickReplies();
   const bubble = addChatLine('Should I add the steps for "' + parentText + '" to your to-do list?', 'buddy');
 
+// Adds the yes/no quick replies for whatever change is pending in the main
+// process. Yes applies it (confirmAITasks), no drops it (declineAITasks).
+function showConfirmButtons(yesLabel, noLabel) {
   const row = document.createElement('div');
   row.className = 'chat-quick-replies';
 
@@ -1245,6 +1248,14 @@ window.electronAPI.onAIBreakdown((info) => showTaskConfirmation(info.parentText)
 window.electronAPI.onAITasksAdded(() => {
   addChatLine("Done, it's on your list.", 'buddy');
 });
+
+// One line per edit, worded by the app, so the chat always says exactly what
+// changed (the buddy's own reply only reacts to it).
+window.electronAPI.onAITasksEdited((lines) => {
+  if (lines && lines.length) addChatLine(lines.join('\n'), 'buddy');
+});
+
+window.electronAPI.onAIConfirmRemoval((taskTexts) => showRemovalConfirmation(taskTexts));
 
 window.electronAPI.onAITasksFailed((message) => {
   addChatLine('Could not break that down: ' + message, 'error');

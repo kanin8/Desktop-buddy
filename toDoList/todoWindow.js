@@ -175,6 +175,11 @@ function createTodoWindow({ onClose } = {}) {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // The see-through frog overlay covers the whole screen above this
+      // panel, and Chromium (on Windows especially) can count the panel as
+      // hidden behind it and stop drawing it. Tasks added from the chat then
+      // only showed up after the panel was clicked. This keeps it drawing.
+      backgroundThrottling: false,
     },
   });
 

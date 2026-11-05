@@ -102,9 +102,12 @@ function toAlternatingTurns(lines) {
  * `history` (optional) is the chat so far as [{ role, content }], oldest
  * first, including nudges and the user's button replies, so the buddy knows
  * what it just asked.
+ * `listContext` (optional) describes the to-do list and what the app just did
+ * to it, so the buddy can talk about the tasks without claiming edits itself.
  */
-function buildReplyMessages(text, voiceGuide, history) {
-  var systemPrompt = voiceGuide ? voiceGuide + '\n\n' + PERSONA : PERSONA;
+function buildReplyMessages(text, voiceGuide, history, listContext) {
+  var parts = [voiceGuide, listContext, PERSONA].filter(Boolean);
+  var systemPrompt = parts.join('\n\n');
   var lines = cleanChatHistory(history).concat([
     { role: 'user', content: String(text || '').trim() },
   ]);
@@ -113,11 +116,25 @@ function buildReplyMessages(text, voiceGuide, history) {
 
 /**
  * Messages for input classification.
+ * `listText` (optional) is the numbered to-do list from taskEdits.describeList.
+ * `history` (optional) is the chat before `text`; only the last few lines are
+ * sent, enough to know what "that one" refers to.
+ * With neither, the user turn is just the message.
  */
-function buildClassifyMessages(text) {
+function buildClassifyMessages(text, listText, history) {
+  var message = String(text || '').trim();
+  var recent = cleanChatHistory(history).slice(-CONFIG.AI_CLASSIFY_HISTORY_MESSAGES)
+    .map(function (line) { return (line.role === 'user' ? 'User: ' : 'Buddy: ') + line.content; })
+    .join('\n');
+
+  var context = [];
+  if (recent) context.push('Recent chat:\n' + recent);
+  if (listText !== undefined) context.push('To-do list:\n' + (listText || '(empty)'));
+  var content = context.length ? context.join('\n\n') + '\n\nLatest message: ' + message : message;
+
   return [
     { role: 'system', content: CLASSIFY_PERSONA },
-    { role: 'user', content: String(text || '').trim() },
+    { role: 'user', content: content },
   ];
 }
 
@@ -349,13 +366,13 @@ function callModel(options) {
 }
 
 /** Streamed reply for the speech bubble. */
-async function streamReply({ provider, baseUrl, apiKey, model, text, voiceGuide, history, onToken, signal }) {
+async function streamReply({ provider, baseUrl, apiKey, model, text, voiceGuide, history, listContext, onToken, signal }) {
   return callModel({
     provider: provider,
     baseUrl: baseUrl,
     apiKey: apiKey,
     model: model,
-    messages: buildReplyMessages(text, voiceGuide, history),
+    messages: buildReplyMessages(text, voiceGuide, history, listContext),
     stream: true,
     temperature: CONFIG.AI_TEMPERATURE,
     maxTokens: CONFIG.AI_MAX_TOKENS,
@@ -400,6 +417,10 @@ async function breakdownGoal({ provider, baseUrl, apiKey, model, text, openItems
   return { parent: String(text || '').trim(), subtasks: [] };
 }
 
+// List edits the classifier may ask for (see CLASSIFY_PERSONA). open_list and
+// close_list show or hide the panel instead of changing tasks.
+var EDIT_OPS = ['complete', 'reopen', 'rename', 'delete', 'add', 'open_list', 'close_list'];
+
 /**
  * Parses the classification response into { type: 'task' | 'chat', action? }.
  * `action` is 'open-todo' when the user asked to see the list. Returns null if
@@ -431,11 +452,12 @@ function parseClassification(raw) {
 }
 
 /**
- * Classifies user input as 'task' (wants subtasks) or 'chat' (casual).
- * Uses a fast, low-temperature call to avoid latency.
+ * Classifies user input as 'task' (wants subtasks), 'chat' (casual) or 'edit'
+ * (changes to the to-do list). `listText` and `history` are explained at
+ * buildClassifyMessages. Uses a fast, low-temperature call to avoid latency.
  */
-async function classifyInput({ provider, baseUrl, apiKey, model, text, signal }) {
-  var messages = buildClassifyMessages(text);
+async function classifyInput({ provider, baseUrl, apiKey, model, text, listText, history, signal }) {
+  var messages = buildClassifyMessages(text, listText, history);
 
   var raw = await callModel({
     provider: provider,

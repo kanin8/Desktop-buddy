@@ -571,6 +571,12 @@ function closeTodoPanel() {
   ipcMain.emit('todolist-state-changed');
 }
 
+// Closes the panel, but never opens it. Used when the user asks the buddy in
+// the chat to close their list.
+ipcMain.on('hide-todolist', () => {
+  if (isTodoWindowVisible()) closeTodoPanel();
+});
+
 ipcMain.on('toggle-todolist', () => {
   if (isTodoWindowVisible()) {
     closeTodoPanel();
