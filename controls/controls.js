@@ -70,6 +70,12 @@ function createBuddyControls(elements, getFrogRect, actions) {
     chatButton.setAttribute('aria-pressed', String(isActive));
   }
 
+  // Highlights To-do in the accent colour while the to-do panel is open.
+  function setTodoActive(isActive) {
+    todoButton.classList.toggle('is-active', isActive);
+    todoButton.setAttribute('aria-pressed', String(isActive));
+  }
+
   // --- MORE MENU ---
 
   function openMenu({ focusFirstItem = false } = {}) {
@@ -221,6 +227,7 @@ function createBuddyControls(elements, getFrogRect, actions) {
     openPinned,
     closeMenu,
     setChatActive,
+    setTodoActive,
     positionMenu,
     handleEscape,
   };

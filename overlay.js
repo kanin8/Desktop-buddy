@@ -341,13 +341,22 @@ const controls = createBuddyControls(
   }
 );
 
+// The panel may already be open when the overlay (re)loads, and the placement
+// event below only fires on a change, so read the state once at startup to
+// light the To-do icon.
+window.electronAPI.getTodoListState().then((state) => {
+  controls.setTodoActive(state === 'running');
+});
+
 // Where the to-do panel window is, mirrored from the main process so the
 // chat lift can rise above the list. Null while the panel is hidden. Every
 // change lets chatLayout run its deferred post-drop lift re-check against
-// the bounds just settled.
+// the bounds just settled, and keeps the pill's To-do icon lit while the
+// panel is open.
 let todoPanelRect = null;
 window.electronAPI.onTodoPanelPlacement((info) => {
   todoPanelRect = info && info.visible ? info : null;
+  controls.setTodoActive(todoPanelRect !== null);
   chatLayout.notePanelPlacement();
 });
 
