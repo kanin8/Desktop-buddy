@@ -60,4 +60,24 @@ module.exports = {
   // "Until tomorrow" wakes the buddy at this hour the next day (local time,
   // 24-hour clock).
   SNOOZE_TOMORROW_HOUR: 8,
+
+  // Appearance settings (Settings > Appearance). Theme choices map straight
+  // to Electron's nativeTheme.themeSource; 'system' follows the OS.
+  THEME_CHOICES: ['system', 'light', 'dark'],
+  THEME_DEFAULT: 'system',
+
+  // How see-through the buddy's messages and menus are (1 = fully solid).
+  // The default matches --surface-opacity in styles/tokens.css, the value
+  // contrast was checked at. Not lower than 0.7: below that, text on busy
+  // backgrounds gets too hard to read in either theme.
+  SURFACE_OPACITY_MIN: 0.7,
+  SURFACE_OPACITY_MAX: 1,
+  SURFACE_OPACITY_DEFAULT: 0.9,
+  SURFACE_OPACITY_STEP: 0.05,
+
+  // Background of the solid windows (Settings, to-do panel) before their
+  // page has painted, so they don't flash the wrong colour. Must match
+  // --grey-900 (dark) and --grey-50 (light) in styles/tokens.css.
+  PANEL_BG_DARK: '#1c1c1e',
+  PANEL_BG_LIGHT: '#f4f4f6',
 };
