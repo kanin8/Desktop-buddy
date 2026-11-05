@@ -188,31 +188,25 @@ Tone: playful and a bit dramatic, never guilt-tripping.
 - "Let's go, that's another one down!"
 
 ### Task breakdown
-AI-generated, within the voice rules and hard limits.
+AI-generated, within the voice rules and hard limits. The steps are not listed in the chat: they are added to the to-do list only after the user confirms.
 
-Format:
-- One short intro line, then 3-5 numbered steps, then one closing line.
+Format in chat:
+- One short line asking whether to add the steps for the task, then two quick replies: "Yes" and "No". The steps themselves stay hidden.
+- "Yes" adds the steps to the to-do list; "No" adds nothing.
+
+Content limits (for the generated steps):
 - Each step starts with a verb and stays short (ideally under about 10 words).
 - Each step is small enough to start right away (roughly 5-15 minutes). **[TEST]**
 - The first step is always the easiest, so starting feels cheap.
 - A short break can work as the last step to keep pressure low.
-
-Content limits:
 - Steps say what to do, never what to write. No ready-made outline content, example sentences or draft text.
 - Casual wording, no coach-like phrasing, no emojis.
 
-Closing line: invites changes and offers to add the steps to the to-do list. **[to confirm with teammates: to-do list exists]**
-
 Example (task: "write a 2000-word essay on climate policy"):
 
-> Okay, here's a way in:
-> 1. Re-read the assignment and note what it asks for
-> 2. Pick the angle that interests you most
-> 3. Jot down three main points, rough is fine
-> 4. Write a messy first paragraph, it doesn't have to be good
-> 5. Take a quick break, then see how it feels
+> Should I add the steps for "write a 2000-word essay on climate policy" to your to-do list?
 >
-> Wanna change anything, or should I add these to your list?
+> [Yes] [No]
 
 ### User asks the buddy to write their text
 - "Sorry, you gotta try that yourself but I'll be here when you've come up with something!"

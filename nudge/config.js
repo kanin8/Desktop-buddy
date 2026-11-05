@@ -82,4 +82,45 @@ window.NUDGE_CONFIG = {
     { id: 'yes', label: 'Yes, help me!', style: 'accent' },
     { id: 'notNow', label: 'Not now', style: 'secondary' },
   ],
+
+  // The greeting when the app starts: a short conversation in the nudge
+  // bubble. It isn't about procrastination, so it never counts toward the
+  // cooldowns above. What each reply does is decided in overlay.js
+  // (handleGreetingReply).
+  startupGreeting: {
+    // How long to wait after startup, so the frog settles in before it speaks.
+    delayMs: 3000,
+
+    text: 'Hey! Working on something today?',
+    replies: [
+      { id: 'greetYep', label: 'Yep', style: 'accent' },
+      { id: 'greetNotToday', label: 'Not today', style: 'secondary' },
+    ],
+
+    // After "Yep". "Yes, help me!" opens the chat with helpLine above.
+    followUpText: 'Nice! Want help getting started?',
+    followUpReplies: [
+      { id: 'greetHelp', label: 'Yes, help me!', style: 'accent' },
+      { id: 'greetGotIt', label: "I've got it", style: 'secondary' },
+    ],
+
+    // Shown briefly after "I've got it", then it fades.
+    gotItLine: "Cool, I'll be right here.",
+
+    // After "Not today": from then on no judging and no proactive nudges
+    // for the session, then the frog asks whether to hide. Ignoring this
+    // question or closing it with × counts as "Stay quietly".
+    notTodayQuestion: 'Fair enough. Want me to hide, or just hang out quietly?',
+    notTodayReplies: [
+      { id: 'greetHide', label: 'Hide', style: 'secondary' },
+      { id: 'greetStay', label: 'Stay quietly', style: 'accent' },
+    ],
+
+    // Shown briefly after "Hide"; when it closes the frog hides until the
+    // user brings it back.
+    hideLine: 'Find me if you need me.',
+
+    // Shown briefly after "Stay quietly"; the frog stays on screen.
+    stayLine: "Cool, I'll just chill here.",
+  },
 };

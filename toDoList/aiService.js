@@ -112,73 +112,16 @@ async function classifyMessage(goal, listText, history, base) {
   }
 }
 
-/**
- * Makes the list edits the AI found. Removals are held back until the user
- * confirms (ai-confirm-tasks), since a removed task can't be brought back.
- * Side effect: changes the store, and may set a pending confirmation.
- * Returns { doneLines, removalTexts } for the reply and the chat.
- */
-function applyListEdits(win, actions, idsByNumber) {
-  const store = getStore();
-  const edits = resolveActions(actions, idsByNumber, store.getItems());
-  const removals = edits.filter((edit) => edit.op === 'delete');
-  const doneLines = applyEdits(store, edits.filter((edit) => edit.op !== 'delete'));
-  if (edits.some((edit) => edit.op === 'add')) showListPanel();
-  // After the auto-open above, so "add milk and close the list" ends closed.
-  const panelLine = applyPanelAction(actions);
-  if (panelLine) doneLines.push(panelLine);
-
-  const removalTexts = removals
-    .map((edit) => (store.getItems().find((item) => item.id === edit.id) || {}).text)
-    .filter(Boolean);
-  if (removalTexts.length) {
-    pendingConfirmations.set(eventKey(win), {
-      apply: () => send(win, 'ai-tasks-edited', applyEdits(getStore(), removals)),
-    });
+  // The user may have asked the buddy to open the to-do list, e.g. "show me my
+  // to-do list". The overlay owns that panel, so hand it the request.
+  if (classification.action === 'open-todo') {
+    send(win, 'ai-open-todo');
   }
-  return { doneLines: doneLines, removalTexts: removalTexts };
-}
 
-/**
- * Opens the to-do panel if it is closed, so new tasks are seen right away.
- * Goes through the host app's 'show-todolist' channel (main.js), which also
- * updates the tray menu and the Settings checkbox.
- */
-function showListPanel() {
-  ipcMain.emit('show-todolist');
-}
-
-/**
- * Opens or closes the panel when the user asked for it in the chat. If both
- * were asked, the last one wins. Side effect: shows or hides the panel.
- * Returns the chat line for it, or '' when neither was asked.
- */
-function applyPanelAction(actions) {
-  const panelActions = actions.filter((a) => a.op === 'open_list' || a.op === 'close_list');
-  if (!panelActions.length) return '';
-
-  const wantOpen = panelActions[panelActions.length - 1].op === 'open_list';
-  if (isTodoWindowVisible() === wantOpen) {
-    return wantOpen ? 'Your to-do list is already open.' : 'Your to-do list is already closed.';
-  }
-  ipcMain.emit(wantOpen ? 'show-todolist' : 'hide-todolist');
-  return wantOpen ? 'Opened your to-do list.' : 'Closed your to-do list.';
-}
-
-/**
- * Tells the reply what the list looks like and what the app just did to it,
- * so the buddy can react without claiming it made the change itself.
- */
-function describeListForReply(listUpdate) {
-  const listText = describeList(getStore().getItems(), CONFIG.MAX_CONTEXT_ITEMS).text;
-  const parts = [listText ? 'The user\'s to-do list right now:\n' + listText : 'The user\'s to-do list is empty.'];
-  if (!listUpdate) return parts[0];
-
-  if (listUpdate.doneLines.length) {
-    parts.push('For their latest message the app has just made these changes: ' + listUpdate.doneLines.join(' '));
-  }
-  if (listUpdate.removalTexts.length) {
-    parts.push('The app is asking the user to confirm removing: "' + listUpdate.removalTexts.join('", "') + '".');
+  if (classification.type !== 'task') {
+    // Casual chat - reply was already streamed, nothing more to do
+    inFlight.delete(eventKey(win));
+    return;
   }
   if (!listUpdate.doneLines.length && !listUpdate.removalTexts.length) {
     parts.push('They asked to change the list, but the app could not tell which task they meant. Briefly ask which one.');
@@ -319,9 +262,8 @@ function registerAiIpc() {
 
   ipcMain.handle('ai-ask', (event, text, history) => askAndBreakdown(overlayOf(event), text, history));
 
-  // Confirmation of a shown breakdown or removal: "Add them" / "Remove" go
-  // here, "Not now" / "Keep" just drop the pending entry, so nothing is added
-  // or removed without a yes.
+  // Confirmation of a pending breakdown: "Yes" goes here, "No" just drops the
+  // pending entry so nothing is ever added without a yes.
   ipcMain.handle('ai-confirm-tasks', (event) => confirmPendingTasks(overlayOf(event)));
   ipcMain.handle('ai-cancel-tasks', (event) => {
     pendingConfirmations.delete(eventKey(overlayOf(event)));
