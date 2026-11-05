@@ -16,9 +16,10 @@
 }
 
 /* Tells Chromium to draw native parts (dropdown lists, scrollbars, model
-   suggestions) dark too, so they don't flash white on the grey window. */
+   suggestions, the slider) in the current theme, so they match the window
+   instead of flashing white on dark or dark on light. */
 :root {
-  color-scheme: dark;
+  color-scheme: light dark;
 }
 
 body {
@@ -241,6 +242,37 @@ input {
 
 .ai-status:empty {
   display: none;
+}
+
+/* ============================
+   4. Components — appearance
+   ============================
+   Theme dropdown and opacity slider, stacked like the AI fields. */
+.appearance-field {
+  padding: var(--space-3) 0;
+}
+
+.appearance-field + .appearance-field {
+  border-top: var(--border-width) solid var(--divider);
+}
+
+/* Label on the left, the slider's current value on the right. */
+.field-label-row {
+  display: flex;
+  justify-content: space-between;
+}
+
+.range-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+/* The native slider, tinted with the accent. */
+.range {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 /* ============================

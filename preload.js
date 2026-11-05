@@ -38,6 +38,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAISettings: () => ipcRenderer.invoke('ai-get-settings'),
   setAISettings: (patch) => ipcRenderer.invoke('ai-set-settings', patch),
 
+  // Appearance (Settings > Appearance): { theme, surfaceOpacity }. Changes
+  // are pushed to every window, so the overlay updates its transparency live.
+  getAppearance: () => ipcRenderer.invoke('appearance-get'),
+  setAppearance: (patch) => ipcRenderer.invoke('appearance-set', patch),
+  onAppearanceChanged: (callback) => ipcRenderer.on('appearance-changed', (event, settings) => callback(settings)),
+
   // Hover pill and More menu (controls/controls.js).
   showSettings: () => ipcRenderer.send('show-settings'),
   showTodoList: () => ipcRenderer.send('show-todolist'),

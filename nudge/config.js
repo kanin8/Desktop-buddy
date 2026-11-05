@@ -23,18 +23,21 @@ window.NUDGE_CONFIG = {
 
   // How long the user must stay in leisure after the frog starts judging
   // before it says anything. A quick look at something else shouldn't
-  // trigger a nudge.
-  judgingDelayMs: 180000,
+  // trigger a nudge. Kept short (10 s) for the demo so judges don't wait.
+  judgingDelayMs: 10000,
 
-  // Minimum time between two nudges, so they never pile up.
-  cooldownMs: 600000,
+  // Minimum time between two nudges, so they never pile up. Kept short (20 s)
+  // for the demo so judges can see a second nudge without waiting.
+  cooldownMs: 20000,
 
-  // At most this many nudges in any rolling hour.
-  maxPerHour: 3,
+  // At most this many nudges in any rolling hour. Raised for the demo so
+  // nudges don't stop after the third one.
+  maxPerHour: 20,
 
   // After "Not now" (or "I'm fine"), the buddy stays quiet this long. The user
-  // said no, so it respects that for a good while.
-  quietAfterNotNowMs: 2700000,
+  // said no, so it respects that for a while. Kept short (30 s) for the demo
+  // so a judge clicking "Not now" doesn't silence the buddy for the session.
+  quietAfterNotNowMs: 30000,
 
   // Said when the frog has been judging for judgingDelayMs. Picked at random,
   // never the same line twice in a row. A line with its own replies uses those
