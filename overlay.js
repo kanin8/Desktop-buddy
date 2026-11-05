@@ -140,6 +140,10 @@ function update() {
 }
 
 // --- MESSAGE QUEUE SYSTEM ---
+// Items are either a plain string (shown for DEFAULT_BUBBLE_VISIBLE_MS) or an
+// object { text, visibleMs } for a message that needs its own timing.
+const DEFAULT_BUBBLE_VISIBLE_MS = 4000;
+const BUBBLE_FADE_MS = 150;
 const messageQueue = [];
 let isSpeaking = false;
 
@@ -148,10 +152,19 @@ async function processQueue() {
   isSpeaking = true;
 
   while (messageQueue.length > 0) {
-    const text = messageQueue.shift();
+    const message = messageQueue.shift();
+    const text = typeof message === 'string' ? message : message.text;
+    const visibleMs = typeof message === 'string'
+      ? DEFAULT_BUBBLE_VISIBLE_MS
+      : (message.visibleMs || DEFAULT_BUBBLE_VISIBLE_MS);
+
     bubble.innerText = text;
     bubble.style.display = 'block';
-    await new Promise(resolve => setTimeout(resolve, 4000));
+    bubble.style.opacity = '1';
+    await new Promise(resolve => setTimeout(resolve, visibleMs));
+
+    bubble.style.opacity = '0';
+    await new Promise(resolve => setTimeout(resolve, BUBBLE_FADE_MS));
     bubble.style.display = 'none';
     await new Promise(resolve => setTimeout(resolve, 500));
   }
@@ -1028,6 +1041,23 @@ function closeChat() {
   releaseIfIdle();
 }
 
+// Greets the user once when the overlay starts, using the speech bubble above
+// the frog. The chat stays closed; the greeting is just a message.
+let hasGreetedOnStartup = false;
+
+function greetOnStartup() {
+  if (hasGreetedOnStartup) return;
+  hasGreetedOnStartup = true;
+
+  const { startupGreetingText, startupGreetingVisibleMs } = window.CHAT_CONFIG;
+  if (!startupGreetingText) return;
+
+  // Play the talking animation while the speech bubble shows the greeting.
+  speakMessage(startupGreetingText);
+  messageQueue.push({ text: startupGreetingText, visibleMs: startupGreetingVisibleMs });
+  processQueue();
+}
+
 function submitChat(e) {
   e.preventDefault();
   const goal = chatInput.value.trim();
@@ -1150,3 +1180,7 @@ spriteAnimator.play(DEFAULT_IMAGE_ANIMATION);
 placeAvatar(avatar, placementParts);
 sendAvatarPositionNow();
 update();
+
+// After the frog is placed and the first frame has run, wait the configured
+// delay, then show the greeting in the speech bubble above the frog.
+setTimeout(greetOnStartup, window.CHAT_CONFIG.startupGreetingDelayMs);

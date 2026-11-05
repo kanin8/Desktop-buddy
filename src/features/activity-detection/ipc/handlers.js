@@ -13,6 +13,7 @@ class ActivityIPCHandlers {
     this.classifier = new ActivityClassifier();
     this.currentActivity = null;
     this.pollingInterval = null;
+    this.startupTimer = null;
 
     // True while a poll is running. A slow AI call can outlast the poll
     // interval, and polls shouldn't pile up behind it.
@@ -45,16 +46,26 @@ class ActivityIPCHandlers {
 
   startPolling() {
     const intervalMs = CONFIG.ACTIVITY_POLL_MS;
-    console.log(`[Activity] Starting polling loop (every ${intervalMs / 1000} seconds)...`);
-    this.pollingInterval = setInterval(async () => {
-      if (this.isPolling) return;
-      this.isPolling = true;
-      try {
-        await this.updateLoop();
-      } finally {
-        this.isPolling = false;
-      }
-    }, intervalMs);
+    const startDelayMs = CONFIG.ACTIVITY_STARTUP_DELAY_MS;
+    console.log(`[Activity] Waiting ${startDelayMs / 1000} seconds before the first activity check...`);
+
+    this.startupTimer = setTimeout(() => {
+      this.startupTimer = null;
+      console.log(`[Activity] Starting polling loop (every ${intervalMs / 1000} seconds)...`);
+      this.pollOnce();
+      this.pollingInterval = setInterval(() => this.pollOnce(), intervalMs);
+    }, startDelayMs);
+  }
+
+  // One poll, guarded so a slow AI call cannot be lapped by the next interval.
+  async pollOnce() {
+    if (this.isPolling) return;
+    this.isPolling = true;
+    try {
+      await this.updateLoop();
+    } finally {
+      this.isPolling = false;
+    }
   }
 
   async updateLoop() {
