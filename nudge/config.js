@@ -26,11 +26,13 @@ window.NUDGE_CONFIG = {
   // trigger a nudge.
   judgingDelayMs: 180000,
 
-  // Minimum time between two nudges, so they never pile up.
-  cooldownMs: 600000,
+  // Minimum time between two nudges, so they never pile up. Kept short (20 s)
+  // for the demo so judges can see a second nudge without waiting.
+  cooldownMs: 20000,
 
-  // At most this many nudges in any rolling hour.
-  maxPerHour: 3,
+  // At most this many nudges in any rolling hour. Raised for the demo so
+  // nudges don't stop after the third one.
+  maxPerHour: 20,
 
   // After "Not now" (or "I'm fine"), the buddy stays quiet this long. The user
   // said no, so it respects that for a good while.
