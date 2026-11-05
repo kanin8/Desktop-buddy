@@ -438,13 +438,16 @@ ipcMain.on('quit-app', () => app.quit());
 
 // --- SNOOZE ---
 // "Snooze" in the buddy's More menu hides it for a while. Only one snooze runs
-// at a time, and bringing the buddy back any other way (tray, shortcut)
-// cancels it.
+// at a time, and bringing the buddy back any other way (tray, shortcut,
+// Settings) cancels it. 'untilBack' (after "Not today" on the startup
+// greeting) hides it with no wake-up time: it stays hidden until brought back.
 let snoozeTimer = null;
 
 // Milliseconds until the chosen snooze ends, or undefined for an unknown
-// choice. 'tomorrow' means the next day at CONFIG.SNOOZE_TOMORROW_HOUR.
+// choice. 'tomorrow' means the next day at CONFIG.SNOOZE_TOMORROW_HOUR;
+// 'untilBack' is Infinity (no wake-up).
 function getSnoozeDurationMs(choice, now = new Date()) {
+  if (choice === 'untilBack') return Infinity;
   if (choice === 'tomorrow') {
     const wakeAt = new Date(now);
     wakeAt.setDate(wakeAt.getDate() + 1);
@@ -471,12 +474,14 @@ function wakeFromSnooze() {
 
 ipcMain.on('snooze', (event, choice) => {
   const durationMs = getSnoozeDurationMs(choice);
-  if (!Number.isFinite(durationMs) || durationMs <= 0) return;
+  if (typeof durationMs !== 'number' || Number.isNaN(durationMs) || durationMs <= 0) return;
   if (!overlayWin || overlayWin.isDestroyed()) return;
 
   cancelSnooze();
   overlayWin.hide();
-  snoozeTimer = setTimeout(wakeFromSnooze, durationMs);
+  // No timer for 'untilBack': setTimeout can't wait forever (it would fire
+  // almost at once), and the user brings the buddy back by hand.
+  if (Number.isFinite(durationMs)) snoozeTimer = setTimeout(wakeFromSnooze, durationMs);
   ipcMain.emit('avatar-state-changed');
 });
 
