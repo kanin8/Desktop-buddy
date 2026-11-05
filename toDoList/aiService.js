@@ -103,6 +103,12 @@ async function askAndBreakdown(win, text, history) {
     classification = { type: 'chat' };
   }
 
+  // The user may have asked the buddy to open the to-do list, e.g. "show me my
+  // to-do list". The overlay owns that panel, so hand it the request.
+  if (classification.action === 'open-todo') {
+    send(win, 'ai-open-todo');
+  }
+
   if (classification.type !== 'task') {
     // Casual chat - reply was already streamed, nothing more to do
     inFlight.delete(eventKey(win));
@@ -205,8 +211,8 @@ function registerAiIpc() {
 
   ipcMain.handle('ai-ask', (event, text, history) => askAndBreakdown(overlayOf(event), text, history));
 
-  // Confirmation of a shown breakdown: "Add them" goes here, "Not now" just
-  // drops the pending entry so nothing is ever added without a yes.
+  // Confirmation of a pending breakdown: "Yes" goes here, "No" just drops the
+  // pending entry so nothing is ever added without a yes.
   ipcMain.handle('ai-confirm-tasks', (event) => confirmPendingTasks(overlayOf(event)));
   ipcMain.handle('ai-cancel-tasks', (event) => {
     pendingAdditions.delete(eventKey(overlayOf(event)));

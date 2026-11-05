@@ -19,15 +19,21 @@ const { callClaudeApi } = require('./anthropicClient');
 // fixed messages (e.g. tier 3, three sentences) through the length limit.
 const PERSONA =
   'Keep replies short, usually one or two sentences. No lists or markdown. ' +
-  'If you have been given a message to send word for word, send exactly that.';
+  'If you have been given a message to send word for word, send exactly that. ' +
+  'If the user asks you to open their to-do list, say you are opening it for them.';
 
 // Classification prompt: determines if user input is a task/goal (needs subtasks)
-// or casual chat (question, greeting, follow-up, venting).
+// or casual chat (question, greeting, follow-up, venting). It also spots a
+// request to open the to-do list, so the buddy can do that for the user.
 const CLASSIFY_PERSONA =
   'Classify the user\'s message as "task" (goal, plan, or request to break into steps) ' +
   'or "chat" (greeting, question, follow-up, venting, casual talk). ' +
-  'Examples: "plan a website"->task, "write a script"->task, "hello"->chat, "how are you"->chat. ' +
-  'Reply with JSON only: {"type": "task"} or {"type": "chat"}.';
+  'If the user asks to open, show or view their to-do list, add "action":"open-todo". ' +
+  'Examples: "plan a website"->{"type":"task"}, "write a script"->{"type":"task"}, ' +
+  '"hello"->{"type":"chat"}, "how are you"->{"type":"chat"}, ' +
+  '"open my to-do list"->{"type":"chat","action":"open-todo"}. ' +
+  'Reply with JSON only, in the shape {"type": "task"} or {"type": "chat"}; ' +
+  'add "action":"open-todo" only when the user asks to open the list.';
 
 // Activity prompt: decides whether the window the user is looking at is work
 // or entertainment. Only used for apps the local rule list does not know.
@@ -395,8 +401,9 @@ async function breakdownGoal({ provider, baseUrl, apiKey, model, text, openItems
 }
 
 /**
- * Parses the classification response into { type: 'task' | 'chat' }.
- * Returns null if parsing fails.
+ * Parses the classification response into { type: 'task' | 'chat', action? }.
+ * `action` is 'open-todo' when the user asked to see the list. Returns null if
+ * there is nothing usable.
  */
 function parseClassification(raw) {
   var candidate = stripCodeFences(raw);
@@ -412,9 +419,15 @@ function parseClassification(raw) {
   if (!parsed || typeof parsed !== 'object') return null;
 
   var type = typeof parsed.type === 'string' ? parsed.type.toLowerCase() : '';
-  if (type !== 'task' && type !== 'chat') return null;
+  var action = typeof parsed.action === 'string' ? parsed.action.toLowerCase() : '';
 
-  return { type: type };
+  var result = {};
+  if (type === 'task' || type === 'chat') result.type = type;
+  if (action === 'open-todo') result.action = 'open-todo';
+  if (!result.type && !result.action) return null;
+  // An action on its own still means chat, so the turn stays conversational.
+  result.type = result.type || 'chat';
+  return result;
 }
 
 /**
