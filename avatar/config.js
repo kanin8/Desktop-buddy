@@ -81,9 +81,9 @@ window.AVATAR_SPRITE_CONFIG = {
 
       // The feet rest at 86.1% down this sheet's cells but 99.7% down idle's,
       // so centring both in the same box would dip the frog ~9px on click.
-      // This shifts it back up. Expressed as a plain offset so it can be
-      // eyeballed and tuned here rather than recomputed.
-      offsetY: -9,
+      // The ramp keeps the first frame on idle's baseline and lifts the final
+      // landing frame back onto it, so the handoff to idle does not drift.
+      offsetY: { from: -9, to: -6 },
     },
 
     // --- Category-driven poses ---
@@ -96,8 +96,9 @@ window.AVATAR_SPRITE_CONFIG = {
     // height left them looking a little larger than the standing frog, since
     // they also carry the chair and desk. The desk and typing poses are 5%
     // smaller again, as they still read slightly large beside the others.
-    // offsetY aligns each pose's feet with idle's baseline
-    // (box centre + --avatar-feet-offset).
+    // offsetY keeps transitions planted: standing poses land on idle's
+    // baseline (box centre + --avatar-feet-offset), and the intro clips chain
+    // onto the seated baseline instead of jumping partway through.
     sittingDown: {
       sheet: 'avatar/sittingDown.png',
       frameWidth: 338,
@@ -110,7 +111,8 @@ window.AVATAR_SPRITE_CONFIG = {
         width: 80,
         height: 143,
       },
-      offsetY: -11,
+      // Starts where idle's feet end, then settles onto the seated baseline.
+      offsetY: -5,
     },
 
     sittingGettingDesk: {
@@ -133,7 +135,8 @@ window.AVATAR_SPRITE_CONFIG = {
         width: 276,
         height: 155,
       },
-      offsetY: 5,
+      // Bridges sittingDown's end and sittingTyping's start.
+      offsetY: 7,
     },
 
     sittingTyping: {
@@ -224,7 +227,10 @@ window.AVATAR_SPRITE_CONFIG = {
         width: 104,
         height: 106,
       },
-      offsetY: 3,
+      // Matches deskLookUp2/deskLookDown (offsetX 4, feet on the shared
+      // baseline) so the judge scene does not jump up/left when it starts.
+      offsetX: 4,
+      offsetY: 10.5,
     },
 
     sittingJudgeBlink: {
@@ -241,7 +247,8 @@ window.AVATAR_SPRITE_CONFIG = {
         width: 104,
         height: 106,
       },
-      offsetY: 3,
+      offsetX: 4,
+      offsetY: 10.5,
     },
 
     sittingJudgeNoBlink: {
@@ -256,7 +263,8 @@ window.AVATAR_SPRITE_CONFIG = {
         width: 104,
         height: 106,
       },
-      offsetY: 3,
+      offsetX: 4,
+      offsetY: 10.5,
     },
 
     sittingJudgeStop: {
@@ -271,7 +279,8 @@ window.AVATAR_SPRITE_CONFIG = {
         width: 104,
         height: 106,
       },
-      offsetY: 3,
+      offsetX: 4,
+      offsetY: 10.5,
     },
 
     deskLookDown: {
