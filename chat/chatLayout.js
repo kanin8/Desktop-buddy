@@ -35,6 +35,11 @@ function createChatLayout(elements, getFrogRect, isChatOpen, onAvatarSettled, ge
   // and the pill-to-list alignment must be reviewed once it holds still.
   let lastPanelY = null;
   let pendingPanelReview = false;
+  // Set when the panel opens or moves while the chat is open — e.g. the
+  // buddy opens the list after adding a task. The pill-on-list review above
+  // waits for the chat to close, so the chat's own lift must clear the new
+  // panel edge instead, or the frog and input bar would cover the list.
+  let pendingChatClearance = false;
   // True while a slide is animating: the pill's measured bottom would be
   // half-way, so placement reviews wait until the frog settles.
   let isSliding = false;
@@ -89,18 +94,21 @@ function createChatLayout(elements, getFrogRect, isChatOpen, onAvatarSettled, ge
         lowerForPanel();
         lastPanelY = null;
         pendingPanelReview = false;
+        pendingChatClearance = false;
       }
       wasPanelOpen = false;
       return;
     }
-    if (!wasPanelOpen) {
+    if (!wasPanelOpen || panel.y !== lastPanelY) {
       lastPanelY = panel.y;
       pendingPanelReview = true;
-    } else if (panel.y !== lastPanelY) {
-      lastPanelY = panel.y;
-      pendingPanelReview = true;
+      pendingChatClearance = isChatOpen();
     }
     wasPanelOpen = true;
+    if (pendingChatClearance && !dragging && !isSliding) {
+      pendingChatClearance = false;
+      if (isChatOpen()) liftFrogIfNeeded();
+    }
     if (
       pendingPanelReview && !dragging && !isChatOpen() && !isSliding &&
       panel.y === lastPanelY
@@ -120,7 +128,9 @@ function createChatLayout(elements, getFrogRect, isChatOpen, onAvatarSettled, ge
   // into the list, which stays where it is, so the frog rises further (this
   // is why the panel stops following the feet while the chat is open). The
   // lifted spot is never saved; the frog's real spot is remembered in
-  // restPosition.
+  // restPosition. A second lift mid-chat (the list opened after the chat
+  // did) keeps the first rest spot, so closing the chat still lands the
+  // frog where it really was.
   function liftFrogIfNeeded() {
     const margin = getScreenMargin();
     const gap = readLengthToken('--space-2');
@@ -134,7 +144,7 @@ function createChatLayout(elements, getFrogRect, isChatOpen, onAvatarSettled, ge
     if (overlap <= 0) return;
 
     const box = avatar.getBoundingClientRect();
-    restPosition = { left: box.left, top: box.top };
+    if (!restPosition) restPosition = { left: box.left, top: box.top };
     slideAvatarTo({ left: box.left, top: box.top - overlap });
   }
 
