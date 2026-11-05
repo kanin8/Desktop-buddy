@@ -374,9 +374,12 @@ const nudge = createNudge(
     // Every reply is saved to the chat history (nudge text, the clicked label
     // as the user's line, then the buddy's answer). "Not now" and "I'm fine"
     // don't open the chat and both start the quiet period (quietAfterNotNowMs).
+    // The startup greeting's replies are handled in handleGreetingReply.
     onReply: (id, text, label) => {
       const { helpLine, notFineLine, fineLine } = window.NUDGE_CONFIG;
-      if (id === 'yes') {
+      if (GREETING_REPLY_IDS.includes(id)) {
+        handleGreetingReply(id, text, label);
+      } else if (id === 'yes') {
         acceptNudge(text, label, helpLine);
       } else if (id === 'notFine') {
         acceptNudge(text, label, notFineLine);
@@ -391,8 +394,16 @@ const nudge = createNudge(
       }
     },
     // Not mid-drag: the overlay must keep catching the mouse until the drop.
+    // A greeting question closed without an answer has its own rules
+    // (handleGreetingClosedUnanswered). After "Hide", the frog hides once its
+    // line is gone.
     onHidden: () => {
       if (!isDragging) releaseIfIdle();
+      handleGreetingClosedUnanswered();
+      if (shouldSnoozeWhenNudgeHides) {
+        shouldSnoozeWhenNudgeHides = false;
+        window.electronAPI.snooze('untilBack');
+      }
     },
   }
 );
@@ -420,27 +431,36 @@ function logNudgeExchange(text, label, followUp, speakFollowUp) {
   addChatLine(followUp, 'buddy', { speak: speakFollowUp });
 }
 
-// A nudge from the main process (--test-nudge) or the judging timer below.
-// message: { text, replies }, both optional; without them the default text
-// and buttons from nudge/config.js are used.
-// The frog plays its cue first so the message doesn't pop up out of nowhere.
-// Skipped while the chat or menu is open (the user is already busy with the
-// buddy) or while a cooldown is running (canShowNudge). The message waits for
-// the cue's length rather than its onComplete, because clicking the frog
-// mid-cue restarts the animation with its own callback and the message would
-// be lost.
+// A proactive nudge from the main process (idle check-in, --test-nudge) or
+// the judging timer below. message: { text, replies }, both optional; without
+// them the default text and buttons from nudge/config.js are used.
+// Skipped while a cooldown is running (canShowNudge), while a startup greeting
+// question is waiting for an answer (it would be replaced and lost), or after
+// the user said "Not today". Counts toward the cooldowns once shown.
 function showNudge(message) {
-  if (isChatOpen() || controls.isMenuOpen() || !canShowNudge()) return;
-  const { cueAnimation, defaultText } = window.NUDGE_CONFIG;
-  const text = message.text || defaultText;
+  if (areProactiveNudgesOff || greetingStep || !canShowNudge()) return;
+  const text = message.text || window.NUDGE_CONFIG.defaultText;
+  presentNudge(text, message.replies, recordNudgeShown);
+}
+
+// Shows a nudge bubble without any cooldown checks (the startup greeting uses
+// this directly). The frog plays its cue first so the message doesn't pop up
+// out of nowhere. Skipped while the chat or menu is open: the user is already
+// busy with the buddy. The message waits for the cue's length rather than its
+// onComplete, because clicking the frog mid-cue restarts the animation with
+// its own callback and the message would be lost.
+// - onShown: optional, runs once the bubble is actually on screen.
+function presentNudge(text, replies, onShown) {
+  if (isChatOpen() || controls.isMenuOpen()) return;
+  const { cueAnimation } = window.NUDGE_CONFIG;
   ++sequenceToken;
   spriteAnimator.play(cueAnimation, {
     onComplete: resumeRestAnimation,
   });
   setTimeout(() => {
     if (isChatOpen() || controls.isMenuOpen()) return;
-    nudge.show(text, message.replies);
-    recordNudgeShown();
+    nudge.show(text, replies);
+    if (onShown) onShown();
   }, getAnimationLengthMs(cueAnimation));
 }
 
@@ -459,6 +479,15 @@ let lastJudgingLineIndex = -1;
 let nudgeShownTimes = [];
 // When "Not now" or "I'm fine" was last pressed; 0 means never.
 let lastNotNowAt = 0;
+// Session switches set by the startup greeting. Not saved, so a restart
+// resets them.
+// - isJudgingOff: no judging animation and no judging nudges (the greeting
+//   was ignored or closed, or the user said "Not today").
+// - areProactiveNudgesOff: also no idle check-ins ("Not today" only).
+let isJudgingOff = false;
+let areProactiveNudgesOff = false;
+// True between "Hide" and its line closing; the frog then hides.
+let shouldSnoozeWhenNudgeHides = false;
 
 // Starts the wait before a judging nudge. Does nothing if one is already
 // waiting, so going leisure -> uncategorized -> leisure doesn't restart it.
@@ -478,7 +507,7 @@ function cancelJudgingNudgeTimer() {
 // Says a random judging line (with its own buttons, if it has any), but only
 // if the user is still in leisure after the delay.
 function showJudgingNudge() {
-  if (activityCategory !== 'leisure') return;
+  if (isJudgingOff || activityCategory !== 'leisure') return;
   const index = pickJudgingLineIndex();
   lastJudgingLineIndex = index;
   const line = window.NUDGE_CONFIG.judgingLines[index];
@@ -791,7 +820,8 @@ function resumeRestAnimation() {
 // Reacts only to actual category changes, so switching apps while still in
 // the same category does not replay the entrance.
 // - productive: sits the frog down the first time, or stops a judge.
-// - leisure: starts judging (once the frog is at the desk) and the nudge timer.
+// - leisure: starts judging (once the frog is at the desk) and the nudge timer,
+//   unless judging was turned off by the startup greeting (isJudgingOff).
 // - uncategorized: detection doesn't know what the user is doing, so the frog
 //   never judges it. A judge stops and the frog goes back to typing. The
 //   nudge timer is left running, so a quick hop leisure -> uncategorized ->
@@ -805,6 +835,9 @@ function setActivityCategory(next) {
     if (isJudging) playLeaveJudging();
     else if (!isAtDesk) playProductiveIntro();
   } else if (next === 'leisure') {
+    // After the greeting was declined, ignored or closed, the frog doesn't
+    // judge: it just keeps its rest pose.
+    if (isJudgingOff) return;
     if (isAtDesk && !isJudging) playJudgingSequence();
     if (isJudging) startJudgingNudgeTimer();
   } else if (isJudging) {
@@ -1054,21 +1087,100 @@ function closeChat() {
   releaseIfIdle();
 }
 
-// Greets the user once when the overlay starts, using the speech bubble above
-// the frog. The chat stays closed; the greeting is just a message.
-let hasGreetedOnStartup = false;
+// --- STARTUP GREETING ---
+// Once when the overlay starts, the frog asks whether the user is working
+// today, in the nudge bubble with buttons. Lines live in nudge/config.js
+// (startupGreeting). Every button click is saved to the chat history.
 
+const GREETING_REPLY_IDS = ['greetYep', 'greetNotToday', 'greetHelp', 'greetGotIt', 'greetHide', 'greetStay'];
+let hasGreetedOnStartup = false;
+// Which greeting question is on screen: 'greeting', 'followUp', 'notToday',
+// or null (none, or it was answered). Lets onHidden tell an ignored or
+// closed question apart from an answered one.
+let greetingStep = null;
+
+// Shows the greeting through presentNudge, so it never counts toward (or is
+// blocked by) the nudge cooldowns.
 function greetOnStartup() {
   if (hasGreetedOnStartup) return;
   hasGreetedOnStartup = true;
+  const { text, replies } = window.NUDGE_CONFIG.startupGreeting;
+  presentNudge(text, replies, () => {
+    greetingStep = 'greeting';
+  });
+}
 
-  const { startupGreetingText, startupGreetingVisibleMs } = window.CHAT_CONFIG;
-  if (!startupGreetingText) return;
+// What each greeting button does. text is the line the button was under and
+// label the button's text.
+function handleGreetingReply(id, text, label) {
+  const greeting = window.NUDGE_CONFIG.startupGreeting;
+  // Answered, so closing the bubble from here on isn't "ignored".
+  greetingStep = null;
 
-  // Play the talking animation while the speech bubble shows the greeting.
-  speakMessage(startupGreetingText);
-  messageQueue.push({ text: startupGreetingText, visibleMs: startupGreetingVisibleMs });
-  processQueue();
+  if (id === 'greetYep') {
+    logGreetingAnswer(text, label);
+    showGreetingQuestion(greeting.followUpText, greeting.followUpReplies, 'followUp');
+  } else if (id === 'greetHelp') {
+    acceptNudge(text, label, window.NUDGE_CONFIG.helpLine);
+  } else if (id === 'greetGotIt') {
+    nudge.showBriefly(greeting.gotItLine);
+    logNudgeExchange(text, label, greeting.gotItLine, false);
+  } else if (id === 'greetNotToday') {
+    logGreetingAnswer(text, label);
+    turnOffProactiveNudges();
+    showGreetingQuestion(greeting.notTodayQuestion, greeting.notTodayReplies, 'notToday');
+  } else if (id === 'greetHide') {
+    nudge.showBriefly(greeting.hideLine);
+    logNudgeExchange(text, label, greeting.hideLine, false);
+    shouldSnoozeWhenNudgeHides = true;
+  } else if (id === 'greetStay') {
+    nudge.showBriefly(greeting.stayLine);
+    logNudgeExchange(text, label, greeting.stayLine, false);
+  }
+}
+
+// Saves a question and the user's answer to the chat history, for answers
+// that lead to another question instead of a reply line.
+function logGreetingAnswer(text, label) {
+  addChatLine(text, 'buddy', { speak: false });
+  addChatLine(label, 'user');
+}
+
+// Puts the next greeting question in the same bubble. The clicked button is
+// removed with the old ones, so focus moves to the new first button to keep
+// keyboard users (and Escape) inside the bubble.
+function showGreetingQuestion(text, replies, step) {
+  const hadFocus = nudgeElement.contains(document.activeElement);
+  nudge.show(text, replies);
+  if (hadFocus) nudge.focus();
+  greetingStep = step;
+}
+
+// Runs whenever the nudge hides. If a greeting question was still waiting
+// for an answer, the user ignored it or closed it with ×:
+// - the first greeting: no judging for the session (idle check-ins stay on).
+// - "Want me to hide…?": same as "Stay quietly". Proactive nudges are
+//   already off since "Not today", and the frog stays, so nothing to do.
+// - "Want help getting started?": nothing; the user said they're working.
+function handleGreetingClosedUnanswered() {
+  const step = greetingStep;
+  greetingStep = null;
+  if (step === 'greeting') turnOffJudging();
+}
+
+// No judging animation and no judging nudges for the rest of the session.
+// A judge already running stops now.
+function turnOffJudging() {
+  isJudgingOff = true;
+  cancelJudgingNudgeTimer();
+  if (isJudging) playLeaveJudging();
+}
+
+// "Not today": no judging and no proactive nudges at all (idle check-ins
+// included) for the rest of the session.
+function turnOffProactiveNudges() {
+  areProactiveNudgesOff = true;
+  turnOffJudging();
 }
 
 function submitChat(e) {
@@ -1195,5 +1307,5 @@ sendAvatarPositionNow();
 update();
 
 // After the frog is placed and the first frame has run, wait the configured
-// delay, then show the greeting in the speech bubble above the frog.
-setTimeout(greetOnStartup, window.CHAT_CONFIG.startupGreetingDelayMs);
+// delay, then ask the startup greeting in the nudge bubble.
+setTimeout(greetOnStartup, window.NUDGE_CONFIG.startupGreeting.delayMs);
