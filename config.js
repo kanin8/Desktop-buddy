@@ -16,6 +16,10 @@ module.exports = {
   // interval doesn't mean an AI call every few seconds.
   ACTIVITY_POLL_MS: 4000,
 
+  // Wait this long after startup before the first activity check, so the
+  // buddy doesn't immediately classify whatever app is already open.
+  ACTIVITY_STARTUP_DELAY_MS: 20 * 1000,
+
   // When the AI couldn't classify a window (AI off, request failed), wait this
   // long before asking about the same window again.
   AI_ACTIVITY_RETRY_MS: 60000,
