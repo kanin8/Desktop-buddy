@@ -462,9 +462,13 @@ function showNudge(message) {
 function presentNudge(text, replies, onShown) {
   if (isChatOpen() || controls.isMenuOpen()) return;
   const { cueAnimation } = window.NUDGE_CONFIG;
-  ++sequenceToken;
+  const token = ++sequenceToken;
+  // Only hands back to the rest pose if nothing newer has started, so the
+  // talking animation the greeting starts when it appears isn't cut short.
   spriteAnimator.play(cueAnimation, {
-    onComplete: resumeRestAnimation,
+    onComplete: () => {
+      if (isCurrentSequence(token)) resumeRestAnimation();
+    },
   });
   setTimeout(() => {
     if (isChatOpen() || controls.isMenuOpen()) return;
@@ -1112,7 +1116,8 @@ function closeChat() {
 // --- STARTUP GREETING ---
 // Once when the overlay starts, the frog asks whether the user is working
 // today, in the nudge bubble with buttons. Lines live in nudge/config.js
-// (startupGreeting). Every button click is saved to the chat history.
+// (startupGreeting). Every button click is saved to the chat history, and
+// the frog plays its talking animation for each line it says.
 
 const GREETING_REPLY_IDS = ['greetYep', 'greetNotToday', 'greetHelp', 'greetGotIt', 'greetHide', 'greetStay'];
 let hasGreetedOnStartup = false;
@@ -1129,6 +1134,7 @@ function greetOnStartup() {
   const { text, replies } = window.NUDGE_CONFIG.startupGreeting;
   presentNudge(text, replies, () => {
     greetingStep = 'greeting';
+    speakMessage(text);
   });
 }
 
@@ -1146,6 +1152,7 @@ function handleGreetingReply(id, text, label) {
     acceptNudge(text, label, window.NUDGE_CONFIG.helpLine);
   } else if (id === 'greetGotIt') {
     nudge.showBriefly(greeting.gotItLine);
+    speakMessage(greeting.gotItLine);
     logNudgeExchange(text, label, greeting.gotItLine, false);
   } else if (id === 'greetNotToday') {
     logGreetingAnswer(text, label);
@@ -1153,10 +1160,12 @@ function handleGreetingReply(id, text, label) {
     showGreetingQuestion(greeting.notTodayQuestion, greeting.notTodayReplies, 'notToday');
   } else if (id === 'greetHide') {
     nudge.showBriefly(greeting.hideLine);
+    speakMessage(greeting.hideLine);
     logNudgeExchange(text, label, greeting.hideLine, false);
     shouldSnoozeWhenNudgeHides = true;
   } else if (id === 'greetStay') {
     nudge.showBriefly(greeting.stayLine);
+    speakMessage(greeting.stayLine);
     logNudgeExchange(text, label, greeting.stayLine, false);
   }
 }
@@ -1176,6 +1185,7 @@ function showGreetingQuestion(text, replies, step) {
   nudge.show(text, replies);
   if (hadFocus) nudge.focus();
   greetingStep = step;
+  speakMessage(text);
 }
 
 // Runs whenever the nudge hides. If a greeting question was still waiting
