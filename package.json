@@ -6,6 +6,7 @@
   "scripts": {
     "start": "electron .",
     "start:linux": "electron --no-sandbox .",
+    "make-icon": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/make-icon.ps1",
     "test:bedtime": "electron . --test-bedtime",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
