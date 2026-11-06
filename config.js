@@ -3,6 +3,13 @@
 // Kept in one file so ports and timings can be adjusted in a single place.
 
 module.exports = {
+  // How the app is named in the Windows Start Menu and Search. The app ID
+  // links the Start Menu shortcut to the running app's taskbar button;
+  // changing it leaves old pinned shortcuts as a separate taskbar entry.
+  APP_DISPLAY_NAME: 'Desktop Buddy',
+  APP_DESCRIPTION: 'Desktop focus buddy',
+  APP_USER_MODEL_ID: 'com.mix301.desktopbuddy',
+
   // Auxiliary helper that lets check_spelling.py push text into the avatar's
   // speech bubble. Purely additive: the app is fully usable without it.
   SPELLING_SERVER_PORT: 5000,

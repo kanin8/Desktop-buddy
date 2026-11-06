@@ -12,6 +12,7 @@ const {
 const { registerAiIpc, classifyActivity } = require('./toDoList/aiService');
 const { flushStore } = require('./toDoList/todoService');
 const { initAppearance, registerAppearanceIpc, getWindowBackgroundColor } = require('./appearance/appearanceService');
+const { applyAppUserModelId, ensureStartMenuShortcut } = require('./startMenu/startMenuShortcut');
 const CONFIG = require('./config');
 
 // --- HARDWARE ACCELERATION ---
@@ -243,6 +244,8 @@ function createSettingsWindow() {
     useContentSize: true,
     resizable: false,
     skipTaskbar: false,
+    // The frog in the taskbar instead of Electron's default logo.
+    icon: path.join(__dirname, 'icon.png'),
     // Shown before the page paints, so it can't read the CSS theme yet: the
     // panel grey of the current theme (see PANEL_BG_* in config.js).
     backgroundColor: getWindowBackgroundColor(),
@@ -282,7 +285,11 @@ function createActivityWindow() {
 }
 
 function createTray() {
-  const icon = nativeImage.createFromPath(path.join(__dirname, 'icon.png'));
+  // icon.png is the 256px app icon; scaled down here with good resampling so
+  // the tray doesn't have to shrink it (macOS shows tray images at full size).
+  const icon = nativeImage
+    .createFromPath(path.join(__dirname, 'icon.png'))
+    .resize({ width: 16, height: 16, quality: 'best' });
   tray = new Tray(icon);
 
   const updateMenu = () => {
@@ -625,6 +632,10 @@ app.whenReady().then(() => {
   console.log('nativeImage:', nativeImage);
   // Before any window opens, so they all start in the saved theme.
   initAppearance();
+  // Also before any window, so taskbar buttons pick up the app ID. The
+  // shortcut makes the app findable in Windows Search from now on.
+  applyAppUserModelId();
+  ensureStartMenuShortcut();
   createSettingsWindow();
   createTray();
 
