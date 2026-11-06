@@ -12,7 +12,7 @@ const {
 const { registerAiIpc, classifyActivity } = require('./toDoList/aiService');
 const { flushStore } = require('./toDoList/todoService');
 const { initAppearance, registerAppearanceIpc, getWindowBackgroundColor } = require('./appearance/appearanceService');
-const { applyAppUserModelId, ensureShortcuts } = require('./startMenu/startMenuShortcut');
+const { prepareAppForShortcuts, ensureShortcuts } = require('./startMenu/startMenuShortcut');
 const CONFIG = require('./config');
 
 // --- HARDWARE ACCELERATION ---
@@ -632,9 +632,9 @@ app.whenReady().then(() => {
   console.log('nativeImage:', nativeImage);
   // Before any window opens, so they all start in the saved theme.
   initAppearance();
-  // Also before any window, so taskbar buttons pick up the app ID. The
-  // Start Menu shortcut makes the app findable in Windows Search.
-  applyAppUserModelId();
+  // Also before any window, so Windows taskbar buttons pick up the app ID.
+  // The app-menu shortcut makes the app findable in Windows and Linux search.
+  prepareAppForShortcuts();
   ensureShortcuts();
   createSettingsWindow();
   createTray();
