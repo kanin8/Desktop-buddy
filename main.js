@@ -12,7 +12,7 @@ const {
 const { registerAiIpc, classifyActivity } = require('./toDoList/aiService');
 const { flushStore } = require('./toDoList/todoService');
 const { initAppearance, registerAppearanceIpc, getWindowBackgroundColor } = require('./appearance/appearanceService');
-const { applyAppUserModelId, ensureStartMenuShortcut } = require('./startMenu/startMenuShortcut');
+const { applyAppUserModelId, ensureShortcuts } = require('./startMenu/startMenuShortcut');
 const CONFIG = require('./config');
 
 // --- HARDWARE ACCELERATION ---
@@ -633,9 +633,9 @@ app.whenReady().then(() => {
   // Before any window opens, so they all start in the saved theme.
   initAppearance();
   // Also before any window, so taskbar buttons pick up the app ID. The
-  // shortcut makes the app findable in Windows Search from now on.
+  // Start Menu shortcut makes the app findable in Windows Search.
   applyAppUserModelId();
-  ensureStartMenuShortcut();
+  ensureShortcuts();
   createSettingsWindow();
   createTray();
 
