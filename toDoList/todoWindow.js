@@ -210,6 +210,16 @@ function createTodoWindow({ onClose } = {}) {
     ipcMain.emit('todo-panel-raised');
   });
 
+  // Clicking the panel gives it focus, and X11 window managers (Cinnamon's
+  // muffin included) restack same-level always-on-top windows on activation:
+  // the panel jumps above the frog overlay until the five-second re-assert
+  // timer puts the frog back. Re-raise the overlay immediately instead, so
+  // the frog never disappears behind the list while the user works in it.
+  // moveTop() does not take focus, so the click still lands in the panel.
+  todoWin.on('focus', () => {
+    ipcMain.emit('todo-panel-raised');
+  });
+
   // Release the timer and the module-scoped reference. Without clearing the
   // interval, a destroyed window would be retained and every toggle would leak
   // one timer.
