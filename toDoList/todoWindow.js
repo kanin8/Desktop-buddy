@@ -33,6 +33,15 @@ let frogFeet = null;
 // is in flight and the panel is visible; cleared on the drop, when anchor()
 // takes over and re-clamps everything as usual.
 let dragFrom = null;
+// Where the chat window ends, as the overlay reports it on `chat-extent`:
+// { visible, y } with y the bottom edge of the chat's input bar (plus the
+// breathing room the chat lift also uses). While the chat is open its window
+// must stay whole, so the panel anchors under it — not merely under the
+// pill's slot — and the two windows read as one stack (see anchor()).
+// Hidden/extents without a y mean the chat is closed and the pill-slot
+// anchor applies alone.
+let chatExtent = { visible: false, y: Infinity };
+
 // Called when the panel's close button is used. Set by whichever app is hosting.
 let onCloseRequested = null;
 // Called after the panel's placement or visibility changes, with
@@ -98,7 +107,18 @@ function anchor() {
   // The top edge rests where the pill's slot under the feet ends: the pill
   // is what stands on the list, so the pill-menu is always above it and the
   // frog appears lifted above the list by the slot whenever the list is open.
-  const top = Math.round(frogFeet.y + frogFeet.clearance) - CONFIG.FOLLOW_FEET_OVERLAP;
+  let top = Math.round(frogFeet.y + frogFeet.clearance) - CONFIG.FOLLOW_FEET_OVERLAP;
+  // While the chat is open the pill-slot anchor may fall INSIDE the chat
+  // window (the input bar hangs below the pill). The chat outranks it: the
+  // panel tucks in right below the chat window's bottom edge (the overlay
+  // pushes it with the same gap the chat lift keeps), and the two windows
+  // read as one stack. When there is not enough room below — the chat sits
+  // near the screen bottom — the clamp above the next lines pulls the panel
+  // up whole and the overlay's lift raises the chat above the list, but the
+  // panel never opens split behind the chat.
+  if (chatExtent.visible && Number.isFinite(chatExtent.y)) {
+    top = Math.max(top, chatExtent.y);
+  }
   // The panel always shows its full height (the whole expanded list stays
   // visible on screen). When the feet sit too low for that, the top edge
   // gives way so the panel stays whole and inside the work area — the
@@ -135,6 +155,18 @@ function notifyPlacement() {
 /** Lets a host observe the panel placement; pass null to unsubscribe. */
 function setPanelPlacementListener(fn) {
   onPanelPlaced = typeof fn === 'function' ? fn : null;
+}
+
+/** Lets a host feed the chat window's current bottom edge (or null to clear). */
+function setChatExtentReference(extent) {
+  chatExtent = extent && typeof extent === 'object' && Number.isFinite(extent.y)
+    ? { visible: !!extent.visible, y: Math.max(0, Math.round(extent.y)) }
+    : { visible: false, y: Infinity };
+  // Refresh a visible panel that already relies on the chat's bottom edge:
+  // the chat may have lifted (the list opened or moved) or closed. During a
+  // rigid ride the drop's own anchor() handles it — new anchors would fight
+  // the drag.
+  if (!dragFrom) anchor();
 }
 
 // Creates and shows the panel. Safe to call when the panel already exists —
@@ -315,6 +347,13 @@ ipcMain.on('avatar-position', (_event, feet) => {
   }
   if (dragFrom) dragFrom = null;
   if (win) anchor();
+});
+
+// Feeds the chat window's bottom edge (see overlay.js's pushChatExtent).
+// While the chat is open, anchor() tucks the panel in right below it instead
+// of only under the pill's slot, so the two windows stack one after another.
+ipcMain.on('chat-extent', (_event, extent) => {
+  setChatExtentReference(extent);
 });
 
 ipcMain.on('todo-close', () => {

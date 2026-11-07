@@ -220,6 +220,14 @@ function createChatLayout(elements, getFrogRect, isChatOpen, onAvatarSettled, ge
     avatar.classList.remove('is-sliding');
   }
 
+  // True from slideAvatarTo() until that slide's transitionend fires. The
+  // to-do panel must not follow the chat's bottom edge between those
+  // points: the input bar would sit inside a still-moving chat window, so
+  // an extent push uses the settled value instead (see overlay.js).
+  function isChatSliding() {
+    return isSliding;
+  }
+
   // Only the frog box's own slide counts: fades inside it (e.g. the hover
   // indicator) also send transitionend up to it.
   avatar.addEventListener('transitionend', (event) => {
@@ -402,5 +410,6 @@ function createChatLayout(elements, getFrogRect, isChatOpen, onAvatarSettled, ge
     setDragging,
     notePanelPlacement,
     placeInColumn,
+    isChatSliding,
   };
 }

@@ -129,6 +129,10 @@ function getBubbleAnchorRect() {
 function update() {
   spriteAnimator.update(performance.now());
   chatLayout.update();
+  // A sliding chat holds its last settled bottom edge; while it slides, the
+  // final one is reported as soon as the slide ends. Deduplicated like the
+  // cursor channel, so nothing arrives while nothing changed.
+  if (!chatLayout.isChatSliding()) pushChatExtent();
   // Catch-up while a drag has stalled (see pendingPositionSend): one extra
   // throttled send after the move events stop, then this goes quiet.
   if (isDragging && pendingPositionSend) sendAvatarPosition();
@@ -233,9 +237,30 @@ function frogFeetPosition() {
 // gap, then the pill itself. The pill is always laid out (it only hides with
 // visibility, see controls.css), so its height can be read at any time. The
 // to-do panel anchors below this slot, which keeps the pill-menu above the
-// list — and the frog standing on it — whenever the list is open.
+// list — and the frog standing on it — whenever the list is open. While the
+// chat is open its input bar hangs lower than that slot, so the chat's whole
+// bottom edge is reported separately below and outranks the slot.
 function pillSlotClearance() {
   return readLengthToken('--indicator-gap') + pill.offsetHeight;
+}
+
+// Where the chat window ends, in screen coordinates: the bottom edge of its
+// input bar plus the same breathing room --space-2 the chat lift also keeps
+// between itself and whatever sits below it. { visible: true } only while
+// the chat is open; the to-do panel anchors below this edge then, instead of
+// above the input bar. Deduplicated like the cursor channel, so a frame that
+// does not move the chat sends nothing. update() polls it, so it only needs
+// to be correct one frame after anything actually moved.
+let lastChatExtentSend = '';
+
+function pushChatExtent() {
+  const extent = isChatOpen()
+    ? { visible: true, y: Math.round(chatForm.getBoundingClientRect().bottom + readLengthToken('--space-2')) }
+    : { visible: false };
+  const signature = JSON.stringify(extent);
+  if (signature === lastChatExtentSend) return;
+  lastChatExtentSend = signature;
+  window.electronAPI.pushChatExtent(extent);
 }
 
 function sendAvatarPosition(force, dragging) {
