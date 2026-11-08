@@ -1307,10 +1307,20 @@ window.electronAPI.onOpenControls(() => {
 });
 
 // Clicking anywhere outside the overlay moves focus away: close the menu and a
-// pill that was opened by the shortcut. An open chat stays, as before.
+// pill that was opened by the shortcut. The chat has its own rule below,
+// because it must survive clicks on the buddy's other windows.
 window.addEventListener('blur', () => {
   controls.closeMenu();
   if (controls.isPinned() && !isChatOpen()) controls.hidePill();
+});
+
+// Focus left the whole app (another application or the desktop was clicked),
+// which main.js reports only after confirming no buddy window took it. That
+// is what closes the chat; a click on the to-do panel or Settings keeps it.
+window.electronAPI.onFocusLeftApp(() => {
+  if (!isChatOpen()) return;
+  closeChat();
+  if (controls.isPinned()) controls.hidePill();
 });
 
 // Re-place on resize (e.g. a resolution change) so the frog can't end up off

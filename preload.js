@@ -56,6 +56,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // The buddy's proactive message (nudge/nudge.js). message is { text },
   // and text may be left out to use the default line.
   onNudge: (callback) => ipcRenderer.on('avatar-nudge', (event, message) => callback(message || {})),
+  // Sent when focus leaves the app entirely (another application or the
+  // desktop was clicked), so an open chat can close. Clicks on the buddy's own
+  // windows (to-do panel, Settings, Activity) do not send this.
+  onFocusLeftApp: (callback) => ipcRenderer.on('focus-left-app', () => callback()),
 
   // General purpose (for the mouse-ignore logic)
   setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),

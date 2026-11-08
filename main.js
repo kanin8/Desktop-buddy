@@ -228,6 +228,19 @@ function createOverlayWindow() {
     mirrorPanelPlacement(lastPanelPlacement);
   });
 
+  // A click on another app or the desktop takes OS focus away from the
+  // overlay, and the open chat should close with it. A click on one of the
+  // buddy's own windows (to-do panel, Settings, Activity) must not: those are
+  // still the buddy's UI. The short timeout lets the new focus settle before
+  // Electron is asked where it went.
+  overlayWin.on('blur', () => {
+    setTimeout(() => {
+      if (!overlayWin || overlayWin.isDestroyed() || overlayWin.isFocused()) return;
+      if (BrowserWindow.getFocusedWindow()) return;
+      overlayWin.webContents.send('focus-left-app');
+    }, 0);
+  });
+
   overlayWin.on('closed', () => {
     overlayWin = null;
     stopCursorPolling();
