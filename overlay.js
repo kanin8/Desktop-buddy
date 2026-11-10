@@ -392,6 +392,7 @@ const nudge = createNudge(
     close: nudgeElement.querySelector('.nudge-close'),
   },
   {
+    onShow: playNudgeSpeakingAnimation,
     // Every reply is saved to the chat history (nudge text, the clicked label
     // as the user's line, then the buddy's answer). "Not now" and "I'm fine"
     // don't open the chat and both start the quiet period (quietAfterNotNowMs).
@@ -441,7 +442,11 @@ const nudge = createNudge(
     onHidden: () => {
       if (!isDragging) releaseIfIdle();
       handleGreetingClosedUnanswered();
-      if (isPomodoroInviteOnScreen) resolvePomodoroInvite();
+      finishNudgeSpeakingPose();
+      if (isPomodoroInviteOnScreen) {
+        isPomodoroInviteOnScreen = false;
+        resolvePomodoroInvite();
+      }
       if (studyBreak) studyBreak.noteQuestionHidden();
       if (shouldSnoozeWhenNudgeHides) {
         shouldSnoozeWhenNudgeHides = false;
@@ -511,9 +516,8 @@ function schedulePomodoroInviteRetry() {
   schedulePomodoroInvite(STUDY.retryWhenBlockedMs);
 }
 
-// Shows the invitation through the same cue + nudge bubble as the greeting.
-// If the user opens the chat/menu during the cue, retry shortly rather than
-// losing the one-time offer.
+// Shows the invitation without the generic nudge cue. The nudge's onShow
+// handler chooses the speaking sequence from the frog's current pose.
 function showPomodoroInvite() {
   if (!studyBreak || isPomodoroInviteResolved || isPomodoroInviteShowing || isPomodoroInviteOnScreen) return;
   if (areProactiveNudgesOff || studyBreak.isJoined() || studyBreak.getStatus().disabled) return;
@@ -524,31 +528,15 @@ function showPomodoroInvite() {
   }
 
   isPomodoroInviteShowing = true;
-  const accepted = presentNudge(
-    STUDY.lines.pomodoroInvite,
-    STUDY.pomodoroReplies,
-    () => {
-      isPomodoroInviteShowing = false;
-      isPomodoroInviteOnScreen = true;
-    },
-    () => {
-      isPomodoroInviteShowing = false;
-      isPomodoroInviteOnScreen = false;
-      schedulePomodoroInviteRetry();
-    },
-  );
-  if (!accepted) {
-    isPomodoroInviteShowing = false;
-    schedulePomodoroInviteRetry();
-  }
+  nudge.show(STUDY.lines.pomodoroInvite, STUDY.pomodoroReplies);
+  isPomodoroInviteShowing = false;
+  isPomodoroInviteOnScreen = true;
 }
 
 // Stops the invitation for the rest of the session: accepted, declined,
 // ignored, or cancelled by "Not today".
 function resolvePomodoroInvite() {
   isPomodoroInviteResolved = true;
-  isPomodoroInviteOnScreen = false;
-  isPomodoroInviteShowing = false;
   if (pomodoroInviteTimer !== null) {
     clearTimeout(pomodoroInviteTimer);
     pomodoroInviteTimer = null;
@@ -653,29 +641,15 @@ function showNudge(message) {
 }
 
 // Shows a nudge bubble without any cooldown checks (the startup greeting and
-// Pomodoro invitation use this directly). The frog plays its cue first so the
-// message doesn't pop up out of nowhere. Skipped while the chat or menu is
-// open: the user is already busy with the buddy. The message waits for the
-// cue's length rather than its onComplete, because clicking the frog mid-cue
-// restarts the animation with its own callback and the message would be lost.
+// Pomodoro invitation use this directly). The onShow handler starts the
+// correct standing or seated speaking sequence. Skipped while another nudge,
+// the chat or menu is open.
 // Returns false when it is blocked immediately.
-// - onShown: optional, runs once the bubble is actually on screen.
-// - onMissed: optional, runs if the bubble became blocked during the cue.
-function presentNudge(text, replies, onShown, onMissed) {
-  if (isChatOpen() || controls.isMenuOpen()) return false;
-  const { cueAnimation } = window.NUDGE_CONFIG;
-  ++sequenceToken;
-  spriteAnimator.play(cueAnimation, {
-    onComplete: resumeRestAnimation,
-  });
-  setTimeout(() => {
-    if (isChatOpen() || controls.isMenuOpen() || nudge.isVisible()) {
-      if (onMissed) onMissed();
-      return;
-    }
-    nudge.show(text, replies);
-    if (onShown) onShown();
-  }, getAnimationLengthMs(cueAnimation));
+// - onShown: optional, runs once the bubble is on screen.
+function presentNudge(text, replies, onShown) {
+  if (isChatOpen() || controls.isMenuOpen() || nudge.isVisible()) return false;
+  nudge.show(text, replies);
+  if (onShown) onShown();
   return true;
 }
 
@@ -818,6 +792,74 @@ function startSpeech(message) {
     spriteAnimator.play(name, { onComplete: () => step(remaining - 1) });
   };
   step(cycles);
+}
+
+// Nudges have their own pose lifecycle because the seated frog stays turned
+// toward the user until the bubble is dismissed or fades away.
+let activeNudgePose = null;
+let activeNudgePoseToken = null;
+
+function playNudgeSpeakingAnimation(message) {
+  const seated = isSeatedState();
+  const token = ++sequenceToken;
+  const speakingName = seated ? SPEAKING.seatedAnimation : SPEAKING.idleAnimation;
+  const durationMs = Math.min(
+    SPEAKING.maxMs,
+    Math.max(SPEAKING.minMs, String(message || '').length * SPEAKING.msPerCharacter)
+  );
+  const cycles = Math.max(1, Math.ceil(durationMs / getAnimationLengthMs(speakingName)));
+
+  activeNudgePose = seated ? 'seated' : 'standing';
+  activeNudgePoseToken = token;
+
+  const speak = (remaining) => {
+    if (!isCurrentSequence(token)) return;
+    if (remaining <= 0) {
+      if (seated) {
+        startLookOverLoop(token);
+      } else {
+        activeNudgePose = null;
+        activeNudgePoseToken = null;
+        resumeRestAnimation();
+      }
+      return;
+    }
+    spriteAnimator.play(speakingName, {
+      onComplete: () => speak(remaining - 1),
+    });
+  };
+
+  if (!seated) {
+    speak(cycles);
+    return;
+  }
+
+  spriteAnimator.play(SPEAKING.seatedIntroAnimation, {
+    onComplete: () => {
+      if (!isCurrentSequence(token)) return;
+      speak(cycles);
+    },
+  });
+}
+
+function finishNudgeSpeakingPose() {
+  const pose = activeNudgePose;
+  const token = activeNudgePoseToken;
+  activeNudgePose = null;
+  activeNudgePoseToken = null;
+  if (!pose || token === null || !isCurrentSequence(token)) return;
+
+  if (pose === 'seated') {
+    const returnToken = ++sequenceToken;
+    spriteAnimator.play('deskLookDown', {
+      onComplete: () => {
+        if (!isCurrentSequence(returnToken)) return;
+        resumeRestAnimation();
+      },
+    });
+  } else {
+    resumeRestAnimation();
+  }
 }
 
 // --- ACTIVITY-DRIVEN ANIMATIONS ---
@@ -1364,10 +1406,13 @@ function greetOnStartup() {
   const { text, replies } = window.NUDGE_CONFIG.startupGreeting;
   const shown = presentNudge(text, replies, () => {
     greetingStep = 'greeting';
-  }, () => {
-    schedulePomodoroInvite();
   });
-  if (!shown) schedulePomodoroInvite();
+  if (!shown) {
+    // The chat/menu or another nudge is already open. Retry rather than
+    // treating a greeting that never appeared as settled.
+    hasGreetedOnStartup = false;
+    setTimeout(greetOnStartup, STUDY.retryWhenBlockedMs);
+  }
 }
 
 // What each greeting button does. text is the line the button was under and
