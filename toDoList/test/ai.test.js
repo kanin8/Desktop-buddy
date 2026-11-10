@@ -512,3 +512,69 @@ test('parseClassification reads opening and closing the list', () => {
   });
   assert.strictEqual(ai.parseClassification('{"type":"edit","actions":[{"op":"close_list"}]}').actions[0].op, 'close_list');
 });
+
+test('describeStudyTimer turns the continuous Pomodoro snapshot into prompt text', () => {
+  assert.match(
+    ai.describeStudyTimer({
+      phase: 'work', joined: true, isWorking: true, remainingMs: 12 * 60 * 1000,
+      roundNumber: 2, completedPomodoros: 1, nextBreakKind: 'short',
+    }),
+    /Pomodoro work round 2, with about 12 minutes until the next short break/
+  );
+  assert.match(
+    ai.describeStudyTimer({
+      phase: 'work', joined: true, isWorking: true, remainingMs: 2 * 60 * 1000,
+      roundNumber: 4, completedPomodoros: 3, nextBreakKind: 'long',
+    }),
+    /about 2 minutes until the next long break.*completed 3 rounds/
+  );
+  assert.match(
+    ai.describeStudyTimer({
+      phase: 'work', joined: true, isWorking: false, remainingMs: 12 * 60 * 1000,
+      roundNumber: 1, completedPomodoros: 0, nextBreakKind: 'short',
+    }),
+    /about 12 minutes until the next short break/
+  );
+  assert.doesNotMatch(
+    ai.describeStudyTimer({ phase: 'work', joined: true, isWorking: false, remainingMs: 12 * 60 * 1000 }),
+    /paused/
+  );
+  assert.match(
+    ai.describeStudyTimer({
+      phase: 'break', joined: true, breakKind: 'short', remainingMs: 3 * 60 * 1000,
+    }),
+    /Pomodoro short break with about 3 minutes left/
+  );
+  assert.match(
+    ai.describeStudyTimer({
+      phase: 'break', joined: true, breakKind: 'long', remainingMs: 20 * 60 * 1000,
+    }),
+    /Pomodoro long break with about 20 minutes left/
+  );
+  assert.match(
+    ai.describeStudyTimer({ phase: 'break', joined: true, pendingQuestion: 'ready' }),
+    /asking right now/
+  );
+  assert.match(
+    ai.describeStudyTimer({ phase: 'overrun', joined: true, remainingMs: 2 * 60 * 1000 }),
+    /will ask again in about 2 minutes/
+  );
+  assert.match(
+    ai.describeStudyTimer({ phase: 'offer', joined: true, breakKind: 'long', completedPomodoros: 4 }),
+    /offered the user a long break/
+  );
+  assert.match(
+    ai.describeStudyTimer({ phase: 'off', joined: false }),
+    /not running because the user has not joined/
+  );
+  assert.match(
+    ai.describeStudyTimer({ disabled: true }),
+    /timer is off for this session/
+  );
+  assert.strictEqual(ai.describeStudyTimer(null), '');
+});
+
+test('buildReplyMessages puts the study timer after the list context', () => {
+  const messages = ai.buildReplyMessages('hi', 'GUIDE', null, 'LIST', 'TIMER');
+  assert.match(messages[0].content, /^GUIDE\n\nLIST\n\nTIMER\n\n/);
+});

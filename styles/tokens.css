@@ -97,6 +97,8 @@
 
   /* Typography: one sans-serif font family, the same as the to-do panel. */
   --font: system-ui, -apple-system, "Segoe UI", Ubuntu, Cantarell, sans-serif;
+  /* Monospace digits for the Pomodoro clock, so its width does not jump. */
+  --font-mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --font-size-sm: 12px;
   --font-size-md: 14px;
   --font-size-lg: 16px;
@@ -176,6 +178,11 @@
   /* Proactive message (nudge): the small × in its corner. Timings live in
      nudge/config.js, not here. */
   --close-button-size: 24px;
+
+  /* Pomodoro clock above the frog's head. The minimum width plus tabular
+     numerals keeps mm:ss from shifting the pill every second. */
+  --clock-min-width: 58px;
+  --clock-paused-opacity: 0.55;
 
   /* To-do panel (Maike's component in toDoList/). It is its own solid
      window, not a layer over the desktop, so it uses the panel grey without

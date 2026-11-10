@@ -12,10 +12,6 @@ window.NUDGE_CONFIG = {
   // Same as the speech bubble's 4 s in overlay.js.
   backOffVisibleMs: 4000,
 
-  // The frog animation played just before a nudge appears, so the message
-  // doesn't pop up out of nowhere. A placeholder until the artists make a
-  // "looks up" or "talking" sprite: add it to avatar/config.js and name it here.
-  cueAnimation: 'standingClicked',
 
   // Shown when a nudge arrives without its own text (e.g. --test-nudge).
   // Level 1 idle check-in.

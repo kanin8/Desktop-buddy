@@ -388,12 +388,14 @@ window.AVATAR_SPRITE_CONFIG = {
     seatedClickExit: 'deskLookDown',
   },
 
-  // How the avatar "speaks" a chat message: the standing sheet while idle, the
-  // seated one at the desk. The clip is held for a length proportional to the
-  // message, clamped so short lines still read and long ones don't drag on.
+  // How the avatar "speaks" a chat or nudge message: the standing sheet while
+  // idle, the seated one at the desk. Nudges while seated look up from the
+  // keyboard first. The clip is held for a length proportional to the message,
+  // clamped so short lines still read and long ones don't drag on.
   speaking: {
     idleAnimation: 'idleSpeak',
     seatedAnimation: 'sittingLooking1Speak',
+    seatedIntroAnimation: 'deskLookUp2',
     msPerCharacter: 55,
     minMs: 1200,
     maxMs: 12000,

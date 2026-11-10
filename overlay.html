@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="controls/controls.css">
   <link rel="stylesheet" href="chat/chat.css">
   <link rel="stylesheet" href="nudge/nudge.css">
+  <link rel="stylesheet" href="study/clock.css">
   <style>
     body {
       margin: 0;
@@ -87,6 +88,8 @@
   </style>
 </head>
 <body>
+  <!-- Small Pomodoro countdown above the frog; shown only after the user joins. -->
+  <div id="study-clock" class="study-clock" role="timer" aria-label="Pomodoro time remaining" aria-live="off"></div>
   <div id="avatar">
     <div id="avatar-sprite"></div>
     <!-- Decorative hint for now; step 3 makes it part of the keyboard-reachable controls. -->
@@ -184,6 +187,9 @@
   <script src="chat/config.js"></script>
   <script src="chat/chatLayout.js"></script>
   <script src="nudge/config.js"></script>
+  <script src="study/config.js"></script>
+  <script src="study/studyBreak.js"></script>
+  <script src="study/clock.js"></script>
   <script src="nudge/nudge.js"></script>
   <script src="overlay.js"></script>
 </body>

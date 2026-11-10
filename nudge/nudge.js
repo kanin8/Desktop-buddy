@@ -5,9 +5,11 @@
 
 // Sets up the nudge and returns the functions the overlay uses.
 // - elements: { nudge, text, replies, close }
-// - actions: { onReply(id, text, label), onHidden }
+// - actions: { onReply(id, text, label), onHidden, onShow(message) }
 //   onReply gets the reply's id, the nudge text and the button's label.
 //   onHidden runs every time the nudge hides, however it was closed.
+//   onShow runs whenever a message is put in the bubble, for the talking
+//   animation.
 function createNudge(elements, actions) {
   const { nudge, text, replies, close } = elements;
   // nudge/config.js is read each time it's needed, so its values can be
@@ -33,6 +35,7 @@ function createNudge(elements, actions) {
     text.textContent = message;
     renderReplies(replyList || config().replies);
     restartHideTimer(config().autoHideMs);
+    if (actions.onShow) actions.onShow(message);
   }
 
   // A short line with no buttons that fades after backOffVisibleMs (the
@@ -45,6 +48,7 @@ function createNudge(elements, actions) {
     // Keep focus in the nudge so Escape still works.
     if (hadFocus) close.focus();
     restartHideTimer(config().backOffVisibleMs);
+    if (actions.onShow) actions.onShow(line);
   }
 
   // "Not now": a random back-off line, no buttons, then it fades. Returns the

@@ -1,0 +1,43 @@
+/* Styles for the small Pomodoro clock above the frog. All colours, spacing
+   and timing values come from styles/tokens.css. */
+
+/* ============================
+   Pomodoro clock
+   ============================ */
+.study-clock {
+  position: absolute;
+  z-index: 99;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  min-width: var(--clock-min-width);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-lg);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--text-primary);
+  background: var(--surface);
+  box-shadow: var(--surface-shadow);
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 160ms ease,
+    visibility 160ms ease;
+}
+
+/* ============================
+   Pomodoro clock — states
+   ============================ */
+.study-clock.is-visible {
+  visibility: visible;
+  opacity: 1;
+}
+
+.study-clock.is-paused {
+  opacity: var(--clock-paused-opacity);
+}

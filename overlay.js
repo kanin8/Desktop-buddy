@@ -1,7 +1,7 @@
 // Overlay renderer: shows the frog (bottom-right, or where it was dragged),
 // plays its sprite animations, shows speech bubbles, runs the hover-to-chat
-// interaction for the AI task breakdown, and decides when the overlay should
-// let mouse clicks through to the desktop.
+// interaction for the AI task breakdown, draws the Pomodoro clock, and decides
+// when the overlay should let mouse clicks through to the desktop.
 
 const avatar = document.getElementById('avatar');
 const bubble = document.getElementById('speech-bubble');
@@ -18,6 +18,10 @@ const chatInput = document.getElementById('chat-input');
 const chatSend = document.getElementById('chat-send');
 const chatClose = document.getElementById('chat-close');
 const nudgeElement = document.getElementById('nudge');
+const studyClockElement = document.getElementById('study-clock');
+
+// Study-break timings, lines and reply ids (study/config.js).
+const STUDY = window.STUDY_CONFIG;
 
 // Plays the sprite sheet onto the child element; #avatar itself stays the
 // invisible box the frog is centred in.
@@ -87,9 +91,16 @@ let isChatPoseActive = false;
 // stale, so a late callback cannot restart an old sequence.
 let sequenceToken = 0;
 
+// The study-break timer. Created once the nudge and controls exist below,
+// because its questions use the same bubble and its poses use the frog.
+let studyBreak = null;
+
 // Gap between the top of the frog and the speech bubble, and between the
 // bubble and the screen edge.
 const BUBBLE_GAP = 12;
+
+// Gap between the frog and the Pomodoro clock.
+const CLOCK_GAP = 10;
 
 // How far the bubble's tail must stay from the bubble's sides, so it never
 // lands on a rounded corner (--radius is 16px).
@@ -135,6 +146,7 @@ function update() {
   if (nudge.isVisible()) chatLayout.placeInColumn(nudgeElement);
   // After the chat and nudge, since the bubble goes above them.
   positionBubble();
+  updateStudyClock();
   controls.positionMenu();
   requestAnimationFrame(update);
 }
@@ -386,7 +398,27 @@ const nudge = createNudge(
     // The startup greeting's replies are handled in handleGreetingReply.
     onReply: (id, text, label) => {
       const { helpLine, notFineLine, fineLine } = window.NUDGE_CONFIG;
-      if (GREETING_REPLY_IDS.includes(id)) {
+      if (id === STUDY.replyIds.pomodoroYes) {
+        resolvePomodoroInvite();
+        nudge.showBriefly(STUDY.lines.pomodoroAccepted);
+        studyBreak.joinPomodoro();
+      } else if (id === STUDY.replyIds.pomodoroNo) {
+        resolvePomodoroInvite();
+        nudge.showBriefly(STUDY.lines.pomodoroDeclined);
+      } else if (id === STUDY.replyIds.breakYes) {
+        const kind = studyBreak.getStatus().breakKind;
+        nudge.showBriefly(kind === 'long' ? STUDY.lines.longBreakAccepted : STUDY.lines.breakAccepted);
+        studyBreak.acceptBreak();
+      } else if (id === STUDY.replyIds.breakNo) {
+        nudge.showBriefly(STUDY.lines.breakDeclined);
+        studyBreak.declineBreak();
+      } else if (id === STUDY.replyIds.readyYes) {
+        nudge.showBriefly(STUDY.lines.readyAccepted);
+        studyBreak.acceptReady();
+      } else if (id === STUDY.replyIds.readyNo) {
+        nudge.showBriefly(STUDY.lines.readyDeclined);
+        studyBreak.declineReady();
+      } else if (GREETING_REPLY_IDS.includes(id)) {
         handleGreetingReply(id, text, label);
       } else if (id === 'yes') {
         acceptNudge(text, label, helpLine);
@@ -409,6 +441,8 @@ const nudge = createNudge(
     onHidden: () => {
       if (!isDragging) releaseIfIdle();
       handleGreetingClosedUnanswered();
+      if (isPomodoroInviteOnScreen) resolvePomodoroInvite();
+      if (studyBreak) studyBreak.noteQuestionHidden();
       if (shouldSnoozeWhenNudgeHides) {
         shouldSnoozeWhenNudgeHides = false;
         window.electronAPI.snooze('untilBack');
@@ -416,6 +450,169 @@ const nudge = createNudge(
     },
   }
 );
+
+// --- POMODORO TIMER ---
+// After the startup greeting settles, the frog offers to follow Pomodoro.
+// Once the user joins, 25-minute work rounds earn a 5-minute break (or a
+// 30-minute long break every fourth round), and a break earns "ready?".
+// Answering no repeats every 3 minutes. The timer lives in
+// study/studyBreak.js; this block connects it to the nudge bubble and poses.
+let pomodoroInviteTimer = null;
+let isPomodoroInviteResolved = false;
+let isPomodoroInviteOnScreen = false;
+let isPomodoroInviteShowing = false;
+let lastStudyClockText = '';
+
+studyBreak = createStudyBreak({
+  // Same bubble as any other nudge. When the user is busy with the chat or
+  // menu (or another nudge is showing), say so and the timer retries shortly
+  // instead of dropping the flow.
+  onSuggest: (breakKind) => {
+    if (areProactiveNudgesOff || greetingStep) return false;
+    const line = breakKind === 'long' ? STUDY.lines.longBreakSuggestion : STUDY.lines.suggestion;
+    return showStudyQuestion(line, STUDY.breakReplies);
+  },
+  onAskReady: () => showStudyQuestion(STUDY.lines.readyQuestion, STUDY.readyReplies),
+  // The break pose is the same look-over loop the chat uses, held until the
+  // break ends. Judging nudges pause so they don't talk over the break.
+  onBreakStart: () => {
+    cancelJudgingNudgeTimer();
+    startLookOverLoop(++sequenceToken);
+  },
+  // Overrun: keep the judging loop, so the frog looks like it is waiting for
+  // the user to come back.
+  onOverrunStart: () => {
+    cancelJudgingNudgeTimer();
+    playJudgingLoop(++sequenceToken);
+  },
+  onBreakEnd: () => {
+    resumeRestAnimation();
+    if (activityCategory === 'leisure' && !isJudgingOff) startJudgingNudgeTimer();
+  },
+});
+
+// Seed the work/leisure flag in case the first activity update arrived before
+// this block was set up. It only affects the pose, not the continuous clock.
+studyBreak.setWorking(activityCategory === 'productive');
+
+// Schedules the one-time Pomodoro invitation. The default delay runs from the
+// moment the startup greeting is answered, dismissed, or could not be shown.
+function schedulePomodoroInvite(delayMs = STUDY.inviteDelayMs) {
+  if (!studyBreak || isPomodoroInviteResolved) return;
+  if (areProactiveNudgesOff || studyBreak.isJoined() || studyBreak.getStatus().disabled) return;
+  if (pomodoroInviteTimer !== null) clearTimeout(pomodoroInviteTimer);
+  pomodoroInviteTimer = setTimeout(() => {
+    pomodoroInviteTimer = null;
+    showPomodoroInvite();
+  }, delayMs);
+}
+
+function schedulePomodoroInviteRetry() {
+  schedulePomodoroInvite(STUDY.retryWhenBlockedMs);
+}
+
+// Shows the invitation through the same cue + nudge bubble as the greeting.
+// If the user opens the chat/menu during the cue, retry shortly rather than
+// losing the one-time offer.
+function showPomodoroInvite() {
+  if (!studyBreak || isPomodoroInviteResolved || isPomodoroInviteShowing || isPomodoroInviteOnScreen) return;
+  if (areProactiveNudgesOff || studyBreak.isJoined() || studyBreak.getStatus().disabled) return;
+  if (document.hidden || isChatOpen() || controls.isMenuOpen() || nudge.isVisible() ||
+      studyBreak.isActive() || isSpeaking || bubble.style.display === 'block') {
+    schedulePomodoroInviteRetry();
+    return;
+  }
+
+  isPomodoroInviteShowing = true;
+  const accepted = presentNudge(
+    STUDY.lines.pomodoroInvite,
+    STUDY.pomodoroReplies,
+    () => {
+      isPomodoroInviteShowing = false;
+      isPomodoroInviteOnScreen = true;
+    },
+    () => {
+      isPomodoroInviteShowing = false;
+      isPomodoroInviteOnScreen = false;
+      schedulePomodoroInviteRetry();
+    },
+  );
+  if (!accepted) {
+    isPomodoroInviteShowing = false;
+    schedulePomodoroInviteRetry();
+  }
+}
+
+// Stops the invitation for the rest of the session: accepted, declined,
+// ignored, or cancelled by "Not today".
+function resolvePomodoroInvite() {
+  isPomodoroInviteResolved = true;
+  isPomodoroInviteOnScreen = false;
+  isPomodoroInviteShowing = false;
+  if (pomodoroInviteTimer !== null) {
+    clearTimeout(pomodoroInviteTimer);
+    pomodoroInviteTimer = null;
+  }
+}
+
+// Shows a study-break question in the nudge bubble, but only when the user is
+// free to read it. Returns true when it is on screen so the timer can retry.
+function showStudyQuestion(text, replies) {
+  if (isChatOpen() || controls.isMenuOpen() || nudge.isVisible() || document.hidden) {
+    return false;
+  }
+  nudge.show(text, replies);
+  return true;
+}
+
+// Draws the small countdown above the frog while a Pomodoro phase is running.
+// It hides while the chat, nudge, menu or speech bubble occupies that space.
+function updateStudyClock() {
+  const status = studyBreak ? studyBreak.getStatus() : null;
+  const showCountdown = status && status.joined && status.remainingMs !== null &&
+    (status.phase === 'work' || status.phase === 'break' || status.phase === 'overrun');
+  const isObstructed = isChatOpen() || controls.isMenuOpen() || nudge.isVisible() ||
+    isSpeaking || bubble.style.display === 'block';
+
+  if (!showCountdown || isObstructed) {
+    studyClockElement.classList.remove('is-visible');
+    lastStudyClockText = '';
+    return;
+  }
+
+  const text = window.STUDY_CLOCK.formatClock(status.remainingMs);
+  if (text !== lastStudyClockText) {
+    studyClockElement.textContent = text;
+    lastStudyClockText = text;
+  }
+  // The overlay is hidden while snoozed, so this dims the clock for that state
+  // without ever pausing the wall-clock countdown.
+  studyClockElement.classList.toggle('is-paused', document.hidden);
+  studyClockElement.classList.add('is-visible');
+  positionStudyClock();
+}
+
+// Places the clock centred above the frog, or beside it when there is no room
+// above (for example when the frog is near the top of the screen).
+function positionStudyClock() {
+  const frog = spriteElement.getBoundingClientRect();
+  const width = studyClockElement.offsetWidth;
+  const height = studyClockElement.offsetHeight;
+
+  let left = frog.left + frog.width / 2 - width / 2;
+  let top = frog.top - height - CLOCK_GAP;
+  if (top < BUBBLE_GAP) {
+    const roomRight = window.innerWidth - frog.right;
+    const roomLeft = frog.left;
+    left = roomRight >= roomLeft ? frog.right + CLOCK_GAP : frog.left - width - CLOCK_GAP;
+    top = frog.top + Math.max(0, (frog.height - height) / 2);
+  }
+
+  left = Math.max(BUBBLE_GAP, Math.min(left, window.innerWidth - width - BUBBLE_GAP));
+  top = Math.max(BUBBLE_GAP, Math.min(top, window.innerHeight - height - BUBBLE_GAP));
+  studyClockElement.style.left = left + 'px';
+  studyClockElement.style.top = top + 'px';
+}
 
 // "Yes, help me!" (or "I'm not"): opens the chat with the exchange already in
 // the history (nudge text, the user's reply, followUp), so the user can
@@ -448,29 +645,38 @@ function logNudgeExchange(text, label, followUp, speakFollowUp) {
 // the user said "Not today". Counts toward the cooldowns once shown.
 function showNudge(message) {
   if (areProactiveNudgesOff || greetingStep || !canShowNudge()) return;
+  // A study break owns the bubble until it ends; a check-in must not replace
+  // the break or ready question.
+  if (studyBreak && studyBreak.isActive()) return;
   const text = message.text || window.NUDGE_CONFIG.defaultText;
   presentNudge(text, message.replies, recordNudgeShown);
 }
 
-// Shows a nudge bubble without any cooldown checks (the startup greeting uses
-// this directly). The frog plays its cue first so the message doesn't pop up
-// out of nowhere. Skipped while the chat or menu is open: the user is already
-// busy with the buddy. The message waits for the cue's length rather than its
-// onComplete, because clicking the frog mid-cue restarts the animation with
-// its own callback and the message would be lost.
+// Shows a nudge bubble without any cooldown checks (the startup greeting and
+// Pomodoro invitation use this directly). The frog plays its cue first so the
+// message doesn't pop up out of nowhere. Skipped while the chat or menu is
+// open: the user is already busy with the buddy. The message waits for the
+// cue's length rather than its onComplete, because clicking the frog mid-cue
+// restarts the animation with its own callback and the message would be lost.
+// Returns false when it is blocked immediately.
 // - onShown: optional, runs once the bubble is actually on screen.
-function presentNudge(text, replies, onShown) {
-  if (isChatOpen() || controls.isMenuOpen()) return;
+// - onMissed: optional, runs if the bubble became blocked during the cue.
+function presentNudge(text, replies, onShown, onMissed) {
+  if (isChatOpen() || controls.isMenuOpen()) return false;
   const { cueAnimation } = window.NUDGE_CONFIG;
   ++sequenceToken;
   spriteAnimator.play(cueAnimation, {
     onComplete: resumeRestAnimation,
   });
   setTimeout(() => {
-    if (isChatOpen() || controls.isMenuOpen()) return;
+    if (isChatOpen() || controls.isMenuOpen() || nudge.isVisible()) {
+      if (onMissed) onMissed();
+      return;
+    }
     nudge.show(text, replies);
     if (onShown) onShown();
   }, getAnimationLengthMs(cueAnimation));
+  return true;
 }
 
 // --- NUDGE TIMING ---
@@ -706,7 +912,7 @@ function playLookingFix(token, remaining) {
     spriteAnimator.play(seatedClickExit, {
       onComplete: () => {
         if (!isCurrentSequence(token)) return;
-        startTypingLoop(token);
+        resumeRestAnimation();
       },
     });
     return;
@@ -724,28 +930,28 @@ function playChatOpenReaction() {
   spriteAnimator.play(seatedClickIntro, {
     onComplete: () => {
       if (!isCurrentSequence(token)) return;
-      startSeatedChatLoop(token);
+      startLookOverLoop(token);
     },
   });
 }
 
-// Loops the look-over sheet indefinitely. Used while the chat is open so the
-// frog stays turned toward the user instead of typing behind the panel.
-function startSeatedChatLoop(token) {
+// Loops the look-over sheet indefinitely. Used while the chat is open and
+// during a study break, so the frog stays turned toward the user.
+function startLookOverLoop(token) {
   if (!isCurrentSequence(token)) return;
   spriteAnimator.play(seatedClickLook, {
-    onComplete: () => startSeatedChatLoop(token),
+    onComplete: () => startLookOverLoop(token),
   });
 }
 
-// Closing the chat while seated: look back down, then resume the typing loop.
+// Closing the chat while seated: look back down, then resume the rest pose.
 function playChatCloseReaction() {
   const token = ++sequenceToken;
   isChatPoseActive = false;
   spriteAnimator.play(seatedClickExit, {
     onComplete: () => {
       if (!isCurrentSequence(token)) return;
-      startTypingLoop(token);
+      resumeRestAnimation();
     },
   });
 }
@@ -756,7 +962,7 @@ function playChatCloseReaction() {
 function resumeProductiveRest(token, startWithBlink) {
   if (isChatOpen()) {
     isChatPoseActive = true;
-    startSeatedChatLoop(token);
+    startLookOverLoop(token);
   } else {
     startTypingLoop(token, startWithBlink);
   }
@@ -812,6 +1018,16 @@ function playLeaveJudging() {
 // The pose shown when no one-off reaction is playing. A click or nudge uses
 // this to hand control back to whichever state the category calls for.
 function resumeRestAnimation() {
+  // A study break owns the pose until it ends: look over while resting, judge
+  // while the buddy keeps asking whether the user is ready.
+  if (studyBreak && studyBreak.isInBreak()) {
+    startLookOverLoop(++sequenceToken);
+    return;
+  }
+  if (studyBreak && studyBreak.isInOverrun()) {
+    playJudgingLoop(++sequenceToken);
+    return;
+  }
   if (isTyping()) {
     resumeProductiveRest(++sequenceToken);
     return;
@@ -826,6 +1042,15 @@ function resumeRestAnimation() {
   spriteAnimator.play(DEFAULT_IMAGE_ANIMATION);
 }
 
+// While a study break owns the pose, activity changes still decide what the
+// frog should return to afterwards. Keep the judging state in sync and stop
+// the judging nudge timer, without playing any animation.
+function syncJudgingWithActivity(next) {
+  cancelJudgingNudgeTimer();
+  if (next === 'leisure' && !isJudgingOff) isJudging = true;
+  else isJudging = false;
+}
+
 // Reacts only to actual category changes, so switching apps while still in
 // the same category does not replay the entrance.
 // - productive: sits the frog down the first time, or stops a judge.
@@ -838,6 +1063,16 @@ function resumeRestAnimation() {
 function setActivityCategory(next) {
   if (!next || next === activityCategory) return;
   activityCategory = next;
+
+  // The study break counts productive stretches and owns the frog's pose
+  // while it is active, so activity changes must not interrupt it.
+  if (studyBreak) {
+    studyBreak.setWorking(next === 'productive');
+    if (studyBreak.isActive()) {
+      syncJudgingWithActivity(next);
+      return;
+    }
+  }
 
   if (next === 'productive') {
     cancelJudgingNudgeTimer();
@@ -1127,9 +1362,12 @@ function greetOnStartup() {
   if (hasGreetedOnStartup) return;
   hasGreetedOnStartup = true;
   const { text, replies } = window.NUDGE_CONFIG.startupGreeting;
-  presentNudge(text, replies, () => {
+  const shown = presentNudge(text, replies, () => {
     greetingStep = 'greeting';
+  }, () => {
+    schedulePomodoroInvite();
   });
+  if (!shown) schedulePomodoroInvite();
 }
 
 // What each greeting button does. text is the line the button was under and
@@ -1144,9 +1382,11 @@ function handleGreetingReply(id, text, label) {
     showGreetingQuestion(greeting.followUpText, greeting.followUpReplies, 'followUp');
   } else if (id === 'greetHelp') {
     acceptNudge(text, label, window.NUDGE_CONFIG.helpLine);
+    schedulePomodoroInvite();
   } else if (id === 'greetGotIt') {
     nudge.showBriefly(greeting.gotItLine);
     logNudgeExchange(text, label, greeting.gotItLine, false);
+    schedulePomodoroInvite();
   } else if (id === 'greetNotToday') {
     logGreetingAnswer(text, label);
     turnOffProactiveNudges();
@@ -1155,9 +1395,11 @@ function handleGreetingReply(id, text, label) {
     nudge.showBriefly(greeting.hideLine);
     logNudgeExchange(text, label, greeting.hideLine, false);
     shouldSnoozeWhenNudgeHides = true;
+    schedulePomodoroInvite();
   } else if (id === 'greetStay') {
     nudge.showBriefly(greeting.stayLine);
     logNudgeExchange(text, label, greeting.stayLine, false);
+    schedulePomodoroInvite();
   }
 }
 
@@ -1187,7 +1429,11 @@ function showGreetingQuestion(text, replies, step) {
 function handleGreetingClosedUnanswered() {
   const step = greetingStep;
   greetingStep = null;
+  if (!step) return;
   if (step === 'greeting') turnOffJudging();
+  // The greeting flow has settled, so the Pomodoro offer can start its timer.
+  // "notToday" already turned proactive nudges off, so it must not schedule.
+  if (step === 'greeting' || step === 'followUp') schedulePomodoroInvite();
 }
 
 // No judging animation and no judging nudges for the rest of the session.
@@ -1203,12 +1449,20 @@ function turnOffJudging() {
 function turnOffProactiveNudges() {
   areProactiveNudgesOff = true;
   turnOffJudging();
+  resolvePomodoroInvite();
+  if (studyBreak) studyBreak.disable();
 }
 
 function submitChat(e) {
   e.preventDefault();
   const goal = chatInput.value.trim();
   if (!goal) return;
+
+  // A message like "I'm done with my break" ends a study break or the
+  // "still coming?" cycle; the AI request below continues as normal.
+  if (studyBreak && studyBreak.isActive() && studyBreak.looksReady(goal)) {
+    studyBreak.endBreakEarly();
+  }
 
   // An unconfirmed breakdown is stale from the moment a new message is sent.
   // Drop its buttons first so their labels don't leak into the history read
@@ -1221,7 +1475,7 @@ function submitChat(e) {
   chatSend.disabled = true;
   activePending = addChatLine('...', 'pending');
 
-  window.electronAPI.askAI(goal, history);
+  window.electronAPI.askAI(goal, history, studyBreak ? studyBreak.getStatus() : null);
 }
 
 window.electronAPI.onAIStream(() => { ensureReplyElement(); });

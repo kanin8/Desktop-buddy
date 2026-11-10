@@ -40,6 +40,7 @@ const CLASSIFY_PERSONA =
   'Use the recent chat to work out what "it" or "that one" means. ' +
   'If you cannot tell which task they mean, reply {"type": "chat"}.\n' +
   'Examples: "plan a website"->task, "write a script"->task, "hello"->chat, "how are you"->chat, ' +
+  '"how long until my next break"->chat, ' +
   '"I finished the reading"->complete the matching task, "change 2 to call mom at 5"->rename task 2, ' +
   '"add buy milk"->add, "get rid of the gym one"->delete the matching task, ' +
   '"show me my list"->open_list, "hide the to-do list"->close_list.';
@@ -103,6 +104,74 @@ function toAlternatingTurns(lines) {
   return turns;
 }
 
+// Rounds a timer value into something worth saying out loud: "about 12
+// minutes", "less than a minute". Exact seconds would be false precision.
+function describeDuration(ms) {
+  var totalSeconds = Math.max(0, Math.round(Number(ms) / 1000));
+  if (totalSeconds < 30) return 'less than a minute';
+  var minutes = Math.max(1, Math.round(totalSeconds / 60));
+  return 'about ' + minutes + (minutes === 1 ? ' minute' : ' minutes');
+}
+
+/**
+ * Turns the Pomodoro timer's status snapshot into a prompt section. The
+ * overlay sends the shape; this validates it here, so a malformed renderer
+ * value can't inject prose into the system prompt.
+ */
+function describeStudyTimer(status) {
+  if (!status || typeof status !== 'object') return '';
+  if (status.disabled === true) {
+    return 'The Pomodoro timer is off for this session, so no next break is scheduled.';
+  }
+  if (status.joined !== true) {
+    return 'The Pomodoro timer is not running because the user has not joined it.';
+  }
+
+  var phase = status.phase;
+  var pending = status.pendingQuestion;
+  var remaining = Number.isFinite(status.remainingMs) ? Math.max(0, status.remainingMs) : null;
+  var roundNumber = Number.isInteger(status.roundNumber) && status.roundNumber > 0
+    ? status.roundNumber
+    : null;
+  var completed = Number.isInteger(status.completedPomodoros) && status.completedPomodoros >= 0
+    ? status.completedPomodoros
+    : null;
+  var breakKind = status.breakKind === 'long' ? 'long' : (status.breakKind === 'short' ? 'short' : null);
+  var nextBreakKind = status.nextBreakKind === 'long' ? 'long' : 'short';
+  var line;
+
+  if (phase === 'break') {
+    var breakName = breakKind === 'long' ? 'long break' : 'short break';
+    if (pending === 'ready') {
+      line = 'The user is on a Pomodoro ' + breakName + ' and the buddy is asking right now whether they are ready to keep working.';
+    } else if (remaining !== null) {
+      line = 'The user is on a Pomodoro ' + breakName + ' with ' + describeDuration(remaining) + ' left.';
+    } else {
+      line = 'The user is on a Pomodoro ' + breakName + '.';
+    }
+  } else if (phase === 'overrun') {
+    line = 'The user\'s Pomodoro break is over and the buddy is waiting for them to say they are ready to keep working.';
+    if (remaining !== null && remaining > 0) {
+      line += ' It will ask again in ' + describeDuration(remaining) + '.';
+    }
+  } else if (phase === 'offer' || pending === 'suggestion') {
+    line = 'The buddy has just offered the user a ' + (breakKind === 'long' ? 'long break' : 'break') + '.';
+  } else if (phase === 'work' && remaining !== null) {
+    var roundText = roundNumber === null ? 'A Pomodoro work round' : 'Pomodoro work round ' + roundNumber;
+    line = 'The user is in ' + roundText + ', with ' + describeDuration(remaining) +
+      ' until the next ' + (nextBreakKind === 'long' ? 'long break' : 'short break') + '.';
+    if (completed !== null) {
+      line += ' They have completed ' + completed + (completed === 1 ? ' round' : ' rounds') + ' so far.';
+    }
+  } else if (phase === 'work') {
+    line = 'The user is in a Pomodoro work round and the next break is being counted down.';
+  } else {
+    line = 'The Pomodoro timer is running.';
+  }
+
+  return line + ' Use this when the user asks about the next break or how much time is left, and never invent a different countdown.';
+}
+
 /**
  * Messages for the streamed in-character reply.
  * No JSON mode: the tokens are shown live, so they must be readable prose.
@@ -113,9 +182,11 @@ function toAlternatingTurns(lines) {
  * what it just asked.
  * `listContext` (optional) describes the to-do list and what the app just did
  * to it, so the buddy can talk about the tasks without claiming edits itself.
+ * `studyContext` (optional) describes the Pomodoro timer, so the buddy can
+ * answer "how long until my next break?".
  */
-function buildReplyMessages(text, voiceGuide, history, listContext) {
-  var parts = [voiceGuide, listContext, PERSONA].filter(Boolean);
+function buildReplyMessages(text, voiceGuide, history, listContext, studyContext) {
+  var parts = [voiceGuide, listContext, studyContext, PERSONA].filter(Boolean);
   var systemPrompt = parts.join('\n\n');
   var lines = cleanChatHistory(history).concat([
     { role: 'user', content: String(text || '').trim() },
@@ -375,13 +446,13 @@ function callModel(options) {
 }
 
 /** Streamed reply for the speech bubble. */
-async function streamReply({ provider, baseUrl, apiKey, model, text, voiceGuide, history, listContext, onToken, signal }) {
+async function streamReply({ provider, baseUrl, apiKey, model, text, voiceGuide, history, listContext, studyContext, onToken, signal }) {
   return callModel({
     provider: provider,
     baseUrl: baseUrl,
     apiKey: apiKey,
     model: model,
-    messages: buildReplyMessages(text, voiceGuide, history, listContext),
+    messages: buildReplyMessages(text, voiceGuide, history, listContext, studyContext),
     stream: true,
     temperature: CONFIG.AI_TEMPERATURE,
     maxTokens: CONFIG.AI_MAX_TOKENS,
@@ -541,6 +612,7 @@ module.exports = {
   buildBreakdownMessages,
   buildClassifyMessages,
   buildActivityMessages,
+  describeStudyTimer,
   parseBreakdown,
   parseClassification,
   parseActivityCategory,
