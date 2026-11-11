@@ -283,6 +283,35 @@ test('readiness phrases are recognised, including "done with my break"', () => {
   assert.strictEqual(study.looksReady(''), false);
 });
 
+test('work-intent phrases count as ready', () => {
+  const { study } = makeStudy();
+
+  assert.strictEqual(study.looksReady("I'll start working"), true);
+  assert.strictEqual(study.looksReady('I want to work now'), true);
+  assert.strictEqual(study.looksReady("let's get back to work"), true);
+  assert.strictEqual(study.looksReady("I can't start working"), false);
+  assert.strictEqual(study.looksReady("I don't want to work"), false);
+  assert.strictEqual(study.looksReady('how do I start working on this?'), false);
+});
+
+test('stop and start commands are recognised', () => {
+  const { study } = makeStudy();
+
+  assert.strictEqual(study.looksLikeStop('stop the pomodoro'), true);
+  assert.strictEqual(study.looksLikeStop('can you end the timer?'), true);
+  assert.strictEqual(study.looksLikeStop('turn off the pomodoro'), true);
+  assert.strictEqual(study.looksLikeStop('I want to start working'), false);
+  assert.strictEqual(study.looksLikeStop('I cannot stop scrolling'), false);
+  assert.strictEqual(study.looksLikeStop('stop by the store'), false);
+  assert.strictEqual(study.looksLikeStop('I want to end my break'), false);
+
+  assert.strictEqual(study.looksLikeStart('start the pomodoro'), true);
+  assert.strictEqual(study.looksLikeStart('please rejoin the timer'), true);
+  assert.strictEqual(study.looksLikeStart('what is the timer for'), false);
+  assert.strictEqual(study.looksLikeStart('I want to start working on the timer'), false);
+  assert.strictEqual(study.looksLikeStart(''), false);
+});
+
 test('a readiness message ends a break or the overrun cycle', () => {
   const { study, clock, events } = makeStudy();
   study.joinPomodoro();
@@ -314,6 +343,78 @@ test('disable before a break prevents the offer', () => {
   const { study, clock, events } = makeStudy();
   study.joinPomodoro();
   study.disable();
+
+  clock.advance(CONFIG.workSessionMs);
+  assert.deepStrictEqual(events, []);
+});
+
+test('stopPomodoro stops the timer without disabling proactive nudges', () => {
+  const { study, clock, events } = makeStudy();
+  study.joinPomodoro();
+  clock.advance(CONFIG.workSessionMs / 2);
+
+  assert.strictEqual(study.stopPomodoro(), true);
+  assert.strictEqual(study.isJoined(), false);
+  assert.strictEqual(study.getStatus().phase, 'off');
+  assert.strictEqual(study.getStatus().disabled, false);
+
+  const eventCount = events.length;
+  clock.advance(CONFIG.workSessionMs);
+  assert.strictEqual(events.length, eventCount);
+});
+
+test('stopPomodoro ends an active break pose', () => {
+  const { study, clock, events } = makeStudy();
+  study.joinPomodoro();
+  clock.advance(CONFIG.workSessionMs);
+  study.acceptBreak();
+
+  assert.strictEqual(study.stopPomodoro(), true);
+  assert.strictEqual(count(events, 'breakEnd'), 1);
+  assert.strictEqual(study.getStatus().disabled, false);
+});
+
+test('stopPomodoro from a break offer does not fire onBreakEnd', () => {
+  const { study, clock, events } = makeStudy();
+  study.joinPomodoro();
+  clock.advance(CONFIG.workSessionMs);
+
+  study.stopPomodoro();
+  assert.strictEqual(count(events, 'breakEnd'), 0);
+  assert.strictEqual(study.getStatus().phase, 'off');
+});
+
+test('the timer can be joined again after stopping', () => {
+  const { study, clock, events } = makeStudy();
+  study.joinPomodoro();
+  study.stopPomodoro();
+
+  assert.strictEqual(study.joinPomodoro(), true);
+  clock.advance(CONFIG.workSessionMs);
+  assert.strictEqual(count(events, 'suggest'), 1);
+});
+
+test('an explicit join clears the Not today kill switch', () => {
+  const { study, clock } = makeStudy();
+  study.joinPomodoro();
+  study.disable();
+  assert.strictEqual(study.getStatus().disabled, true);
+
+  assert.strictEqual(study.joinPomodoro(), true);
+  assert.strictEqual(study.getStatus().disabled, false);
+  assert.strictEqual(study.getStatus().phase, 'work');
+
+  clock.advance(CONFIG.workSessionMs);
+  assert.strictEqual(study.getStatus().phase, 'offer');
+});
+
+test('enable clears Not today without starting the timer', () => {
+  const { study, clock, events } = makeStudy();
+  study.disable();
+  study.enable();
+
+  assert.strictEqual(study.getStatus().disabled, false);
+  assert.strictEqual(study.getStatus().phase, 'off');
 
   clock.advance(CONFIG.workSessionMs);
   assert.deepStrictEqual(events, []);

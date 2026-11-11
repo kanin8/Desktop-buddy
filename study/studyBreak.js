@@ -1,7 +1,8 @@
 // The Pomodoro timer: once the user joins, every 25-minute work round earns a
 // 5-minute break, every fourth round earns a 30-minute long break, and a
 // 5-minute break earns a "ready to keep working?" question. Answering no
-// repeats that question every 3 minutes until the user is ready.
+// repeats that question every 3 minutes until the user is ready. The user can
+// leave the loop at any time and join again later.
 //
 // The work countdown is wall-clock time, so it keeps running when the user
 // leaves productive apps. Timing and state only: every visible effect (nudge
@@ -31,13 +32,15 @@ function createStudyBreak(callbacks, options = {}) {
   // True while the active window is productive work. This only feeds the frog
   // pose and the AI status; the Pomodoro clock itself runs continuously.
   let isWorking = false;
-  // True once the user accepts the Pomodoro invitation.
+  // True once the user accepts the Pomodoro invitation or asks for the timer
+  // in chat.
   let joined = false;
   let phaseTimer = null;
   // When the current work, break or overrun phase ends, for getStatus().
   let phaseEndsAt = null;
   let retryTimer = null;
-  // Session kill switch ("Not today").
+  // Session kill switch ("Not today"). An explicit join or enable() clears it
+  // again, so the user can change their mind.
   let isDisabled = false;
   // Completed 25-minute work rounds in this session.
   let completedPomodoros = 0;
@@ -157,13 +160,21 @@ function createStudyBreak(callbacks, options = {}) {
     else state = 'off';
   }
 
-  // The user accepts the Pomodoro invitation. Starts the first work round.
+  // The user accepts the Pomodoro invitation or asks for the timer in chat.
+  // An explicit start also clears "Not today", so it works after disable().
   function joinPomodoro() {
-    if (joined || isDisabled) return false;
+    if (joined) return false;
+    isDisabled = false;
     joined = true;
     completedPomodoros = 0;
     startWorkRound();
     return true;
+  }
+
+  // Clears "Not today" without starting the timer, so the invitation can be
+  // offered again when the user changes their mind.
+  function enable() {
+    isDisabled = false;
   }
 
   // Records whether the active window is productive. The Pomodoro timer is
@@ -241,6 +252,24 @@ function createStudyBreak(callbacks, options = {}) {
     if (wasShowingBreakPose) callbacks.onBreakEnd();
   }
 
+  // The user leaves the Pomodoro loop without turning off proactive nudges.
+  // Stops every timer and hands the frog back to its rest pose if a break was
+  // running. The one-time invitation stays resolved, so the timer only starts
+  // again if the user asks for it in chat.
+  function stopPomodoro() {
+    if (!joined) return false;
+    const wasShowingBreakPose = state === 'break' || state === 'overrun';
+    pendingQuestion = null;
+    pendingBreakKind = null;
+    currentBreakKind = null;
+    clearPhaseTimer();
+    clearRetryTimer();
+    joined = false;
+    state = 'off';
+    if (wasShowingBreakPose) callbacks.onBreakEnd();
+    return true;
+  }
+
   // True when a chat message says the user is ready to work again.
   function looksReady(message) {
     const text = String(message || '').trim();
@@ -248,6 +277,20 @@ function createStudyBreak(callbacks, options = {}) {
     const { readyPatterns, notReadyPatterns } = config();
     if (notReadyPatterns.some((pattern) => pattern.test(text))) return false;
     return readyPatterns.some((pattern) => pattern.test(text));
+  }
+
+  // True when a chat message asks to stop the Pomodoro timer.
+  function looksLikeStop(message) {
+    const text = String(message || '').trim();
+    if (!text) return false;
+    return config().stopPatterns.some((pattern) => pattern.test(text));
+  }
+
+  // True when a chat message asks to (re)start the Pomodoro timer.
+  function looksLikeStart(message) {
+    const text = String(message || '').trim();
+    if (!text) return false;
+    return config().startPatterns.some((pattern) => pattern.test(text));
   }
 
   // Snapshot for the AI prompt and the clock: where the timer is, how long is
@@ -271,6 +314,7 @@ function createStudyBreak(callbacks, options = {}) {
 
   return {
     joinPomodoro,
+    enable,
     setWorking,
     acceptBreak,
     declineBreak,
@@ -278,8 +322,11 @@ function createStudyBreak(callbacks, options = {}) {
     declineReady,
     endBreakEarly,
     noteQuestionHidden,
+    stopPomodoro,
     disable,
     looksReady,
+    looksLikeStop,
+    looksLikeStart,
     getStatus,
     isJoined: () => joined,
     isActive: () => state === 'offer' || state === 'break' || state === 'overrun',

@@ -419,6 +419,10 @@ const nudge = createNudge(
       } else if (id === STUDY.replyIds.readyNo) {
         nudge.showBriefly(STUDY.lines.readyDeclined);
         studyBreak.declineReady();
+      } else if (id === STUDY.replyIds.stop) {
+        // Leave the timer first so the frog returns to rest before speaking.
+        studyBreak.stopPomodoro();
+        nudge.showBriefly(STUDY.lines.pomodoroStopped);
       } else if (GREETING_REPLY_IDS.includes(id)) {
         handleGreetingReply(id, text, label);
       } else if (id === 'yes') {
@@ -473,7 +477,9 @@ studyBreak = createStudyBreak({
   // menu (or another nudge is showing), say so and the timer retries shortly
   // instead of dropping the flow.
   onSuggest: (breakKind) => {
-    if (areProactiveNudgesOff || greetingStep) return false;
+    // A joined timer is explicit consent, even after "Not today", so the
+    // general nudge switch must not suppress break offers.
+    if (greetingStep) return false;
     const line = breakKind === 'long' ? STUDY.lines.longBreakSuggestion : STUDY.lines.suggestion;
     return showStudyQuestion(line, STUDY.breakReplies);
   },
@@ -541,6 +547,19 @@ function resolvePomodoroInvite() {
     clearTimeout(pomodoroInviteTimer);
     pomodoroInviteTimer = null;
   }
+}
+
+// Lets the one-time invitation be offered again after the user undoes
+// "Not today" by saying they want to start working.
+function resetPomodoroInvite() {
+  isPomodoroInviteResolved = false;
+  isPomodoroInviteOnScreen = false;
+  isPomodoroInviteShowing = false;
+  if (pomodoroInviteTimer !== null) {
+    clearTimeout(pomodoroInviteTimer);
+    pomodoroInviteTimer = null;
+  }
+  schedulePomodoroInvite();
 }
 
 // Shows a study-break question in the nudge bubble, but only when the user is
@@ -1490,7 +1509,7 @@ function turnOffJudging() {
 }
 
 // "Not today": no judging and no proactive nudges at all (idle check-ins
-// included) for the rest of the session.
+// included) until the user says they want to start working again.
 function turnOffProactiveNudges() {
   areProactiveNudgesOff = true;
   turnOffJudging();
@@ -1498,15 +1517,46 @@ function turnOffProactiveNudges() {
   if (studyBreak) studyBreak.disable();
 }
 
+// The user changed their mind after "Not today" (for example by saying they
+// are starting work). Turns judging and proactive nudges back on, clears the
+// timer's kill switch, and optionally schedules the Pomodoro invitation again.
+function resumeAfterNotToday({ reofferPomodoro }) {
+  areProactiveNudgesOff = false;
+  isJudgingOff = false;
+  if (studyBreak) studyBreak.enable();
+
+  // Activity updates only fire on category changes, so bring judging back
+  // right away if the user is currently in leisure.
+  if (activityCategory === 'leisure') {
+    if (isAtDesk && !isJudging) playJudgingSequence();
+    if (isJudging) startJudgingNudgeTimer();
+  }
+
+  if (reofferPomodoro) resetPomodoroInvite();
+}
+
 function submitChat(e) {
   e.preventDefault();
   const goal = chatInput.value.trim();
   if (!goal) return;
 
-  // A message like "I'm done with my break" ends a study break or the
-  // "still coming?" cycle; the AI request below continues as normal.
-  if (studyBreak && studyBreak.isActive() && studyBreak.looksReady(goal)) {
-    studyBreak.endBreakEarly();
+  // Chat can drive the Pomodoro timer: stop it, (re)start it, or clear a
+  // previous "Not today" by saying the user is starting work. The AI request
+  // below continues either way and sees the updated status.
+  if (studyBreak) {
+    if (studyBreak.looksLikeStop(goal)) {
+      studyBreak.stopPomodoro();
+    } else if (studyBreak.looksLikeStart(goal)) {
+      if (areProactiveNudgesOff) resumeAfterNotToday({ reofferPomodoro: false });
+      resolvePomodoroInvite();
+      studyBreak.joinPomodoro();
+    } else if (areProactiveNudgesOff && studyBreak.looksReady(goal)) {
+      resumeAfterNotToday({ reofferPomodoro: true });
+    } else if (studyBreak.isActive() && studyBreak.looksReady(goal)) {
+      // A message like "I'm done with my break" ends a study break or the
+      // "still coming?" cycle early.
+      studyBreak.endBreakEarly();
+    }
   }
 
   // An unconfirmed breakdown is stale from the moment a new message is sent.
