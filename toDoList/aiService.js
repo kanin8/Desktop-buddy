@@ -69,8 +69,9 @@ function send(win, channel, payload) {
  * Classifying first costs a moment before the reply starts, but means the
  * buddy never talks about an edit that didn't happen.
  * `history` is the chat before `text` as [{ role, content }].
+ * `studyTimer` is the overlay's Pomodoro snapshot, for timer questions.
  */
-async function askAndBreakdown(win, text, history) {
+async function askAndBreakdown(win, text, history, studyTimer) {
   const config = getSettings();
   const goal = String(text || '').trim();
   if (!goal) return;
@@ -90,8 +91,12 @@ async function askAndBreakdown(win, text, history) {
     const list = describeList(getStore().getItems(), CONFIG.MAX_CONTEXT_ITEMS);
     const intent = await classifyMessage(goal, list.text, history, base);
     const listUpdate = intent.type === 'edit' ? applyListEdits(win, intent.actions, list.idsByNumber) : null;
+    // The overlay owns the timer, so it does the start (overlay.js,
+    // onAIStartTimer). Sent before the reply so the clock is already running
+    // when the buddy confirms it.
+    if (intent.startTimer) send(win, 'ai-start-timer');
 
-    const replied = await streamBuddyReply(win, goal, history, listUpdate, base);
+    const replied = await streamBuddyReply(win, goal, history, listUpdate, base, studyTimer, intent.startTimer === true);
     // Shown even if the reply failed: the edits already happened.
     if (listUpdate) announceListUpdate(win, listUpdate);
     if (replied && intent.type === 'task') await offerBreakdown(win, goal, base);
@@ -190,9 +195,10 @@ function describeListForReply(listUpdate) {
 
 /**
  * Streams the in-character reply into the chat. Returns whether it finished;
- * on failure the error is already shown.
+ * on failure the error is already shown. `timerStarted` is true when this
+ * message just started the Pomodoro timer.
  */
-async function streamBuddyReply(win, goal, history, listUpdate, base) {
+async function streamBuddyReply(win, goal, history, listUpdate, base, studyTimer, timerStarted) {
   try {
     // Only the visible reply gets the voice guide: the classify and breakdown
     // calls need strict JSON, and the guide would add ~4k tokens to each.
@@ -201,6 +207,7 @@ async function streamBuddyReply(win, goal, history, listUpdate, base) {
       voiceGuide: voiceGuide,
       history: history,
       listContext: describeListForReply(listUpdate),
+      studyContext: ai.describeStudyTimer(studyTimer, timerStarted),
       onToken: (token) => send(win, 'ai-stream', token),
     }, base));
     send(win, 'ai-stream-end', reply || '');
@@ -317,7 +324,7 @@ async function classifyActivity(info) {
 function registerAiIpc() {
   voiceGuide = loadVoiceGuide();
 
-  ipcMain.handle('ai-ask', (event, text, history) => askAndBreakdown(overlayOf(event), text, history));
+  ipcMain.handle('ai-ask', (event, text, history, studyTimer) => askAndBreakdown(overlayOf(event), text, history, studyTimer));
 
   // Confirmation of a pending breakdown or removal: "Yes" / "Remove" go here,
   // "No" / "Keep" just drop the pending entry, so nothing is added or removed

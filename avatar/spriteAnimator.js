@@ -137,21 +137,27 @@ class SpriteAnimator {
   // Nudges the sprite onto the shared feet baseline. A number is a fixed
   // offset; `{ from, to }` ramps across the playback so a pose whose feet
   // drift within the sheet stays planted. `offsetX` shifts horizontally the
-  // same way. Applied as a transform so it does not disturb the parent's
-  // centring, and so the element's bounding rect (used for click/hover)
-  // follows the shift.
+  // same way. `scale` (`{ from, to }`, around the sprite's centre) lets a
+  // clip whose sheet draws the frog at two different sizes start and end at
+  // the size of the poses on either side of it. Applied as a transform so it
+  // does not disturb the parent's centring, and so the element's bounding
+  // rect (used for click/hover) follows the shift.
   applyOffset() {
-    const offsetY = this.animation.offsetY;
-    let value = offsetY;
+    const offsetX = this.getOffsetAtCurrentFrame(this.animation.offsetX, 0);
+    const offsetY = this.getOffsetAtCurrentFrame(this.animation.offsetY, 0);
+    const scale = this.getOffsetAtCurrentFrame(this.animation.scale, 1);
+    this.element.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+  }
 
-    if (offsetY && typeof offsetY === 'object') {
-      const frameCount = this.getFrameCount();
-      const progress = frameCount > 1 ? this.frameIndex / (frameCount - 1) : 0;
-      value = offsetY.from + (offsetY.to - offsetY.from) * progress;
-    }
+  // Resolves one setting (a number, `{ from, to }`, or missing) to its value
+  // for the frame being shown. `fallback` is used when it is missing.
+  getOffsetAtCurrentFrame(offset, fallback) {
+    if (offset === undefined || offset === null) return fallback;
+    if (typeof offset !== 'object') return offset;
 
-    const offsetX = this.animation.offsetX || 0;
-    this.element.style.transform = `translate(${offsetX}px, ${value || 0}px)`;
+    const frameCount = this.getFrameCount();
+    const progress = frameCount > 1 ? this.frameIndex / (frameCount - 1) : 0;
+    return offset.from + (offset.to - offset.from) * progress;
   }
 
   // Moves the background to the current frame. Offsets are negative to pull the

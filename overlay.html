@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="controls/controls.css">
   <link rel="stylesheet" href="chat/chat.css">
   <link rel="stylesheet" href="nudge/nudge.css">
+  <link rel="stylesheet" href="study/clock.css">
   <style>
     body {
       margin: 0;
@@ -87,6 +88,32 @@
   </style>
 </head>
 <body>
+  <!-- Small Pomodoro countdown above the frog; shown only after the user joins. -->
+  <div id="study-clock" class="study-clock" data-no-drag>
+    <div id="study-clock-time" class="study-clock-time" role="timer" aria-label="Pomodoro time remaining" aria-live="off"></div>
+    <!-- Play/pause, skip and stop, under the countdown (overlay.js). -->
+    <div class="study-clock-controls" role="toolbar" aria-label="Pomodoro controls">
+      <button id="study-clock-pause" class="study-clock-button" type="button" aria-label="Pause">
+        <svg class="control-icon icon-pause" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M9 6v12M15 6v12"/>
+        </svg>
+        <svg class="control-icon icon-play" viewBox="0 0 24 24" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
+          <path d="M8 5l11 7-11 7z"/>
+        </svg>
+      </button>
+      <button id="study-clock-skip" class="study-clock-button" type="button" aria-label="Skip to next phase">
+        <svg class="control-icon" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M6 5l9 7-9 7z"/>
+          <path d="M18 5v14"/>
+        </svg>
+      </button>
+      <button id="study-clock-stop" class="study-clock-button" type="button" aria-label="Stop Pomodoro">
+        <svg class="control-icon" viewBox="0 0 24 24" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
+          <rect x="6" y="6" width="12" height="12" rx="1.5"/>
+        </svg>
+      </button>
+    </div>
+  </div>
   <div id="avatar">
     <div id="avatar-sprite"></div>
     <!-- Decorative hint for now; step 3 makes it part of the keyboard-reachable controls. -->
@@ -184,6 +211,9 @@
   <script src="chat/config.js"></script>
   <script src="chat/chatLayout.js"></script>
   <script src="nudge/config.js"></script>
+  <script src="study/config.js"></script>
+  <script src="study/studyBreak.js"></script>
+  <script src="study/clock.js"></script>
   <script src="nudge/nudge.js"></script>
   <script src="overlay.js"></script>
 </body>

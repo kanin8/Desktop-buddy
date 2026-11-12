@@ -40,9 +40,16 @@ const CLASSIFY_PERSONA =
   'Use the recent chat to work out what "it" or "that one" means. ' +
   'If you cannot tell which task they mean, reply {"type": "chat"}.\n' +
   'Examples: "plan a website"->task, "write a script"->task, "hello"->chat, "how are you"->chat, ' +
+  '"how long until my next break"->chat, ' +
   '"I finished the reading"->complete the matching task, "change 2 to call mom at 5"->rename task 2, ' +
   '"add buy milk"->add, "get rid of the gym one"->delete the matching task, ' +
-  '"show me my list"->open_list, "hide the to-do list"->close_list.';
+  '"show me my list"->open_list, "hide the to-do list"->close_list.\n' +
+  'Pomodoro timer: also put "timer": "start" in the JSON when the user wants the Pomodoro ' +
+  '(study/focus) timer to start now, in any wording, including saying yes after the buddy ' +
+  'offered it. Leave it out for questions about the timer, for stopping it, and for anything else. ' +
+  'Examples: "let\'s do a pomodoro"->{"type": "chat", "timer": "start"}, ' +
+  '"time my study session"->{"type": "chat", "timer": "start"}, ' +
+  '"how long until my break"->{"type": "chat"}.';
 
 // Activity prompt: decides whether the window the user is looking at is work
 // or entertainment. Only used for apps the local rule list does not know.
@@ -103,6 +110,106 @@ function toAlternatingTurns(lines) {
   return turns;
 }
 
+// Rounds a timer value into something worth saying out loud: "about 12
+// minutes", "less than a minute". Exact seconds would be false precision.
+function describeDuration(ms) {
+  var totalSeconds = Math.max(0, Math.round(Number(ms) / 1000));
+  if (totalSeconds < 30) return 'less than a minute';
+  var minutes = Math.max(1, Math.round(totalSeconds / 60));
+  return 'about ' + minutes + (minutes === 1 ? ' minute' : ' minutes');
+}
+
+// What the buddy can do with the timer, so it offers it and doesn't claim it
+// can't. The app starts the timer when classification says so ("timer":
+// "start") and stops it on study/config.js stopPatterns, both before this
+// reply is requested, so the status above is already the result.
+var TIMER_CONTROLS =
+  'You can start and stop the Pomodoro timer for the user: when they ask, the app does it ' +
+  'and the timer status above already shows the result, so confirm it briefly. Only say the ' +
+  'timer started or stopped if the status says so. You can also suggest starting it when they ' +
+  'want to focus. The clock above you has play/pause, skip and stop buttons too.';
+
+/**
+ * Turns the Pomodoro timer's status snapshot into a prompt section: what the
+ * timer is doing, then what the buddy can do with it (TIMER_CONTROLS). The
+ * overlay sends the shape; this validates it here, so a malformed renderer
+ * value can't inject prose into the system prompt.
+ * `startRequested` is true when this message just started the timer: the
+ * snapshot was taken before that, so it is described as started instead.
+ */
+function describeStudyTimer(status, startRequested) {
+  if (!status || typeof status !== 'object') return '';
+  return describeTimerStart(status, startRequested) + ' ' + TIMER_CONTROLS;
+}
+
+// The state sentence, adjusted for a start the app made for this message.
+function describeTimerStart(status, startRequested) {
+  if (startRequested !== true) return describeTimerState(status);
+  if (status.joined === true) {
+    return describeTimerState(status) + ' The user asked to start the timer, but it was already running, so nothing changed.';
+  }
+  return 'For the user\'s latest message the app has just started the Pomodoro timer: a fresh ' +
+    'work round is now counting down to the first break.';
+}
+
+// The first part of describeStudyTimer: one or two sentences on where the
+// timer is right now.
+function describeTimerState(status) {
+  if (status.disabled === true) {
+    return 'The Pomodoro timer is off for this session, so no next break is scheduled.';
+  }
+  if (status.joined !== true) {
+    return 'The Pomodoro timer is not running because the user has not joined it.';
+  }
+
+  var phase = status.phase;
+  var pending = status.pendingQuestion;
+  var remaining = Number.isFinite(status.remainingMs) ? Math.max(0, status.remainingMs) : null;
+  var roundNumber = Number.isInteger(status.roundNumber) && status.roundNumber > 0
+    ? status.roundNumber
+    : null;
+  var completed = Number.isInteger(status.completedPomodoros) && status.completedPomodoros >= 0
+    ? status.completedPomodoros
+    : null;
+  var breakKind = status.breakKind === 'long' ? 'long' : (status.breakKind === 'short' ? 'short' : null);
+  var nextBreakKind = status.nextBreakKind === 'long' ? 'long' : 'short';
+  var line;
+
+  if (phase === 'break') {
+    var breakName = breakKind === 'long' ? 'long break' : 'short break';
+    if (pending === 'ready') {
+      line = 'The user is on a Pomodoro ' + breakName + ' and the buddy is asking right now whether they are ready to keep working.';
+    } else if (remaining !== null) {
+      line = 'The user is on a Pomodoro ' + breakName + ' with ' + describeDuration(remaining) + ' left.';
+    } else {
+      line = 'The user is on a Pomodoro ' + breakName + '.';
+    }
+  } else if (phase === 'overrun') {
+    line = 'The user\'s Pomodoro break is over and the buddy is waiting for them to say they are ready to keep working.';
+    if (remaining !== null && remaining > 0) {
+      line += ' It will ask again in ' + describeDuration(remaining) + '.';
+    }
+  } else if (phase === 'offer' || pending === 'suggestion') {
+    line = 'The buddy has just offered the user a ' + (breakKind === 'long' ? 'long break' : 'break') + '.';
+  } else if (phase === 'work' && remaining !== null) {
+    var roundText = roundNumber === null ? 'A Pomodoro work round' : 'Pomodoro work round ' + roundNumber;
+    line = 'The user is in ' + roundText + ', with ' + describeDuration(remaining) +
+      ' until the next ' + (nextBreakKind === 'long' ? 'long break' : 'short break') + '.';
+    if (completed !== null) {
+      line += ' They have completed ' + completed + (completed === 1 ? ' round' : ' rounds') + ' so far.';
+    }
+  } else if (phase === 'work') {
+    line = 'The user is in a Pomodoro work round and the next break is being counted down.';
+  } else {
+    line = 'The Pomodoro timer is running.';
+  }
+
+  // Paused from the clock's pause button: the time left is frozen.
+  if (status.isPaused === true) line += ' The countdown is paused right now.';
+
+  return line + ' Use this when the user asks about the next break or how much time is left, and never invent a different countdown.';
+}
+
 /**
  * Messages for the streamed in-character reply.
  * No JSON mode: the tokens are shown live, so they must be readable prose.
@@ -113,9 +220,11 @@ function toAlternatingTurns(lines) {
  * what it just asked.
  * `listContext` (optional) describes the to-do list and what the app just did
  * to it, so the buddy can talk about the tasks without claiming edits itself.
+ * `studyContext` (optional) describes the Pomodoro timer, so the buddy can
+ * answer "how long until my next break?".
  */
-function buildReplyMessages(text, voiceGuide, history, listContext) {
-  var parts = [voiceGuide, listContext, PERSONA].filter(Boolean);
+function buildReplyMessages(text, voiceGuide, history, listContext, studyContext) {
+  var parts = [voiceGuide, listContext, studyContext, PERSONA].filter(Boolean);
   var systemPrompt = parts.join('\n\n');
   var lines = cleanChatHistory(history).concat([
     { role: 'user', content: String(text || '').trim() },
@@ -375,13 +484,13 @@ function callModel(options) {
 }
 
 /** Streamed reply for the speech bubble. */
-async function streamReply({ provider, baseUrl, apiKey, model, text, voiceGuide, history, listContext, onToken, signal }) {
+async function streamReply({ provider, baseUrl, apiKey, model, text, voiceGuide, history, listContext, studyContext, onToken, signal }) {
   return callModel({
     provider: provider,
     baseUrl: baseUrl,
     apiKey: apiKey,
     model: model,
-    messages: buildReplyMessages(text, voiceGuide, history, listContext),
+    messages: buildReplyMessages(text, voiceGuide, history, listContext, studyContext),
     stream: true,
     temperature: CONFIG.AI_TEMPERATURE,
     maxTokens: CONFIG.AI_MAX_TOKENS,
@@ -466,13 +575,21 @@ function parseClassification(raw) {
   if (!parsed || typeof parsed !== 'object') return null;
 
   var type = typeof parsed.type === 'string' ? parsed.type.toLowerCase() : '';
+  var result;
   if (type === 'edit') {
     var actions = parseEditActions(parsed.actions);
-    return actions.length ? { type: 'edit', actions: actions } : null;
+    if (!actions.length) return null;
+    result = { type: 'edit', actions: actions };
+  } else if (type === 'task' || type === 'chat') {
+    result = { type: type };
+  } else {
+    return null;
   }
-  if (type !== 'task' && type !== 'chat') return null;
 
-  return { type: type };
+  // The AI's call on whether to start the Pomodoro timer. Only added when
+  // true, so the usual results keep their plain shape.
+  if (parsed.timer === 'start') result.startTimer = true;
+  return result;
 }
 
 /**
@@ -541,6 +658,7 @@ module.exports = {
   buildBreakdownMessages,
   buildClassifyMessages,
   buildActivityMessages,
+  describeStudyTimer,
   parseBreakdown,
   parseClassification,
   parseActivityCategory,

@@ -512,3 +512,105 @@ test('parseClassification reads opening and closing the list', () => {
   });
   assert.strictEqual(ai.parseClassification('{"type":"edit","actions":[{"op":"close_list"}]}').actions[0].op, 'close_list');
 });
+
+test('describeStudyTimer turns the continuous Pomodoro snapshot into prompt text', () => {
+  assert.match(
+    ai.describeStudyTimer({
+      phase: 'work', joined: true, isWorking: true, remainingMs: 12 * 60 * 1000,
+      roundNumber: 2, completedPomodoros: 1, nextBreakKind: 'short',
+    }),
+    /Pomodoro work round 2, with about 12 minutes until the next short break/
+  );
+  assert.match(
+    ai.describeStudyTimer({
+      phase: 'work', joined: true, isWorking: true, remainingMs: 2 * 60 * 1000,
+      roundNumber: 4, completedPomodoros: 3, nextBreakKind: 'long',
+    }),
+    /about 2 minutes until the next long break.*completed 3 rounds/
+  );
+  assert.match(
+    ai.describeStudyTimer({
+      phase: 'work', joined: true, isWorking: false, remainingMs: 12 * 60 * 1000,
+      roundNumber: 1, completedPomodoros: 0, nextBreakKind: 'short',
+    }),
+    /about 12 minutes until the next short break/
+  );
+  assert.doesNotMatch(
+    ai.describeStudyTimer({ phase: 'work', joined: true, isWorking: false, remainingMs: 12 * 60 * 1000 }),
+    /paused/
+  );
+  assert.match(
+    ai.describeStudyTimer({
+      phase: 'break', joined: true, breakKind: 'short', remainingMs: 3 * 60 * 1000,
+    }),
+    /Pomodoro short break with about 3 minutes left/
+  );
+  assert.match(
+    ai.describeStudyTimer({
+      phase: 'break', joined: true, breakKind: 'long', remainingMs: 20 * 60 * 1000,
+    }),
+    /Pomodoro long break with about 20 minutes left/
+  );
+  assert.match(
+    ai.describeStudyTimer({ phase: 'break', joined: true, pendingQuestion: 'ready' }),
+    /asking right now/
+  );
+  assert.match(
+    ai.describeStudyTimer({ phase: 'overrun', joined: true, remainingMs: 2 * 60 * 1000 }),
+    /will ask again in about 2 minutes/
+  );
+  assert.match(
+    ai.describeStudyTimer({ phase: 'offer', joined: true, breakKind: 'long', completedPomodoros: 4 }),
+    /offered the user a long break/
+  );
+  assert.match(
+    ai.describeStudyTimer({ phase: 'off', joined: false }),
+    /not running because the user has not joined/
+  );
+  assert.match(
+    ai.describeStudyTimer({ disabled: true }),
+    /timer is off for this session/
+  );
+  assert.strictEqual(ai.describeStudyTimer(null), '');
+});
+
+test('describeStudyTimer tells the buddy it can start and stop the timer', () => {
+  const statuses = [
+    { phase: 'off', joined: false },
+    { disabled: true },
+    { phase: 'work', joined: true, remainingMs: 60 * 1000 },
+  ];
+  statuses.forEach((status) => {
+    assert.match(ai.describeStudyTimer(status), /You can start and stop the Pomodoro timer/);
+  });
+});
+
+test('parseClassification reads the AI\'s decision to start the timer', () => {
+  assert.deepStrictEqual(ai.parseClassification('{"type":"chat","timer":"start"}'), { type: 'chat', startTimer: true });
+  assert.strictEqual(ai.parseClassification('{"type":"task","timer":"start"}').startTimer, true);
+  assert.deepStrictEqual(ai.parseClassification('{"type":"chat","timer":"stop"}'), { type: 'chat' });
+  assert.deepStrictEqual(ai.parseClassification('{"type":"chat"}'), { type: 'chat' });
+});
+
+test('describeStudyTimer describes a timer this message just started', () => {
+  assert.match(
+    ai.describeStudyTimer({ phase: 'off', joined: false }, true),
+    /app has just started the Pomodoro timer/
+  );
+  assert.match(
+    ai.describeStudyTimer({ phase: 'work', joined: true, remainingMs: 60 * 1000 }, true),
+    /already running, so nothing changed/
+  );
+});
+
+test('describeStudyTimer says when the countdown is paused', () => {
+  assert.match(
+    ai.describeStudyTimer({ phase: 'work', joined: true, remainingMs: 5 * 60 * 1000, isPaused: true }),
+    /about 5 minutes until the next short break.*paused right now/
+  );
+});
+
+test('buildReplyMessages puts the study timer after the list context', () => {
+  const messages = ai.buildReplyMessages('hi', 'GUIDE', null, 'LIST', 'TIMER');
+  assert.match(messages[0].content, /^GUIDE\n\nLIST\n\nTIMER\n\n/);
+});

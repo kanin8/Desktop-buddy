@@ -23,11 +23,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // AI task breakdown. The overlay never holds an API key: it asks the main
   // process to run the request and receives the reply as stream events.
   // history is the chat so far as [{ role, content }], so the buddy remembers it.
-  askAI: (text, history) => ipcRenderer.invoke('ai-ask', text, history),
+  // studyTimer is the Pomodoro snapshot, so the reply can say when the next
+  // break is due.
+  askAI: (text, history, studyTimer) => ipcRenderer.invoke('ai-ask', text, history, studyTimer),
   cancelAI: () => ipcRenderer.invoke('ai-cancel'),
   onAIStream: (callback) => ipcRenderer.on('ai-stream', (event, token) => callback(token)),
   onAIStreamEnd: (callback) => ipcRenderer.on('ai-stream-end', (event, reply) => callback(reply)),
   onAIError: (callback) => ipcRenderer.on('ai-error', (event, message) => callback(message)),
+  // The AI decided the user's message asks to start the Pomodoro timer.
+  onAIStartTimer: (callback) => ipcRenderer.on('ai-start-timer', () => callback()),
   onAITasksAdded: (callback) => ipcRenderer.on('ai-tasks-added', (event, info) => callback(info)),
   onAITasksFailed: (callback) => ipcRenderer.on('ai-tasks-failed', (event, message) => callback(message)),
   // List edits the app made from a chat message, as lines to show, and tasks
@@ -56,6 +60,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // The buddy's proactive message (nudge/nudge.js). message is { text },
   // and text may be left out to use the default line.
   onNudge: (callback) => ipcRenderer.on('avatar-nudge', (event, message) => callback(message || {})),
+  // Sent when focus leaves the app entirely (another application or the
+  // desktop was clicked), so an open chat can close. Clicks on the buddy's own
+  // windows (to-do panel, Settings, Activity) do not send this.
+  onFocusLeftApp: (callback) => ipcRenderer.on('focus-left-app', () => callback()),
 
   // General purpose (for the mouse-ignore logic)
   setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),

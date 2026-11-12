@@ -1,0 +1,107 @@
+/* Styles for the small Pomodoro clock above the frog and its play/pause,
+   skip and stop buttons. All colours, spacing and timing values come from
+   styles/tokens.css. */
+
+/* ============================
+   Pomodoro clock
+   ============================
+   The countdown on top, the control buttons underneath. */
+.study-clock {
+  position: absolute;
+  z-index: 99;
+  display: grid;
+  place-items: center;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  min-width: var(--clock-min-width);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  background: var(--surface);
+  box-shadow: var(--surface-shadow);
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 160ms ease,
+    visibility 160ms ease;
+}
+
+.study-clock-time {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-lg);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* ============================
+   Pomodoro clock — control buttons
+   ============================
+   Same look as the hover pill's buttons, just smaller. Hidden until the
+   pointer is on the frog or the clock (see the states section). */
+.study-clock-controls {
+  display: none;
+  gap: var(--space-1);
+}
+
+.study-clock-button {
+  display: grid;
+  place-items: center;
+  width: var(--clock-button-size);
+  height: var(--clock-button-size);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: var(--text-primary);
+  background-color: transparent;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.study-clock-button:hover {
+  background-color: var(--surface-hover);
+}
+
+.study-clock-button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+}
+
+/* ============================
+   Pomodoro clock — states
+   ============================ */
+.study-clock.is-visible {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Hovering the frog or the clock (overlay.js sets .is-hovered) shows the
+   buttons. Keyboard focus keeps them up too; :focus-visible rather than
+   :focus-within, because a clicked button keeps focus and would otherwise
+   hold the buttons open after the pointer leaves. */
+.study-clock.is-hovered .study-clock-controls,
+.study-clock:has(:focus-visible) .study-clock-controls {
+  display: flex;
+}
+
+/* Paused by the user, or the overlay is snoozed. Dims only the numbers, so
+   the buttons stay easy to read and press. */
+.study-clock.is-paused .study-clock-time,
+.study-clock.is-snoozed .study-clock-time {
+  opacity: var(--clock-paused-opacity);
+}
+
+/* The pause button shows a play icon while the countdown is paused. */
+.study-clock-button .icon-play {
+  display: none;
+}
+
+.study-clock.is-paused .study-clock-button .icon-play {
+  display: block;
+}
+
+.study-clock.is-paused .study-clock-button .icon-pause {
+  display: none;
+}
