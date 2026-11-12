@@ -49,7 +49,6 @@ window.STUDY_CONFIG = {
     breakNo: 'studyBreakNo',
     readyYes: 'studyReadyYes',
     readyNo: 'studyReadyNo',
-    stop: 'studyStop',
   },
   pomodoroReplies: [
     { id: 'pomodoroYes', label: 'Yes', style: 'accent' },
@@ -58,12 +57,10 @@ window.STUDY_CONFIG = {
   breakReplies: [
     { id: 'studyBreakYes', label: 'Yes', style: 'accent' },
     { id: 'studyBreakNo', label: 'No', style: 'secondary' },
-    { id: 'studyStop', label: 'Stop timer', style: 'secondary' },
   ],
   readyReplies: [
     { id: 'studyReadyYes', label: 'Yes', style: 'accent' },
     { id: 'studyReadyNo', label: 'No', style: 'secondary' },
-    { id: 'studyStop', label: 'Stop timer', style: 'secondary' },
   ],
 
   // A chat message matching any of these asks to stop or (re)start the

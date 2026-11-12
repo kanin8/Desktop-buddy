@@ -436,12 +436,6 @@ const nudge = createNudge(
         addChatLine(label, 'user');
         addChatLine(STUDY.lines.readyDeclined, 'buddy', { speak: false });
         studyBreak.declineReady();
-      } else if (id === STUDY.replyIds.stop) {
-        // Leave the timer first so the frog returns to rest before speaking.
-        studyBreak.stopPomodoro();
-        nudge.showBriefly(STUDY.lines.pomodoroStopped);
-        addChatLine(label, 'user');
-        addChatLine(STUDY.lines.pomodoroStopped, 'buddy', { speak: false });
       } else if (GREETING_REPLY_IDS.includes(id)) {
         handleGreetingReply(id, text, label);
       } else if (id === 'yes') {
