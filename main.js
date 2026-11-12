@@ -270,6 +270,8 @@ function createSettingsWindow() {
       nodeIntegration: false,
     },
   });
+  // The default File/Edit/View/Window menu has nothing useful for settings.
+  settingsWin.setMenuBarVisibility(false);
 
   settingsWin.loadFile('settings.html');
 
