@@ -91,8 +91,12 @@ async function askAndBreakdown(win, text, history, studyTimer) {
     const list = describeList(getStore().getItems(), CONFIG.MAX_CONTEXT_ITEMS);
     const intent = await classifyMessage(goal, list.text, history, base);
     const listUpdate = intent.type === 'edit' ? applyListEdits(win, intent.actions, list.idsByNumber) : null;
+    // The overlay owns the timer, so it does the start (overlay.js,
+    // onAIStartTimer). Sent before the reply so the clock is already running
+    // when the buddy confirms it.
+    if (intent.startTimer) send(win, 'ai-start-timer');
 
-    const replied = await streamBuddyReply(win, goal, history, listUpdate, base, studyTimer);
+    const replied = await streamBuddyReply(win, goal, history, listUpdate, base, studyTimer, intent.startTimer === true);
     // Shown even if the reply failed: the edits already happened.
     if (listUpdate) announceListUpdate(win, listUpdate);
     if (replied && intent.type === 'task') await offerBreakdown(win, goal, base);
@@ -191,9 +195,10 @@ function describeListForReply(listUpdate) {
 
 /**
  * Streams the in-character reply into the chat. Returns whether it finished;
- * on failure the error is already shown.
+ * on failure the error is already shown. `timerStarted` is true when this
+ * message just started the Pomodoro timer.
  */
-async function streamBuddyReply(win, goal, history, listUpdate, base, studyTimer) {
+async function streamBuddyReply(win, goal, history, listUpdate, base, studyTimer, timerStarted) {
   try {
     // Only the visible reply gets the voice guide: the classify and breakdown
     // calls need strict JSON, and the guide would add ~4k tokens to each.
@@ -202,7 +207,7 @@ async function streamBuddyReply(win, goal, history, listUpdate, base, studyTimer
       voiceGuide: voiceGuide,
       history: history,
       listContext: describeListForReply(listUpdate),
-      studyContext: ai.describeStudyTimer(studyTimer),
+      studyContext: ai.describeStudyTimer(studyTimer, timerStarted),
       onToken: (token) => send(win, 'ai-stream', token),
     }, base));
     send(win, 'ai-stream-end', reply || '');

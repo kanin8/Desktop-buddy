@@ -43,7 +43,13 @@ const CLASSIFY_PERSONA =
   '"how long until my next break"->chat, ' +
   '"I finished the reading"->complete the matching task, "change 2 to call mom at 5"->rename task 2, ' +
   '"add buy milk"->add, "get rid of the gym one"->delete the matching task, ' +
-  '"show me my list"->open_list, "hide the to-do list"->close_list.';
+  '"show me my list"->open_list, "hide the to-do list"->close_list.\n' +
+  'Pomodoro timer: also put "timer": "start" in the JSON when the user wants the Pomodoro ' +
+  '(study/focus) timer to start now, in any wording, including saying yes after the buddy ' +
+  'offered it. Leave it out for questions about the timer, for stopping it, and for anything else. ' +
+  'Examples: "let\'s do a pomodoro"->{"type": "chat", "timer": "start"}, ' +
+  '"time my study session"->{"type": "chat", "timer": "start"}, ' +
+  '"how long until my break"->{"type": "chat"}.';
 
 // Activity prompt: decides whether the window the user is looking at is work
 // or entertainment. Only used for apps the local rule list does not know.
@@ -113,13 +119,42 @@ function describeDuration(ms) {
   return 'about ' + minutes + (minutes === 1 ? ' minute' : ' minutes');
 }
 
+// What the buddy can do with the timer, so it offers it and doesn't claim it
+// can't. The app starts the timer when classification says so ("timer":
+// "start") and stops it on study/config.js stopPatterns, both before this
+// reply is requested, so the status above is already the result.
+var TIMER_CONTROLS =
+  'You can start and stop the Pomodoro timer for the user: when they ask, the app does it ' +
+  'and the timer status above already shows the result, so confirm it briefly. Only say the ' +
+  'timer started or stopped if the status says so. You can also suggest starting it when they ' +
+  'want to focus. The clock above you has play/pause, skip and stop buttons too.';
+
 /**
- * Turns the Pomodoro timer's status snapshot into a prompt section. The
+ * Turns the Pomodoro timer's status snapshot into a prompt section: what the
+ * timer is doing, then what the buddy can do with it (TIMER_CONTROLS). The
  * overlay sends the shape; this validates it here, so a malformed renderer
  * value can't inject prose into the system prompt.
+ * `startRequested` is true when this message just started the timer: the
+ * snapshot was taken before that, so it is described as started instead.
  */
-function describeStudyTimer(status) {
+function describeStudyTimer(status, startRequested) {
   if (!status || typeof status !== 'object') return '';
+  return describeTimerStart(status, startRequested) + ' ' + TIMER_CONTROLS;
+}
+
+// The state sentence, adjusted for a start the app made for this message.
+function describeTimerStart(status, startRequested) {
+  if (startRequested !== true) return describeTimerState(status);
+  if (status.joined === true) {
+    return describeTimerState(status) + ' The user asked to start the timer, but it was already running, so nothing changed.';
+  }
+  return 'For the user\'s latest message the app has just started the Pomodoro timer: a fresh ' +
+    'work round is now counting down to the first break.';
+}
+
+// The first part of describeStudyTimer: one or two sentences on where the
+// timer is right now.
+function describeTimerState(status) {
   if (status.disabled === true) {
     return 'The Pomodoro timer is off for this session, so no next break is scheduled.';
   }
@@ -168,6 +203,9 @@ function describeStudyTimer(status) {
   } else {
     line = 'The Pomodoro timer is running.';
   }
+
+  // Paused from the clock's pause button: the time left is frozen.
+  if (status.isPaused === true) line += ' The countdown is paused right now.';
 
   return line + ' Use this when the user asks about the next break or how much time is left, and never invent a different countdown.';
 }
@@ -537,13 +575,21 @@ function parseClassification(raw) {
   if (!parsed || typeof parsed !== 'object') return null;
 
   var type = typeof parsed.type === 'string' ? parsed.type.toLowerCase() : '';
+  var result;
   if (type === 'edit') {
     var actions = parseEditActions(parsed.actions);
-    return actions.length ? { type: 'edit', actions: actions } : null;
+    if (!actions.length) return null;
+    result = { type: 'edit', actions: actions };
+  } else if (type === 'task' || type === 'chat') {
+    result = { type: type };
+  } else {
+    return null;
   }
-  if (type !== 'task' && type !== 'chat') return null;
 
-  return { type: type };
+  // The AI's call on whether to start the Pomodoro timer. Only added when
+  // true, so the usual results keep their plain shape.
+  if (parsed.timer === 'start') result.startTimer = true;
+  return result;
 }
 
 /**

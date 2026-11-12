@@ -574,6 +574,42 @@ test('describeStudyTimer turns the continuous Pomodoro snapshot into prompt text
   assert.strictEqual(ai.describeStudyTimer(null), '');
 });
 
+test('describeStudyTimer tells the buddy it can start and stop the timer', () => {
+  const statuses = [
+    { phase: 'off', joined: false },
+    { disabled: true },
+    { phase: 'work', joined: true, remainingMs: 60 * 1000 },
+  ];
+  statuses.forEach((status) => {
+    assert.match(ai.describeStudyTimer(status), /You can start and stop the Pomodoro timer/);
+  });
+});
+
+test('parseClassification reads the AI\'s decision to start the timer', () => {
+  assert.deepStrictEqual(ai.parseClassification('{"type":"chat","timer":"start"}'), { type: 'chat', startTimer: true });
+  assert.strictEqual(ai.parseClassification('{"type":"task","timer":"start"}').startTimer, true);
+  assert.deepStrictEqual(ai.parseClassification('{"type":"chat","timer":"stop"}'), { type: 'chat' });
+  assert.deepStrictEqual(ai.parseClassification('{"type":"chat"}'), { type: 'chat' });
+});
+
+test('describeStudyTimer describes a timer this message just started', () => {
+  assert.match(
+    ai.describeStudyTimer({ phase: 'off', joined: false }, true),
+    /app has just started the Pomodoro timer/
+  );
+  assert.match(
+    ai.describeStudyTimer({ phase: 'work', joined: true, remainingMs: 60 * 1000 }, true),
+    /already running, so nothing changed/
+  );
+});
+
+test('describeStudyTimer says when the countdown is paused', () => {
+  assert.match(
+    ai.describeStudyTimer({ phase: 'work', joined: true, remainingMs: 5 * 60 * 1000, isPaused: true }),
+    /about 5 minutes until the next short break.*paused right now/
+  );
+});
+
 test('buildReplyMessages puts the study timer after the list context', () => {
   const messages = ai.buildReplyMessages('hi', 'GUIDE', null, 'LIST', 'TIMER');
   assert.match(messages[0].content, /^GUIDE\n\nLIST\n\nTIMER\n\n/);

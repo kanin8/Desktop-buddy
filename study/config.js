@@ -63,17 +63,14 @@ window.STUDY_CONFIG = {
     { id: 'studyReadyNo', label: 'No', style: 'secondary' },
   ],
 
-  // A chat message matching any of these asks to stop or (re)start the
-  // Pomodoro timer. Both an action and a timer word are required, so normal
-  // conversation ("I can't stop scrolling") doesn't match. "Break" is left out
-  // on purpose: break messages belong to the readiness flow below.
+  // A chat message matching any of these asks to stop the Pomodoro timer.
+  // Both an action and a timer word are required, so normal conversation
+  // ("I can't stop scrolling") doesn't match. "Break" is left out on purpose:
+  // break messages belong to the readiness flow below. Starting the timer is
+  // decided by the AI instead (toDoList/ai.js, "timer": "start").
   stopPatterns: [
     /\b(stop|end|quit|leave|cancel|exit|turn off)\b.{0,12}\b(pomodoro|timer|clock|session)\b/i,
     /\b(pomodoro|timer|clock|session)\b.{0,12}\b(stop|end|quit|leave|cancel|exit|off)\b/i,
-  ],
-  startPatterns: [
-    /\b(start|begin|resume|restart|join|rejoin|turn on)\b.{0,12}\b(pomodoro|timer|clock|session)\b/i,
-    /\b(pomodoro|timer|clock|session)\b.{0,12}\b(start|begin|resume|restart|join|rejoin)\b/i,
   ],
 
   // A chat message matching any of these means the user is ready to work

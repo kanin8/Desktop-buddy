@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onAIStream: (callback) => ipcRenderer.on('ai-stream', (event, token) => callback(token)),
   onAIStreamEnd: (callback) => ipcRenderer.on('ai-stream-end', (event, reply) => callback(reply)),
   onAIError: (callback) => ipcRenderer.on('ai-error', (event, message) => callback(message)),
+  // The AI decided the user's message asks to start the Pomodoro timer.
+  onAIStartTimer: (callback) => ipcRenderer.on('ai-start-timer', () => callback()),
   onAITasksAdded: (callback) => ipcRenderer.on('ai-tasks-added', (event, info) => callback(info)),
   onAITasksFailed: (callback) => ipcRenderer.on('ai-tasks-failed', (event, message) => callback(message)),
   // List edits the app made from a chat message, as lines to show, and tasks

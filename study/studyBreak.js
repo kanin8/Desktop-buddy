@@ -335,13 +335,6 @@ function createStudyBreak(callbacks, options = {}) {
     return config().stopPatterns.some((pattern) => pattern.test(text));
   }
 
-  // True when a chat message asks to (re)start the Pomodoro timer.
-  function looksLikeStart(message) {
-    const text = String(message || '').trim();
-    if (!text) return false;
-    return config().startPatterns.some((pattern) => pattern.test(text));
-  }
-
   // Snapshot for the AI prompt and the clock: where the timer is, how long is
   // left in the current phase, and which work round the user is on.
   function getStatus() {
@@ -381,7 +374,6 @@ function createStudyBreak(callbacks, options = {}) {
     disable,
     looksReady,
     looksLikeStop,
-    looksLikeStart,
     getStatus,
     isJoined: () => joined,
     isActive: () => state === 'offer' || state === 'break' || state === 'overrun',

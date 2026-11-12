@@ -1634,16 +1634,13 @@ function submitChat(e) {
   const goal = chatInput.value.trim();
   if (!goal) return;
 
-  // Chat can drive the Pomodoro timer: stop it, (re)start it, or clear a
-  // previous "Not today" by saying the user is starting work. The AI request
-  // below continues either way and sees the updated status.
+  // Chat can drive the Pomodoro timer: stop it, or clear a previous "Not
+  // today" by saying the user is starting work. Starting the timer is the
+  // AI's call (startPomodoroFromChat). The AI request below continues either
+  // way and sees the updated status.
   if (studyBreak) {
     if (studyBreak.looksLikeStop(goal)) {
       studyBreak.stopPomodoro();
-    } else if (studyBreak.looksLikeStart(goal)) {
-      if (areProactiveNudgesOff) resumeAfterNotToday({ reofferPomodoro: false });
-      resolvePomodoroInvite();
-      studyBreak.joinPomodoro();
     } else if (areProactiveNudgesOff && studyBreak.looksReady(goal)) {
       resumeAfterNotToday({ reofferPomodoro: true });
     } else if (studyBreak.isActive() && studyBreak.looksReady(goal)) {
@@ -1666,6 +1663,18 @@ function submitChat(e) {
 
   window.electronAPI.askAI(goal, history, studyBreak ? studyBreak.getStatus() : null);
 }
+
+// The AI read the user's message as "start the Pomodoro timer". It also
+// clears "Not today" (without re-offering the invitation) and marks the
+// invitation as answered so it doesn't pop up on top of a running timer.
+function startPomodoroFromChat() {
+  if (!studyBreak) return;
+  if (areProactiveNudgesOff) resumeAfterNotToday({ reofferPomodoro: false });
+  resolvePomodoroInvite();
+  studyBreak.joinPomodoro();
+}
+
+window.electronAPI.onAIStartTimer(startPomodoroFromChat);
 
 window.electronAPI.onAIStream(() => { ensureReplyElement(); });
 

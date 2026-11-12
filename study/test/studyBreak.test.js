@@ -294,7 +294,7 @@ test('work-intent phrases count as ready', () => {
   assert.strictEqual(study.looksReady('how do I start working on this?'), false);
 });
 
-test('stop and start commands are recognised', () => {
+test('stop commands are recognised', () => {
   const { study } = makeStudy();
 
   assert.strictEqual(study.looksLikeStop('stop the pomodoro'), true);
@@ -304,12 +304,6 @@ test('stop and start commands are recognised', () => {
   assert.strictEqual(study.looksLikeStop('I cannot stop scrolling'), false);
   assert.strictEqual(study.looksLikeStop('stop by the store'), false);
   assert.strictEqual(study.looksLikeStop('I want to end my break'), false);
-
-  assert.strictEqual(study.looksLikeStart('start the pomodoro'), true);
-  assert.strictEqual(study.looksLikeStart('please rejoin the timer'), true);
-  assert.strictEqual(study.looksLikeStart('what is the timer for'), false);
-  assert.strictEqual(study.looksLikeStart('I want to start working on the timer'), false);
-  assert.strictEqual(study.looksLikeStart(''), false);
 });
 
 test('a readiness message ends a break or the overrun cycle', () => {
