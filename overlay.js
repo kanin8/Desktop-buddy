@@ -490,6 +490,9 @@ let isPomodoroInviteResolved = false;
 let isPomodoroInviteOnScreen = false;
 let isPomodoroInviteShowing = false;
 let lastStudyClockText = '';
+// True while the break pose is the overrun judge stare rather than the
+// look-over, so the frog knows which exit to play when the break ends.
+let isBreakPoseJudging = false;
 
 studyBreak = createStudyBreak({
   // Same bubble as any other nudge. When the user is busy with the chat or
@@ -507,6 +510,7 @@ studyBreak = createStudyBreak({
   // the break ends. Judging nudges pause so they don't talk over the break.
   onBreakStart: () => {
     cancelJudgingNudgeTimer();
+    isBreakPoseJudging = false;
     const token = ++sequenceToken;
     spriteAnimator.play('sittingStretch', {
       onComplete: () => {
@@ -519,13 +523,36 @@ studyBreak = createStudyBreak({
   // the user to come back.
   onOverrunStart: () => {
     cancelJudgingNudgeTimer();
+    isBreakPoseJudging = true;
     playJudgingLoop(++sequenceToken);
   },
   onBreakEnd: () => {
-    resumeRestAnimation();
+    playBreakEndPose();
     if (activityCategory === 'leisure' && !isJudgingOff) startJudgingNudgeTimer();
   },
 });
+
+// Leaving the break pose: the frog looks back down at the desk (stopping its
+// judge stare first if it was waiting in the overrun pose). If a new work
+// round has started by then, it goes straight back to typing, so the restart
+// reads as "back to work"; otherwise (timer stopped) it takes its normal rest
+// pose.
+function playBreakEndPose() {
+  const token = ++sequenceToken;
+  const exit = isBreakPoseJudging ? judgingExit : [seatedClickExit];
+  isBreakPoseJudging = false;
+  playSequence(exit, token, () => {
+    if (studyBreak.getStatus().phase !== 'work') {
+      resumeRestAnimation();
+      return;
+    }
+    // Back at the keyboard for the new round, even if a leisure app is in
+    // front: the judging pose returns on the next activity change.
+    isAtDesk = true;
+    isJudging = false;
+    startTypingLoop(token);
+  });
+}
 
 // Seed the work/leisure flag in case the first activity update arrived before
 // this block was set up. It only affects the pose, not the continuous clock.
