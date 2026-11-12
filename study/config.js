@@ -6,7 +6,7 @@
 window.STUDY_CONFIG = {
   // How long the frog waits after the startup greeting settles before offering
   // to follow Pomodoro with the user.
-  inviteDelayMs: 60 * 1000,
+  inviteDelayMs: 25 * 1000,
 
   // Length of one continuous Pomodoro work round. This is wall-clock time: it
   // keeps running even when the user leaves productive apps.
