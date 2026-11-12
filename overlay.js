@@ -19,6 +19,13 @@ const chatSend = document.getElementById('chat-send');
 const chatClose = document.getElementById('chat-close');
 const nudgeElement = document.getElementById('nudge');
 const studyClockElement = document.getElementById('study-clock');
+const studyClockTimeElement = document.getElementById('study-clock-time');
+const studyPauseButton = document.getElementById('study-pause');
+const studySkipButton = document.getElementById('study-skip');
+const studyStopButton = document.getElementById('study-stop');
+let showStudyTimer = true;
+const STUDY_PAUSE_ICON = '<svg class="control-icon" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 5v14M17 5v14"/></svg>';
+const STUDY_PLAY_ICON = '<svg class="control-icon" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 5l10 7-10 7z"/></svg>';
 
 // Study-break timings, lines and reply ids (study/config.js).
 const STUDY = window.STUDY_CONFIG;
@@ -416,28 +423,30 @@ const nudge = createNudge(
         nudge.showBriefly(line);
         addChatLine(label, 'user');
         addChatLine(line, 'buddy', { speak: false });
-        studyBreak.acceptBreak();
+        // Let the reply speak before the break pose/state changes.
+        setTimeout(() => studyBreak.acceptBreak(), window.NUDGE_CONFIG.backOffVisibleMs + 200);
       } else if (id === STUDY.replyIds.breakNo) {
         nudge.showBriefly(STUDY.lines.breakDeclined);
         addChatLine(label, 'user');
         addChatLine(STUDY.lines.breakDeclined, 'buddy', { speak: false });
-        studyBreak.declineBreak();
+        setTimeout(() => studyBreak.declineBreak(), window.NUDGE_CONFIG.backOffVisibleMs + 200);
       } else if (id === STUDY.replyIds.readyYes) {
+        // Speak the reply, then go back to work (look down, type, loop).
+        shouldReturnToWorkAfterBreak = true;
         nudge.showBriefly(STUDY.lines.readyAccepted);
         addChatLine(label, 'user');
         addChatLine(STUDY.lines.readyAccepted, 'buddy', { speak: false });
-        studyBreak.acceptReady();
+        setTimeout(() => studyBreak.acceptReady(), window.NUDGE_CONFIG.backOffVisibleMs + 200);
       } else if (id === STUDY.replyIds.readyNo) {
         nudge.showBriefly(STUDY.lines.readyDeclined);
         addChatLine(label, 'user');
         addChatLine(STUDY.lines.readyDeclined, 'buddy', { speak: false });
-        studyBreak.declineReady();
+        setTimeout(() => studyBreak.declineReady(), window.NUDGE_CONFIG.backOffVisibleMs + 200);
       } else if (id === STUDY.replyIds.stop) {
-        // Leave the timer first so the frog returns to rest before speaking.
-        studyBreak.stopPomodoro();
         nudge.showBriefly(STUDY.lines.pomodoroStopped);
         addChatLine(label, 'user');
         addChatLine(STUDY.lines.pomodoroStopped, 'buddy', { speak: false });
+        setTimeout(() => studyBreak.stopPomodoro(), window.NUDGE_CONFIG.backOffVisibleMs + 200);
       } else if (GREETING_REPLY_IDS.includes(id)) {
         handleGreetingReply(id, text, label);
       } else if (id === 'yes') {
@@ -485,7 +494,9 @@ let pomodoroInviteTimer = null;
 let isPomodoroInviteResolved = false;
 let isPomodoroInviteOnScreen = false;
 let isPomodoroInviteShowing = false;
-let lastStudyClockText = '';
+let shouldReturnToWorkAfterBreak = false;
+let breakPoseLeanTimer = null;
+let breakPoseToken = 0;
 
 studyBreak = createStudyBreak({
   // Same bubble as any other nudge. When the user is busy with the chat or
@@ -499,26 +510,32 @@ studyBreak = createStudyBreak({
     return showStudyQuestion(line, STUDY.breakReplies);
   },
   onAskReady: () => showStudyQuestion(STUDY.lines.readyQuestion, STUDY.readyReplies),
-  // The break pose starts with a stretch, then holds the look-over loop until
-  // the break ends. Judging nudges pause so they don't talk over the break.
+  // The break pose starts with a stretch, then settles into the seated break
+  // idle with occasional leans. Judging nudges pause so they don't talk over it.
   onBreakStart: () => {
     cancelJudgingNudgeTimer();
+    cancelBreakPoseSchedule();
     const token = ++sequenceToken;
     spriteAnimator.play('sittingStretch', {
       onComplete: () => {
         if (!isCurrentSequence(token)) return;
-        startLookOverLoop(token);
+        startBreakPoseLoop(token);
       },
     });
   },
-  // Overrun: keep the judging loop, so the frog looks like it is waiting for
-  // the user to come back.
+  // Overrun/ready wait: same relaxed seated break pose with occasional leans.
   onOverrunStart: () => {
     cancelJudgingNudgeTimer();
-    playJudgingLoop(++sequenceToken);
+    startBreakPoseLoop(++sequenceToken);
   },
   onBreakEnd: () => {
-    resumeRestAnimation();
+    cancelBreakPoseSchedule();
+    if (shouldReturnToWorkAfterBreak) {
+      shouldReturnToWorkAfterBreak = false;
+      playReturnToWorkSequence();
+    } else {
+      resumeRestAnimation();
+    }
     if (activityCategory === 'leisure' && !isJudgingOff) startJudgingNudgeTimer();
   },
 });
@@ -594,29 +611,33 @@ function showStudyQuestion(text, replies) {
   return true;
 }
 
-// Draws the small countdown above the frog while a Pomodoro phase is running.
-// It hides while the chat, nudge, menu or speech bubble occupies that space.
+// Draws the small countdown and controls above the frog while a Pomodoro phase
+// is running. It hides while the chat, nudge, menu or speech bubble occupies
+// that space, or when the user turned the timer display off.
 function updateStudyClock() {
+  if (!studyClockElement) return;
   const status = studyBreak ? studyBreak.getStatus() : null;
-  const showCountdown = status && status.joined && status.remainingMs !== null &&
+  const showCountdown = showStudyTimer && status && status.joined && status.remainingMs !== null &&
     (status.phase === 'work' || status.phase === 'break' || status.phase === 'overrun');
   const isObstructed = isChatOpen() || controls.isMenuOpen() || nudge.isVisible() ||
     isSpeaking || bubble.style.display === 'block';
 
   if (!showCountdown || isObstructed) {
     studyClockElement.classList.remove('is-visible');
+    studyClockElement.classList.remove('is-paused');
     lastStudyClockText = '';
     return;
   }
 
   const text = window.STUDY_CLOCK.formatClock(status.remainingMs);
+  const timeEl = studyClockTimeElement || studyClockElement;
   if (text !== lastStudyClockText) {
-    studyClockElement.textContent = text;
+    timeEl.textContent = text;
     lastStudyClockText = text;
   }
-  // The overlay is hidden while snoozed, so this dims the clock for that state
-  // without ever pausing the wall-clock countdown.
-  studyClockElement.classList.toggle('is-paused', document.hidden);
+  const paused = Boolean(status.paused);
+  studyClockElement.classList.toggle('is-paused', paused);
+  setStudyPauseButton(paused);
   studyClockElement.classList.add('is-visible');
   positionStudyClock();
 }
@@ -840,6 +861,31 @@ function startSpeech(message) {
 let activeNudgePose = null;
 let activeNudgePoseToken = null;
 
+// Play a short talking animation after a nudge reply without interrupting the
+// current seated nudge pose; falls back to the normal speech animation.
+function queueSpeechAfterNudge(text) {
+  const message = String(text || '').trim();
+  if (!message) return;
+  if (isSeatedState()) {
+    const durationMs = Math.min(
+      SPEAKING.maxMs,
+      Math.max(SPEAKING.minMs, message.length * SPEAKING.msPerCharacter)
+    );
+    const cycles = Math.max(1, Math.ceil(durationMs / getAnimationLengthMs(SPEAKING.seatedAnimation)));
+    if (activeNudgePose === 'seated' && activeNudgePoseToken !== null && isCurrentSequence(activeNudgePoseToken)) {
+      const token = activeNudgePoseToken;
+      const speak = (remaining) => {
+        if (!isCurrentSequence(token) || activeNudgePoseToken !== token) return;
+        if (remaining <= 0) return;
+        spriteAnimator.play(SPEAKING.seatedAnimation, { onComplete: () => speak(remaining - 1) });
+      };
+      speak(cycles);
+      return;
+    }
+  }
+  speakMessage(message);
+}
+
 function playNudgeSpeakingAnimation(message) {
   const seated = isSeatedState();
   const token = ++sequenceToken;
@@ -857,7 +903,8 @@ function playNudgeSpeakingAnimation(message) {
     if (!isCurrentSequence(token)) return;
     if (remaining <= 0) {
       if (seated) {
-        startLookOverLoop(token);
+        if (isInBreakPosePhase()) startBreakPoseLoop(token);
+        else startLookOverLoop(token);
       } else {
         activeNudgePose = null;
         activeNudgePoseToken = null;
@@ -871,6 +918,12 @@ function playNudgeSpeakingAnimation(message) {
   };
 
   if (!seated) {
+    speak(cycles);
+    return;
+  }
+
+  // During breaks/ready or while chat is open the frog already faces the user.
+  if (isInBreakPosePhase() || isChatOpen()) {
     speak(cycles);
     return;
   }
@@ -891,6 +944,11 @@ function finishNudgeSpeakingPose() {
   if (!pose || token === null || !isCurrentSequence(token)) return;
 
   if (pose === 'seated') {
+    if (isInBreakPosePhase() || shouldReturnToWorkAfterBreak) {
+      if (isInBreakPosePhase()) startBreakPoseLoop(++sequenceToken);
+      else resumeRestAnimation();
+      return;
+    }
     const returnToken = ++sequenceToken;
     spriteAnimator.play('deskLookDown', {
       onComplete: () => {
@@ -901,6 +959,27 @@ function finishNudgeSpeakingPose() {
   } else {
     resumeRestAnimation();
   }
+}
+
+// After the user is ready to keep working: look down, type, then loop typing.
+function playReturnToWorkSequence() {
+  shouldReturnToWorkAfterBreak = false;
+  cancelBreakPoseSchedule();
+  const token = ++sequenceToken;
+  isAtDesk = true;
+  isJudging = false;
+  isChatPoseActive = false;
+  spriteAnimator.play('deskLookDown', {
+    onComplete: () => {
+      if (!isCurrentSequence(token)) return;
+      spriteAnimator.play('sittingTyping', {
+        onComplete: () => {
+          if (!isCurrentSequence(token)) return;
+          startTypingLoop(token, true);
+        },
+      });
+    },
+  });
 }
 
 // --- ACTIVITY-DRIVEN ANIMATIONS ---
@@ -1098,17 +1177,56 @@ function playLeaveJudging() {
   });
 }
 
+// During a break or ready wait the frog sits looking over, and leans back
+// from time to time before returning to the regular sitting pose.
+function isInBreakPosePhase() {
+  return Boolean(studyBreak) && (studyBreak.isInBreak() || studyBreak.isInOverrun());
+}
+
+function cancelBreakPoseSchedule() {
+  if (breakPoseLeanTimer) {
+    clearTimeout(breakPoseLeanTimer);
+    breakPoseLeanTimer = null;
+  }
+  breakPoseToken++;
+}
+
+function startBreakPoseLoop(token) {
+  cancelBreakPoseSchedule();
+  breakPoseToken = token;
+  scheduleBreakLean(token);
+  playBreakIdleLoop(token);
+}
+
+function playBreakIdleLoop(token) {
+  if (!isCurrentSequence(token) || !isInBreakPosePhase()) return;
+  spriteAnimator.play(seatedClickLook, {
+    onComplete: () => playBreakIdleLoop(token),
+  });
+}
+
+function scheduleBreakLean(token) {
+  if (!isCurrentSequence(token) || token !== breakPoseToken || !isInBreakPosePhase()) return;
+  const delayMs = 60000 + Math.floor(Math.random() * 30001);
+  breakPoseLeanTimer = setTimeout(() => {
+    breakPoseLeanTimer = null;
+    if (!isCurrentSequence(token) || token !== breakPoseToken || !isInBreakPosePhase()) return;
+    spriteAnimator.play('sittingLean', {
+      onComplete: () => {
+        if (!isCurrentSequence(token) || token !== breakPoseToken || !isInBreakPosePhase()) return;
+        scheduleBreakLean(token);
+        playBreakIdleLoop(token);
+      },
+    });
+  }, delayMs);
+}
+
 // The pose shown when no one-off reaction is playing. A click or nudge uses
 // this to hand control back to whichever state the category calls for.
 function resumeRestAnimation() {
-  // A study break owns the pose until it ends: look over while resting, judge
-  // while the buddy keeps asking whether the user is ready.
-  if (studyBreak && studyBreak.isInBreak()) {
-    startLookOverLoop(++sequenceToken);
-    return;
-  }
-  if (studyBreak && studyBreak.isInOverrun()) {
-    playJudgingLoop(++sequenceToken);
+  // A break/ready wait owns the pose with a relaxed seated idle and leans.
+  if (isInBreakPosePhase()) {
+    startBreakPoseLoop(++sequenceToken);
     return;
   }
   if (isTyping()) {
@@ -1208,6 +1326,7 @@ function isOverInteractiveArea(x, y) {
   if (isChatOpen() && rectsOverlap(x, y, chatLog.getBoundingClientRect())) return true;
   if (isChatOpen() && rectsOverlap(x, y, chatForm.getBoundingClientRect())) return true;
   if (nudge.isVisible() && rectsOverlap(x, y, nudge.getRect())) return true;
+  if (studyClockElement && studyClockElement.classList.contains('is-visible') && rectsOverlap(x, y, studyClockElement.getBoundingClientRect())) return true;
   return false;
 }
 
@@ -1263,14 +1382,45 @@ function reevaluateHover() {
 // The theme switches by itself (prefers-color-scheme in styles/tokens.css).
 // Message transparency is a user setting, so the overlay applies it here.
 
-// Sets how solid the buddy's messages and menus are. An inline style on the
-// root, because the value comes from Settings and can't live in a stylesheet.
+// Sets how solid the buddy's messages and menus are and whether the Pomodoro
+// timer is shown. Inline style on the root for opacity, because the value comes
+// from Settings and can't live in a stylesheet.
 function applyAppearance(settings) {
-  document.documentElement.style.setProperty('--surface-opacity', settings.surfaceOpacity);
+  if (settings && typeof settings.surfaceOpacity === 'number') {
+    document.documentElement.style.setProperty('--surface-opacity', settings.surfaceOpacity);
+  }
+  if (settings && typeof settings.showStudyTimer === 'boolean') {
+    showStudyTimer = settings.showStudyTimer;
+  }
+  updateStudyClock();
 }
 
 window.electronAPI.getAppearance().then(applyAppearance);
 window.electronAPI.onAppearanceChanged(applyAppearance);
+
+if (studyPauseButton) {
+  studyPauseButton.addEventListener('click', () => {
+    if (!studyBreak) return;
+    studyBreak.togglePause();
+    updateStudyClock();
+  });
+}
+if (studySkipButton) {
+  studySkipButton.addEventListener('click', () => {
+    if (!studyBreak) return;
+    studyBreak.skipPhase();
+    updateStudyClock();
+  });
+}
+if (studyStopButton) {
+  studyStopButton.addEventListener('click', () => {
+    if (!studyBreak) return;
+    if (studyBreak.stopPomodoro()) {
+      addChatLine(STUDY.lines.pomodoroStopped, 'buddy', { speak: false });
+    }
+    updateStudyClock();
+  });
+}
 
 // --- AI CHAT ---
 // Stream listeners are registered once at startup rather than per message, so
@@ -1577,6 +1727,7 @@ function submitChat(e) {
     } else if (studyBreak.isActive() && studyBreak.looksReady(goal)) {
       // A message like "I'm done with my break" ends a study break or the
       // "still coming?" cycle early.
+      shouldReturnToWorkAfterBreak = true;
       studyBreak.endBreakEarly();
     }
   }

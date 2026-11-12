@@ -348,10 +348,45 @@ window.AVATAR_SPRITE_CONFIG = {
       frameDurationMs: 83,
       loop: false,
       display: {
-        width: 120,
-        height: 128,
+        width: 122,
+        height: 125,
       },
-      offsetY: 9,
+      offsetX: 3,
+      offsetY: 11,
+    },
+
+    // Seated lean during breaks: leans back and holds before returning to
+    // the regular sitting pose. Middle frames are repeated for a ~5s hold.
+    sittingLean: {
+      sheet: 'avatar/SittingLean.png',
+      frameWidth: 504,
+      frameHeight: 442,
+      columns: 5,
+      frameCount: 25,
+      frames: [
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+        10, 11, 12, 13, 14,
+        10, 11, 12, 13, 14,
+        10, 11, 12, 13, 14,
+        10, 11, 12, 13, 14,
+        10, 11, 12, 13, 14,
+        10, 11, 12, 13, 14,
+        10, 11, 12, 13, 14,
+        10, 11, 12, 13, 14,
+        10, 11, 12, 13, 14,
+        10, 11, 12, 13, 14,
+        10, 11, 12, 13, 14,
+        10, 11, 12, 13, 14,
+        15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+      ],
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 122,
+        height: 125,
+      },
+      offsetX: 3,
+      offsetY: 11,
     },
 
     closeComputer: {

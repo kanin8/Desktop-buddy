@@ -8,6 +8,7 @@ const CONFIG = require('../config');
 const DEFAULTS = {
   theme: CONFIG.THEME_DEFAULT,
   surfaceOpacity: CONFIG.SURFACE_OPACITY_DEFAULT,
+  showStudyTimer: CONFIG.SHOW_STUDY_TIMER_DEFAULT,
 };
 
 function isKnownTheme(theme) {
@@ -55,6 +56,7 @@ function createAppearanceStore({ filePath }) {
     if (isKnownTheme(patch.theme)) settings.theme = patch.theme;
     const opacity = clampOpacity(patch.surfaceOpacity);
     if (opacity !== null) settings.surfaceOpacity = opacity;
+    if (typeof patch.showStudyTimer === 'boolean') settings.showStudyTimer = patch.showStudyTimer;
   }
 
   function read() {

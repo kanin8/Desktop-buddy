@@ -141,6 +141,12 @@ opacityRange.addEventListener('input', () => {
   window.electronAPI.setAppearance({ surfaceOpacity: Number(opacityRange.value) });
 });
 
+if (studyTimerToggle) {
+  studyTimerToggle.addEventListener('change', () => {
+    window.electronAPI.setAppearance({ showStudyTimer: studyTimerToggle.checked });
+  });
+}
+
 // --- AI ---
 // One section configures every AI feature. Fields save as soon as they change.
 

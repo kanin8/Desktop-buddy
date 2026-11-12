@@ -51,10 +51,12 @@ function getWindowBackgroundColor() {
   return nativeTheme.shouldUseDarkColors ? CONFIG.PANEL_BG_DARK : CONFIG.PANEL_BG_LIGHT;
 }
 
-// Applies the saved theme. Call once at startup, before creating windows, so
-// they open in the right colours.
+// Applies the saved theme and forces the Pomodoro timer to be shown on every
+// launch. Call once at startup, before creating windows, so they open in the
+// right colours.
 function initAppearance() {
-  applyTheme(getStore().read().theme);
+  const settings = getStore().update({ showStudyTimer: true });
+  applyTheme(settings.theme);
 }
 
 // Answers the renderers: 'appearance-get' returns the settings,

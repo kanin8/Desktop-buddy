@@ -38,6 +38,8 @@ function createStudyBreak(callbacks, options = {}) {
   let phaseTimer = null;
   // When the current work, break or overrun phase ends, for getStatus().
   let phaseEndsAt = null;
+  // When paused during a timed phase, the frozen countdown remaining.
+  let pausedRemainingMs = null;
   let retryTimer = null;
   // Session kill switch ("Not today"). An explicit join or enable() clears it
   // again, so the user can change their mind.
@@ -48,18 +50,53 @@ function createStudyBreak(callbacks, options = {}) {
   let pendingBreakKind = null;
   let currentBreakKind = null;
 
+  function isTimedPhase() {
+    return state === 'work' || state === 'break' || state === 'overrun';
+  }
+
+  function clearPause() {
+    pausedRemainingMs = null;
+  }
+
   function clearPhaseTimer() {
     if (phaseTimer !== null) {
       clearTimer(phaseTimer);
       phaseTimer = null;
     }
     phaseEndsAt = null;
+    clearPause();
   }
 
   function clearRetryTimer() {
     if (retryTimer === null) return;
     clearTimer(retryTimer);
     retryTimer = null;
+  }
+
+  // Runs when the current timed phase's countdown reaches zero. Pausing only
+  // freezes the countdown, so this is the same transition as a natural expiry.
+  function handlePhaseTimeout() {
+    phaseTimer = null;
+    phaseEndsAt = null;
+    clearPause();
+    if (state === 'work') {
+      completeWorkRound();
+    } else if (state === 'break') {
+      askReady();
+    } else if (state === 'overrun') {
+      askReady();
+    }
+  }
+
+  function schedulePhaseTimeout(remainingMs) {
+    if (phaseTimer !== null) {
+      clearTimer(phaseTimer);
+      phaseTimer = null;
+    }
+    const delay = Math.max(0, remainingMs);
+    phaseEndsAt = now() + delay;
+    clearPause();
+    phaseTimer = setTimer(handlePhaseTimeout, delay);
   }
 
   // Starts the next wall-clock work round. Called when the user joins and
@@ -75,12 +112,7 @@ function createStudyBreak(callbacks, options = {}) {
     pendingQuestion = null;
     pendingBreakKind = null;
     currentBreakKind = null;
-    phaseEndsAt = now() + config().workSessionMs;
-    phaseTimer = setTimer(() => {
-      phaseTimer = null;
-      phaseEndsAt = null;
-      completeWorkRound();
-    }, config().workSessionMs);
+    schedulePhaseTimeout(config().workSessionMs);
   }
 
   // The 25-minute round is over. Count it, choose the break length, and offer
@@ -128,12 +160,7 @@ function createStudyBreak(callbacks, options = {}) {
     pendingBreakKind = null;
     currentBreakKind = kind;
     callbacks.onBreakStart(kind);
-    phaseEndsAt = now() + lengthMs;
-    phaseTimer = setTimer(() => {
-      phaseTimer = null;
-      phaseEndsAt = null;
-      askReady();
-    }, lengthMs);
+    schedulePhaseTimeout(lengthMs);
   }
 
   function enterOverrun() {
@@ -143,12 +170,7 @@ function createStudyBreak(callbacks, options = {}) {
       state = 'overrun';
       callbacks.onOverrunStart();
     }
-    phaseEndsAt = now() + config().overrunMs;
-    phaseTimer = setTimer(() => {
-      phaseTimer = null;
-      phaseEndsAt = null;
-      askReady();
-    }, config().overrunMs);
+    schedulePhaseTimeout(config().overrunMs);
   }
 
   function endBreak() {
@@ -158,6 +180,58 @@ function createStudyBreak(callbacks, options = {}) {
     callbacks.onBreakEnd();
     if (joined && !isDisabled) startWorkRound();
     else state = 'off';
+  }
+
+  // Pauses the current timed countdown. No-op outside a running work, break or
+  // overrun phase, so it never affects questions or poses.
+  function pause() {
+    if (pausedRemainingMs !== null || !isTimedPhase() || phaseEndsAt === null) return false;
+    pausedRemainingMs = Math.max(0, phaseEndsAt - now());
+    if (phaseTimer !== null) {
+      clearTimer(phaseTimer);
+      phaseTimer = null;
+    }
+    phaseEndsAt = null;
+    return true;
+  }
+
+  // Resumes a paused countdown with the remaining time preserved.
+  function resume() {
+    if (pausedRemainingMs === null || !isTimedPhase()) return false;
+    const remaining = pausedRemainingMs;
+    pausedRemainingMs = null;
+    schedulePhaseTimeout(remaining);
+    return true;
+  }
+
+  function togglePause() {
+    if (pausedRemainingMs !== null) return resume();
+    return pause();
+  }
+
+  // Ends the current timed phase immediately so the frog asks its question,
+  // without auto-accepting. No-op when no timed countdown is running or when a
+  // question is already waiting. Skipping while paused ends the phase now.
+  function skipPhase() {
+    if (!isTimedPhase() || pendingQuestion) return false;
+    const phase = state;
+    if (pausedRemainingMs !== null) {
+      pausedRemainingMs = null;
+      if (phaseTimer !== null) {
+        clearTimer(phaseTimer);
+        phaseTimer = null;
+      }
+      phaseEndsAt = null;
+    }
+    clearPhaseTimer();
+    if (phase === 'work') {
+      completeWorkRound();
+    } else if (phase === 'break' || phase === 'overrun') {
+      askReady();
+    } else {
+      return false;
+    }
+    return true;
   }
 
   // The user accepts the Pomodoro invitation or asks for the timer in chat.
@@ -296,13 +370,17 @@ function createStudyBreak(callbacks, options = {}) {
   // Snapshot for the AI prompt and the clock: where the timer is, how long is
   // left in the current phase, and which work round the user is on.
   function getStatus() {
-    const remainingMs = phaseEndsAt === null ? null : Math.max(0, phaseEndsAt - now());
+    const paused = pausedRemainingMs !== null;
+    const remainingMs = paused
+      ? pausedRemainingMs
+      : (phaseEndsAt === null ? null : Math.max(0, phaseEndsAt - now()));
     const nextBreakKind = (completedPomodoros + 1) % config().longBreakEvery === 0 ? 'long' : 'short';
     return {
       phase: state,
       joined,
       isWorking,
       remainingMs,
+      paused,
       pendingQuestion,
       disabled: isDisabled,
       breakKind: currentBreakKind || pendingBreakKind,
@@ -316,6 +394,10 @@ function createStudyBreak(callbacks, options = {}) {
     joinPomodoro,
     enable,
     setWorking,
+    pause,
+    resume,
+    togglePause,
+    skipPhase,
     acceptBreak,
     declineBreak,
     acceptReady,
@@ -328,6 +410,7 @@ function createStudyBreak(callbacks, options = {}) {
     looksLikeStop,
     looksLikeStart,
     getStatus,
+    isPaused: () => pausedRemainingMs !== null,
     isJoined: () => joined,
     isActive: () => state === 'offer' || state === 'break' || state === 'overrun',
     isInBreak: () => state === 'break',

@@ -75,6 +75,10 @@ module.exports = {
   SURFACE_OPACITY_DEFAULT: 0.9,
   SURFACE_OPACITY_STEP: 0.05,
 
+  // Whether the small Pomodoro countdown is shown above the frog while the
+  // timer runs. Hiding it only affects the display, not the countdown itself.
+  SHOW_STUDY_TIMER_DEFAULT: true,
+
   // Background of the solid windows (Settings, to-do panel) before their
   // page has painted, so they don't flash the wrong colour. Must match
   // --grey-900 (dark) and --grey-50 (light) in styles/tokens.css.
