@@ -24,11 +24,10 @@ function createChatLayout(elements, getFrogRect, isChatOpen, onAvatarSettled, ge
   // Where the frog was before it slid up to make room for the input bar;
   // null when it hasn't been lifted.
   let restPosition = null;
-  // How many pixels the frog is currently lifted for the to-do panel, so the
-  // pill's slot under its feet rests on the list's top edge. Only the panel
-  // sets this; the chat's own lift is measured against the lifted frog, so
-  // the two compose without bookkeeping tricks.
-  let panelLift = 0;
+  // Where the frog sits with no panel lift (its natural spot), kept while the
+  // pill's slot rests on the list's top edge so closing the list can put the
+  // frog back. Null when the panel isn't lifting it.
+  let panelBaseTop = null;
   let wasPanelOpen = false;
   // The panel's top edge from the frame last acted on. A differing value
   // while the panel is open means it moved — opened, dragged, or resized —
@@ -62,7 +61,12 @@ function createChatLayout(elements, getFrogRect, isChatOpen, onAvatarSettled, ge
   function update() {
     const isOpen = isChatOpen();
     if (isOpen && !wasOpen) liftFrogIfNeeded();
-    if (!isOpen && wasOpen) lowerFrog();
+    if (!isOpen && wasOpen) {
+      lowerFrog();
+      // The list may still be open: once the chat no longer needs the room
+      // above it, settle the frog back onto the list's top edge.
+      if (getTodoPanelRect && getTodoPanelRect()) pendingPanelReview = true;
+    }
     wasOpen = isOpen;
     // A deferred lift re-check only makes sense while the chat it is for is
     // still open.
@@ -86,7 +90,20 @@ function createChatLayout(elements, getFrogRect, isChatOpen, onAvatarSettled, ge
     const panel = getTodoPanelRect ? getTodoPanelRect() : null;
     if (!panel) {
       if (wasPanelOpen) {
-        lowerForPanel();
+        // Closing the list while chatting may let the frog come back down,
+        // but only as far as the chat alone needs. Its natural spot then
+        // becomes the chat's rest, so a later chat close doesn't settle on a
+        // spot that was only lifted for the list.
+        if (isChatOpen()) {
+          if (panelBaseTop !== null) {
+            if (restPosition) restPosition = { left: restPosition.left, top: panelBaseTop };
+            else restPosition = { left: avatar.getBoundingClientRect().left, top: panelBaseTop };
+            panelBaseTop = null;
+          }
+          liftFrogIfNeeded();
+        } else {
+          lowerForPanel();
+        }
         lastPanelY = null;
         pendingPanelReview = false;
       }
@@ -102,12 +119,18 @@ function createChatLayout(elements, getFrogRect, isChatOpen, onAvatarSettled, ge
     }
     wasPanelOpen = true;
     if (
-      pendingPanelReview && !dragging && !isChatOpen() && !isSliding &&
+      pendingPanelReview && !dragging && !isSliding &&
       panel.y === lastPanelY
     ) {
       pendingPanelReview = false;
-      const delta = pill.getBoundingClientRect().bottom - panel.y;
-      if (delta !== 0) slideForPanel(delta);
+      if (isChatOpen()) {
+        // The list opened or moved under an already-open chat: lift the frog
+        // (and the chat with it) above the panel. The panel stays put while
+        // the chat owns the position, so this must not slide for the panel.
+        liftFrogIfNeeded();
+      } else {
+        slideForPanel();
+      }
     }
   }
 
@@ -118,9 +141,12 @@ function createChatLayout(elements, getFrogRect, isChatOpen, onAvatarSettled, ge
   // to-do list open it must also clear the panel's top edge: the chat (the
   // history above the head and the input bar under the pill) may never run
   // into the list, which stays where it is, so the frog rises further (this
-  // is why the panel stops following the feet while the chat is open). The
-  // lifted spot is never saved; the frog's real spot is remembered in
-  // restPosition.
+  // is why the panel stops following the feet while the chat is open). Called
+  // when the chat opens and again whenever the list opens, moves or closes
+  // while chatting, so opening the list after the chat can never cover it.
+  // The frog's original spot is kept in restPosition and is never undershot:
+  // a negative overlap (the list closed again) only lowers back to what the
+  // chat alone needs, never below the resting spot.
   function liftFrogIfNeeded() {
     const margin = getScreenMargin();
     const gap = readLengthToken('--space-2');
@@ -131,11 +157,18 @@ function createChatLayout(elements, getFrogRect, isChatOpen, onAvatarSettled, ge
     if (panel) ceiling = Math.min(ceiling, panel.y - gap);
     const formBottom = pill.getBoundingClientRect().bottom + gap + form.offsetHeight;
     const overlap = formBottom - ceiling;
-    if (overlap <= 0) return;
 
     const box = avatar.getBoundingClientRect();
-    restPosition = { left: box.left, top: box.top };
-    slideAvatarTo({ left: box.left, top: box.top - overlap });
+    // Capture the resting spot once, before the first lift: later calls (the
+    // list opening or closing mid-chat) must not overwrite it with a lifted
+    // position, or the frog would drift upward or settle too high.
+    if (!restPosition) {
+      if (overlap <= 0) return;
+      restPosition = { left: box.left, top: box.top };
+    }
+    const targetTop = Math.min(restPosition.top, box.top - overlap);
+    if (Math.abs(targetTop - box.top) < 1) return;
+    slideAvatarTo({ left: box.left, top: targetTop });
   }
 
   // Puts the frog back where it was before the chat lifted it.
@@ -145,28 +178,33 @@ function createChatLayout(elements, getFrogRect, isChatOpen, onAvatarSettled, ge
     restPosition = null;
   }
 
-  // While the list is open the panel's top edge is the ceiling the pill's
-  // slot must reach: the pill-menu is what stands on the list. Near the
-  // screen bottom the panel is pushed up so the whole expanded list shows,
-  // so the frog rises by exactly the overlap. Skipped while the chat is
-  // open — its lift already keeps the pill above the panel, and a second
-  // slider mid-chat would break its rest bookkeeping.
-  function slideForPanel(delta) {
+  // While the list is open the panel's top edge is where the pill's slot
+  // rests: the pill-menu is what stands on the list. Aim straight at that
+  // edge (rather than nudging by a measured delta) so a list that moved while
+  // the chat was open still ends up with the slot exactly on it. The frog's
+  // unlifted spot is remembered the first time, for lowerForPanel. Skipped
+  // while the chat is open — its lift already keeps the pill above the panel,
+  // and a second slider mid-chat would break its rest bookkeeping.
+  function slideForPanel() {
     if (isChatOpen()) return;
-    const sign = delta > 0 ? -1 : 1;
-    panelLift = Math.max(0, panelLift - delta * sign);
+    const panel = getTodoPanelRect && getTodoPanelRect();
+    if (!panel) return;
     const box = avatar.getBoundingClientRect();
-    slideAvatarTo({ left: box.left, top: box.top + sign * Math.abs(delta) });
+    if (panelBaseTop === null) panelBaseTop = box.top;
+    const pillOffset = pill.getBoundingClientRect().bottom - box.top;
+    const targetTop = panel.y - pillOffset;
+    if (Math.abs(targetTop - box.top) < 1) return;
+    slideAvatarTo({ left: box.left, top: targetTop });
   }
 
-  // Puts the frog back down when the list closes, by the amount the panel
-  // lift added. Skipped while the chat is open: the chat lowers to its rest
-  // (which is the panel-lifted spot) and keeps the frog up on its own.
+  // Puts the frog back on its unlifted spot when the list closes. Skipped
+  // while the chat is open: the chat lowers to its rest (which has already
+  // been moved to the unlifted spot when the list closed) on its own.
   function lowerForPanel() {
-    if (isChatOpen() || panelLift <= 0) return;
+    if (isChatOpen() || panelBaseTop === null) return;
     const box = avatar.getBoundingClientRect();
-    slideAvatarTo({ left: box.left, top: box.top + panelLift });
-    panelLift = 0;
+    slideAvatarTo({ left: box.left, top: panelBaseTop });
+    panelBaseTop = null;
   }
 
   // Moves the frog with the short slide from chat.css (.is-sliding). The
@@ -180,6 +218,14 @@ function createChatLayout(elements, getFrogRect, isChatOpen, onAvatarSettled, ge
   function stopSliding() {
     isSliding = false;
     avatar.classList.remove('is-sliding');
+  }
+
+  // True from slideAvatarTo() until that slide's transitionend fires. The
+  // to-do panel must not follow the chat's bottom edge between those
+  // points: the input bar would sit inside a still-moving chat window, so
+  // an extent push uses the settled value instead (see overlay.js).
+  function isChatSliding() {
+    return isSliding;
   }
 
   // Only the frog box's own slide counts: fades inside it (e.g. the hover
@@ -197,7 +243,7 @@ function createChatLayout(elements, getFrogRect, isChatOpen, onAvatarSettled, ge
   // pending panel review and lower are dropped with it.
   function forgetRestPosition() {
     restPosition = null;
-    panelLift = 0;
+    panelBaseTop = null;
     pendingPanelReview = false;
     lastPanelY = null;
     stopSliding();
@@ -364,5 +410,6 @@ function createChatLayout(elements, getFrogRect, isChatOpen, onAvatarSettled, ge
     setDragging,
     notePanelPlacement,
     placeInColumn,
+    isChatSliding,
   };
 }

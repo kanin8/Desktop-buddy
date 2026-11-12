@@ -71,6 +71,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // to-do panel under it. The overlay sends placement and drag events; the
   // throttle lives in the overlay, not here.
   pushAvatarPosition: (feet) => ipcRenderer.send('avatar-position', feet),
+  // Feeds the chat window's current bottom edge to the main process so the
+  // to-do panel can anchor below the whole chat while it is open (and fall
+  // back to the pill's slot when it is not). See overlay.js's pushChatExtent.
+  pushChatExtent: (extent) => ipcRenderer.send('chat-extent', extent),
   // Subscribe to the to-do panel's bounds ({ visible, x, y, width, height }),
   // mirrored from the panel window, so the chat lift can rise above the list.
   onTodoPanelPlacement: (callback) => {

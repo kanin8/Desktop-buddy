@@ -144,6 +144,10 @@ function getBubbleAnchorRect() {
 function update() {
   spriteAnimator.update(performance.now());
   chatLayout.update();
+  // A sliding chat holds its last settled bottom edge; while it slides, the
+  // final one is reported as soon as the slide ends. Deduplicated like the
+  // cursor channel, so nothing arrives while nothing changed.
+  if (!chatLayout.isChatSliding()) pushChatExtent();
   // Catch-up while a drag has stalled (see pendingPositionSend): one extra
   // throttled send after the move events stop, then this goes quiet.
   if (isDragging && pendingPositionSend) sendAvatarPosition();
@@ -249,9 +253,30 @@ function frogFeetPosition() {
 // gap, then the pill itself. The pill is always laid out (it only hides with
 // visibility, see controls.css), so its height can be read at any time. The
 // to-do panel anchors below this slot, which keeps the pill-menu above the
-// list — and the frog standing on it — whenever the list is open.
+// list — and the frog standing on it — whenever the list is open. While the
+// chat is open its input bar hangs lower than that slot, so the chat's whole
+// bottom edge is reported separately below and outranks the slot.
 function pillSlotClearance() {
   return readLengthToken('--indicator-gap') + pill.offsetHeight;
+}
+
+// Where the chat window ends, in screen coordinates: the bottom edge of its
+// input bar plus the same breathing room --space-2 the chat lift also keeps
+// between itself and whatever sits below it. { visible: true } only while
+// the chat is open; the to-do panel anchors below this edge then, instead of
+// above the input bar. Deduplicated like the cursor channel, so a frame that
+// does not move the chat sends nothing. update() polls it, so it only needs
+// to be correct one frame after anything actually moved.
+let lastChatExtentSend = '';
+
+function pushChatExtent() {
+  const extent = isChatOpen()
+    ? { visible: true, y: Math.round(chatForm.getBoundingClientRect().bottom + readLengthToken('--space-2')) }
+    : { visible: false };
+  const signature = JSON.stringify(extent);
+  if (signature === lastChatExtentSend) return;
+  lastChatExtentSend = signature;
+  window.electronAPI.pushChatExtent(extent);
 }
 
 function sendAvatarPosition(force, dragging) {
@@ -752,10 +777,21 @@ function showNudge(message) {
 // Returns false when it is blocked immediately.
 // - onShown: optional, runs once the bubble is on screen.
 function presentNudge(text, replies, onShown) {
-  if (isChatOpen() || controls.isMenuOpen() || nudge.isVisible()) return false;
-  nudge.show(text, replies);
-  if (onShown) onShown();
-  return true;
+  if (isChatOpen() || controls.isMenuOpen()) return;
+  const { cueAnimation } = window.NUDGE_CONFIG;
+  const token = ++sequenceToken;
+  // Only hands back to the rest pose if nothing newer has started, so the
+  // talking animation the greeting starts when it appears isn't cut short.
+  spriteAnimator.play(cueAnimation, {
+    onComplete: () => {
+      if (isCurrentSequence(token)) resumeRestAnimation();
+    },
+  });
+  setTimeout(() => {
+    if (isChatOpen() || controls.isMenuOpen()) return;
+    nudge.show(text, replies);
+    if (onShown) onShown();
+  }, getAnimationLengthMs(cueAnimation));
 }
 
 // --- NUDGE TIMING ---
@@ -1502,7 +1538,8 @@ function closeChat() {
 // --- STARTUP GREETING ---
 // Once when the overlay starts, the frog asks whether the user is working
 // today, in the nudge bubble with buttons. Lines live in nudge/config.js
-// (startupGreeting). Every button click is saved to the chat history.
+// (startupGreeting). Every button click is saved to the chat history, and
+// the frog plays its talking animation for each line it says.
 
 const GREETING_REPLY_IDS = ['greetYep', 'greetNotToday', 'greetHelp', 'greetGotIt', 'greetHide', 'greetStay'];
 let hasGreetedOnStartup = false;
@@ -1519,6 +1556,7 @@ function greetOnStartup() {
   const { text, replies } = window.NUDGE_CONFIG.startupGreeting;
   const shown = presentNudge(text, replies, () => {
     greetingStep = 'greeting';
+    speakMessage(text);
   });
   if (!shown) {
     // The chat/menu or another nudge is already open. Retry rather than
@@ -1543,6 +1581,7 @@ function handleGreetingReply(id, text, label) {
     schedulePomodoroInvite();
   } else if (id === 'greetGotIt') {
     nudge.showBriefly(greeting.gotItLine);
+    speakMessage(greeting.gotItLine);
     logNudgeExchange(text, label, greeting.gotItLine, false);
     schedulePomodoroInvite();
   } else if (id === 'greetNotToday') {
@@ -1551,11 +1590,13 @@ function handleGreetingReply(id, text, label) {
     showGreetingQuestion(greeting.notTodayQuestion, greeting.notTodayReplies, 'notToday');
   } else if (id === 'greetHide') {
     nudge.showBriefly(greeting.hideLine);
+    speakMessage(greeting.hideLine);
     logNudgeExchange(text, label, greeting.hideLine, false);
     shouldSnoozeWhenNudgeHides = true;
     schedulePomodoroInvite();
   } else if (id === 'greetStay') {
     nudge.showBriefly(greeting.stayLine);
+    speakMessage(greeting.stayLine);
     logNudgeExchange(text, label, greeting.stayLine, false);
     schedulePomodoroInvite();
   }
@@ -1576,6 +1617,7 @@ function showGreetingQuestion(text, replies, step) {
   nudge.show(text, replies);
   if (hadFocus) nudge.focus();
   greetingStep = step;
+  speakMessage(text);
 }
 
 // Runs whenever the nudge hides. If a greeting question was still waiting
