@@ -10,12 +10,12 @@ window.AVATAR_SPRITE_CONFIG = {
   // that do not specify their own `display`. These are deliberately integers:
   // Chromium rounds background-position to whole device pixels, and fractional
   // values make seams appear between adjacent frames.
-  // The idle value matches the footprint the old static Frog_avatar.png
-  // occupied (~75x125), so swapping in an animated sheet did not move the
-  // avatar within its movement bounds.
+  // Used by idle and idleSpeak, whose size every other pose is matched to
+  // (see "Sizing and alignment" below). To make the whole frog bigger or
+  // smaller, re-fit all poses rather than changing only this.
   frameDisplay: {
-    width: 80,
-    height: 126,
+    width: 94,
+    height: 147,
   },
 
   animations: {
@@ -37,7 +37,9 @@ window.AVATAR_SPRITE_CONFIG = {
       frameDurationMs: 83,
 
       loop: true,
-      offsetY: 0,
+      // Keeps the feet on the hover indicator's baseline
+      // (box centre + --avatar-feet-offset).
+      offsetY: -10.5,
     },
 
     // Standing "talking" loop, played while the buddy is delivering a chat
@@ -50,7 +52,7 @@ window.AVATAR_SPRITE_CONFIG = {
       frameCount: 25,
       frameDurationMs: 83,
       loop: false,
-      offsetY: 0,
+      offsetY: -10.5,
     },
 
     // One-shot click reaction, played from the idle loop and handed back to it
@@ -72,33 +74,34 @@ window.AVATAR_SPRITE_CONFIG = {
 
       loop: false,
 
-      // Scales this sheet up so its standing frames (~76x122) match idle's
-      // footprint (~75x125) instead of rendering the frog smaller.
+      // Scales this sheet so its standing frog is as tall as idle's.
       display: {
-        width: 84,
-        height: 198,
+        width: 100,
+        height: 237,
       },
 
       // The feet rest at 86.1% down this sheet's cells but 99.7% down idle's,
-      // so centring both in the same box would dip the frog ~9px on click.
+      // so centring both in the same box would dip the frog on click.
       // The ramp keeps the first frame on idle's baseline and lifts the final
       // landing frame back onto it, so the handoff to idle does not drift.
-      offsetY: { from: -9, to: -6 },
+      offsetX: { from: -1.5, to: -1 },
+      offsetY: { from: -23, to: -19.5 },
     },
 
-    // --- Category-driven poses ---
-    // These sheets are drawn at different source resolutions, so each
-    // `display` is scaled so the visible sprite is about as tall as idle
-    // (~125px). Scaling by the raw source ratio instead would make the frog
-    // shrink to half size in the standing poses.
-    //
-    // The seated poses are then scaled down another 10%: matching idle's
-    // height left them looking a little larger than the standing frog, since
-    // they also carry the chair and desk. The desk and typing poses are 5%
-    // smaller again, as they still read slightly large beside the others.
-    // offsetY keeps transitions planted: standing poses land on idle's
-    // baseline (box centre + --avatar-feet-offset), and the intro clips chain
-    // onto the seated baseline instead of jumping partway through.
+    // --- Sizing and alignment ---
+    // Every pose draws the frog at the same size and spot, so it doesn't
+    // grow, shrink or jump when one clip hands over to the next. The values
+    // were measured from the sheets, not set by eye, as a chain from idle:
+    // - sittingDown's first frame matches idle (height, centre, feet), with
+    //   one fixed offsetX so the frog sits down in place without sliding.
+    // - sittingGettingDesk's first frame matches sittingDown's last.
+    // - sittingTyping's desk matches sittingGettingDesk's final desk, and
+    //   every other desk pose is scaled and moved so its desk sits exactly
+    //   on sittingTyping's.
+    // - standUp starts on closeComputer's last frame and ends on idle. Its
+    //   sheet draws the standing frog ~6% larger relative to the seated one
+    //   than the other sheets do, so it ramps `scale` to match both ends.
+    // - standingClicked starts and ends on idle.
     sittingDown: {
       sheet: 'avatar/sittingDown.png',
       frameWidth: 338,
@@ -108,11 +111,12 @@ window.AVATAR_SPRITE_CONFIG = {
       frameDurationMs: 83,
       loop: false,
       display: {
-        width: 80,
-        height: 143,
+        width: 93,
+        height: 166,
       },
-      // Starts where idle's feet end, then settles onto the seated baseline.
-      offsetY: -5,
+      // Starts exactly on idle; the feet stay on the baseline as it sits.
+      offsetX: -1,
+      offsetY: { from: -16.5, to: -14.5 },
     },
 
     sittingGettingDesk: {
@@ -132,11 +136,12 @@ window.AVATAR_SPRITE_CONFIG = {
       // Wide scene: the frog sits well inside the cell while the desk is
       // pulled into frame.
       display: {
-        width: 276,
-        height: 155,
+        width: 327,
+        height: 184,
       },
-      // Bridges sittingDown's end and sittingTyping's start.
-      offsetY: 7,
+      // Starts exactly where sittingDown ends.
+      offsetX: -4.5,
+      offsetY: -0.5,
     },
 
     sittingTyping: {
@@ -150,10 +155,11 @@ window.AVATAR_SPRITE_CONFIG = {
       // sheet into an endless loop.
       loop: false,
       display: {
-        width: 96,
-        height: 105,
+        width: 111,
+        height: 123,
       },
-      offsetY: 9,
+      offsetX: -13,
+      offsetY: 3,
     },
 
     sittingTypingBlink: {
@@ -165,10 +171,11 @@ window.AVATAR_SPRITE_CONFIG = {
       frameDurationMs: 83,
       loop: false,
       display: {
-        width: 96,
-        height: 105,
+        width: 111,
+        height: 123,
       },
-      offsetY: 9,
+      offsetX: -13,
+      offsetY: 3,
     },
 
     deskLookUp: {
@@ -181,11 +188,11 @@ window.AVATAR_SPRITE_CONFIG = {
       frameDurationMs: 83,
       loop: false,
       display: {
-        width: 103,
-        height: 123,
+        width: 120,
+        height: 144,
       },
-      offsetX: 4,
-      offsetY: 3,
+      offsetX: -8.5,
+      offsetY: -4,
     },
 
     // Alternative look-up sheet used by the judging sequence. Same 5x1 layout
@@ -199,11 +206,11 @@ window.AVATAR_SPRITE_CONFIG = {
       frameDurationMs: 83,
       loop: false,
       display: {
-        width: 103,
-        height: 123,
+        width: 120,
+        height: 144,
       },
-      offsetX: 4,
-      offsetY: 3,
+      offsetX: -8.5,
+      offsetY: -4,
     },
 
     // --- Judging the user's focus ---
@@ -212,8 +219,8 @@ window.AVATAR_SPRITE_CONFIG = {
     // leave leisure. `judgingExit` reverses it back to typing.
     //
     // These scenes are drawn wider than the look-up pair, so their `display`
-    // is scaled to keep the frog about the same size. The cells are ~396x402,
-    // hence a slightly shorter box than DeskLookUp's 350x420.
+    // is scaled to keep the desk the same size (see "Sizing and alignment").
+    // The cells are ~396x402, hence a shorter box than DeskLookUp's 350x420.
     sittingJudgeStart: {
       sheet: 'avatar/SittingJudgeStart.png',
       // A single row of five frames, so there are no rows to derive.
@@ -224,13 +231,13 @@ window.AVATAR_SPRITE_CONFIG = {
       frameDurationMs: 83,
       loop: false,
       display: {
-        width: 104,
-        height: 106,
+        width: 121,
+        height: 123,
       },
-      // Matches deskLookUp2/deskLookDown (offsetX 4, feet on the shared
-      // baseline) so the judge scene does not jump up/left when it starts.
-      offsetX: 4,
-      offsetY: 10.5,
+      // Desk on sittingTyping's desk, like deskLookUp2 before it, so the
+      // judge scene does not jump when it starts.
+      offsetX: -8,
+      offsetY: 4,
     },
 
     sittingJudgeBlink: {
@@ -244,11 +251,11 @@ window.AVATAR_SPRITE_CONFIG = {
       frameDurationMs: 83,
       loop: false,
       display: {
-        width: 104,
-        height: 106,
+        width: 121,
+        height: 123,
       },
-      offsetX: 4,
-      offsetY: 10.5,
+      offsetX: -8,
+      offsetY: 3,
     },
 
     sittingJudgeNoBlink: {
@@ -260,11 +267,11 @@ window.AVATAR_SPRITE_CONFIG = {
       frameDurationMs: 83,
       loop: false,
       display: {
-        width: 104,
-        height: 106,
+        width: 121,
+        height: 123,
       },
-      offsetX: 4,
-      offsetY: 10.5,
+      offsetX: -8,
+      offsetY: 4,
     },
 
     sittingJudgeStop: {
@@ -276,11 +283,11 @@ window.AVATAR_SPRITE_CONFIG = {
       frameDurationMs: 83,
       loop: false,
       display: {
-        width: 104,
-        height: 106,
+        width: 121,
+        height: 123,
       },
-      offsetX: 4,
-      offsetY: 10.5,
+      offsetX: -8,
+      offsetY: 4.5,
     },
 
     deskLookDown: {
@@ -294,11 +301,11 @@ window.AVATAR_SPRITE_CONFIG = {
       frameDurationMs: 83,
       loop: false,
       display: {
-        width: 103,
-        height: 123,
+        width: 120,
+        height: 144,
       },
-      offsetX: 4,
-      offsetY: 3,
+      offsetX: -8.5,
+      offsetY: -4,
     },
 
     // Reaction while seated and typing: the frog looks over at the user. Loops
@@ -313,11 +320,11 @@ window.AVATAR_SPRITE_CONFIG = {
       frameDurationMs: 83,
       loop: false,
       display: {
-        width: 102,
-        height: 104,
+        width: 121,
+        height: 123,
       },
-      offsetX: 3,
-      offsetY: 11,
+      offsetX: -8,
+      offsetY: 3.5,
     },
 
     // Seated "talking" loop, played while the buddy delivers a chat message
@@ -331,11 +338,11 @@ window.AVATAR_SPRITE_CONFIG = {
       frameDurationMs: 83,
       loop: false,
       display: {
-        width: 102,
-        height: 104,
+        width: 121,
+        height: 123,
       },
-      offsetX: 3,
-      offsetY: 11,
+      offsetX: -8,
+      offsetY: 3.5,
     },
 
     // One-shot seated stretch, played when the user accepts a study break.
@@ -347,11 +354,14 @@ window.AVATAR_SPRITE_CONFIG = {
       frameCount: 25,
       frameDurationMs: 83,
       loop: false,
+      // This sheet draws the desk smaller within its cell than the others,
+      // so it needs a larger box for the frog and desk to match sittingTyping.
       display: {
-        width: 120,
-        height: 128,
+        width: 163,
+        height: 173,
       },
-      offsetY: 9,
+      offsetX: -7,
+      offsetY: 2.5,
     },
 
     closeComputer: {
@@ -363,10 +373,11 @@ window.AVATAR_SPRITE_CONFIG = {
       frameDurationMs: 83,
       loop: false,
       display: {
-        width: 103,
-        height: 112,
+        width: 116,
+        height: 127,
       },
-      offsetY: 6,
+      offsetX: -13,
+      offsetY: 3,
     },
 
     standUp: {
@@ -378,13 +389,17 @@ window.AVATAR_SPRITE_CONFIG = {
       frameDurationMs: 83,
       loop: false,
       display: {
-        width: 83,
-        height: 134,
+        width: 97,
+        height: 157,
       },
       // The feet sit high in the first cells and drift ~30px down the sheet as
       // the frog stands. Ramp the whole sprite up across the clip so the feet
-      // stay planted, ending on idle's baseline.
-      offsetY: { from: 28, to: -1 },
+      // stay planted, ending on idle's baseline. It also moves from where
+      // closeComputer leaves the seated frog to idle's centre, and grows
+      // slightly (scale) to end at idle's size (see "Sizing and alignment").
+      offsetX: { from: -7, to: -0.5 },
+      offsetY: { from: 22.5, to: -10 },
+      scale: { from: 1.059, to: 1 },
     },
   },
 
