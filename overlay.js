@@ -402,27 +402,42 @@ const nudge = createNudge(
       if (id === STUDY.replyIds.pomodoroYes) {
         resolvePomodoroInvite();
         nudge.showBriefly(STUDY.lines.pomodoroAccepted);
+        addChatLine(label, 'user');
+        addChatLine(STUDY.lines.pomodoroAccepted, 'buddy', { speak: false });
         studyBreak.joinPomodoro();
       } else if (id === STUDY.replyIds.pomodoroNo) {
         resolvePomodoroInvite();
         nudge.showBriefly(STUDY.lines.pomodoroDeclined);
+        addChatLine(label, 'user');
+        addChatLine(STUDY.lines.pomodoroDeclined, 'buddy', { speak: false });
       } else if (id === STUDY.replyIds.breakYes) {
         const kind = studyBreak.getStatus().breakKind;
-        nudge.showBriefly(kind === 'long' ? STUDY.lines.longBreakAccepted : STUDY.lines.breakAccepted);
+        const line = kind === 'long' ? STUDY.lines.longBreakAccepted : STUDY.lines.breakAccepted;
+        nudge.showBriefly(line);
+        addChatLine(label, 'user');
+        addChatLine(line, 'buddy', { speak: false });
         studyBreak.acceptBreak();
       } else if (id === STUDY.replyIds.breakNo) {
         nudge.showBriefly(STUDY.lines.breakDeclined);
+        addChatLine(label, 'user');
+        addChatLine(STUDY.lines.breakDeclined, 'buddy', { speak: false });
         studyBreak.declineBreak();
       } else if (id === STUDY.replyIds.readyYes) {
         nudge.showBriefly(STUDY.lines.readyAccepted);
+        addChatLine(label, 'user');
+        addChatLine(STUDY.lines.readyAccepted, 'buddy', { speak: false });
         studyBreak.acceptReady();
       } else if (id === STUDY.replyIds.readyNo) {
         nudge.showBriefly(STUDY.lines.readyDeclined);
+        addChatLine(label, 'user');
+        addChatLine(STUDY.lines.readyDeclined, 'buddy', { speak: false });
         studyBreak.declineReady();
       } else if (id === STUDY.replyIds.stop) {
         // Leave the timer first so the frog returns to rest before speaking.
         studyBreak.stopPomodoro();
         nudge.showBriefly(STUDY.lines.pomodoroStopped);
+        addChatLine(label, 'user');
+        addChatLine(STUDY.lines.pomodoroStopped, 'buddy', { speak: false });
       } else if (GREETING_REPLY_IDS.includes(id)) {
         handleGreetingReply(id, text, label);
       } else if (id === 'yes') {
@@ -484,11 +499,17 @@ studyBreak = createStudyBreak({
     return showStudyQuestion(line, STUDY.breakReplies);
   },
   onAskReady: () => showStudyQuestion(STUDY.lines.readyQuestion, STUDY.readyReplies),
-  // The break pose is the same look-over loop the chat uses, held until the
-  // break ends. Judging nudges pause so they don't talk over the break.
+  // The break pose starts with a stretch, then holds the look-over loop until
+  // the break ends. Judging nudges pause so they don't talk over the break.
   onBreakStart: () => {
     cancelJudgingNudgeTimer();
-    startLookOverLoop(++sequenceToken);
+    const token = ++sequenceToken;
+    spriteAnimator.play('sittingStretch', {
+      onComplete: () => {
+        if (!isCurrentSequence(token)) return;
+        startLookOverLoop(token);
+      },
+    });
   },
   // Overrun: keep the judging loop, so the frog looks like it is waiting for
   // the user to come back.
@@ -569,6 +590,7 @@ function showStudyQuestion(text, replies) {
     return false;
   }
   nudge.show(text, replies);
+  addChatLine(text, 'buddy', { speak: false });
   return true;
 }
 

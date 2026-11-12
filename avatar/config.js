@@ -338,6 +338,22 @@ window.AVATAR_SPRITE_CONFIG = {
       offsetY: 11,
     },
 
+    // One-shot seated stretch, played when the user accepts a study break.
+    sittingStretch: {
+      sheet: 'avatar/SittingStretch.png',
+      frameWidth: 492,
+      frameHeight: 524,
+      columns: 5,
+      frameCount: 25,
+      frameDurationMs: 83,
+      loop: false,
+      display: {
+        width: 120,
+        height: 128,
+      },
+      offsetY: 9,
+    },
+
     closeComputer: {
       sheet: 'avatar/CloseComputer_2.png',
       frameWidth: 242,
