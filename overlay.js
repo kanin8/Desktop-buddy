@@ -19,6 +19,10 @@ const chatSend = document.getElementById('chat-send');
 const chatClose = document.getElementById('chat-close');
 const nudgeElement = document.getElementById('nudge');
 const studyClockElement = document.getElementById('study-clock');
+const studyClockTimeElement = document.getElementById('study-clock-time');
+const studyClockPauseButton = document.getElementById('study-clock-pause');
+const studyClockSkipButton = document.getElementById('study-clock-skip');
+const studyClockStopButton = document.getElementById('study-clock-stop');
 
 // Study-break timings, lines and reply ids (study/config.js).
 const STUDY = window.STUDY_CONFIG;
@@ -611,14 +615,53 @@ function updateStudyClock() {
 
   const text = window.STUDY_CLOCK.formatClock(status.remainingMs);
   if (text !== lastStudyClockText) {
-    studyClockElement.textContent = text;
+    studyClockTimeElement.textContent = text;
     lastStudyClockText = text;
   }
   // The overlay is hidden while snoozed, so this dims the clock for that state
   // without ever pausing the wall-clock countdown.
-  studyClockElement.classList.toggle('is-paused', document.hidden);
+  studyClockElement.classList.toggle('is-snoozed', document.hidden);
+  updateStudyClockPauseButton(status.isPaused);
   studyClockElement.classList.add('is-visible');
   positionStudyClock();
+}
+
+// Swaps the pause button between Pause and Play (the icon swap is CSS, keyed
+// on .is-paused). Only touches the DOM when the state actually changes,
+// since this runs every animation frame.
+function updateStudyClockPauseButton(isPaused) {
+  if (studyClockElement.classList.contains('is-paused') === isPaused) return;
+  studyClockElement.classList.toggle('is-paused', isPaused);
+  studyClockPauseButton.setAttribute('aria-label', isPaused ? 'Resume' : 'Pause');
+}
+
+// --- POMODORO CLOCK CONTROLS ---
+// Play/pause, skip and stop under the countdown. Stop says what happened in a
+// short bubble and saves it to the chat history, like the chat-driven stop.
+// Play/pause stays silent: any bubble hides the clock, which would take the
+// button away right after the user pressed it.
+
+studyClockPauseButton.addEventListener('click', () => {
+  if (studyBreak.getStatus().isPaused) studyBreak.resume();
+  else studyBreak.pause();
+});
+
+// Skipping jumps to the question the countdown would have ended on ("want a
+// break?" or "ready to keep working?"). The timer shows that question itself
+// through onSuggest / onAskReady, so there is no extra line here.
+studyClockSkipButton.addEventListener('click', () => {
+  studyBreak.skipPhase();
+});
+
+// Same as asking the buddy to stop in chat. The timer stops first so the frog
+// is back at rest before it speaks.
+studyClockStopButton.addEventListener('click', () => {
+  if (studyBreak.stopPomodoro()) sayStudyClockLine(STUDY.lines.pomodoroStopped);
+});
+
+function sayStudyClockLine(line) {
+  nudge.showBriefly(line);
+  addChatLine(line, 'buddy', { speak: false });
 }
 
 // Places the clock centred above the frog, or beside it when there is no room
@@ -1208,6 +1251,8 @@ function isOverInteractiveArea(x, y) {
   if (isChatOpen() && rectsOverlap(x, y, chatLog.getBoundingClientRect())) return true;
   if (isChatOpen() && rectsOverlap(x, y, chatForm.getBoundingClientRect())) return true;
   if (nudge.isVisible() && rectsOverlap(x, y, nudge.getRect())) return true;
+  if (studyClockElement.classList.contains('is-visible') &&
+    rectsOverlap(x, y, studyClockElement.getBoundingClientRect())) return true;
   return false;
 }
 
@@ -1240,6 +1285,12 @@ function handlePointerAt(x, y) {
 
   // Lights up the hover indicator under the frog.
   avatar.classList.toggle('is-hovered', isPointerOverFrog(x, y));
+
+  // The Pomodoro clock's buttons only show while the pointer is on the frog
+  // or on the clock itself.
+  const isOverStudyClock = studyClockElement.classList.contains('is-visible') &&
+    rectsOverlap(x, y, studyClockElement.getBoundingClientRect());
+  studyClockElement.classList.toggle('is-hovered', isPointerOverFrog(x, y) || isOverStudyClock);
 
   // A nudge doesn't fade away while the pointer is on it.
   nudge.setPointerOver(nudge.isVisible() && rectsOverlap(x, y, nudge.getRect()));

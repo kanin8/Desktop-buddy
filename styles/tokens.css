@@ -183,6 +183,8 @@
      numerals keeps mm:ss from shifting the pill every second. */
   --clock-min-width: 58px;
   --clock-paused-opacity: 0.55;
+  /* Round play/pause, skip and stop buttons under the countdown. */
+  --clock-button-size: 24px;
 
   /* To-do panel (Maike's component in toDoList/). It is its own solid
      window, not a layer over the desktop, so it uses the panel grey without

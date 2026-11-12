@@ -501,3 +501,124 @@ test('getStatus says the timer is off after disable', () => {
   assert.strictEqual(status.disabled, true);
   assert.strictEqual(status.remainingMs, null);
 });
+
+test('pause freezes the countdown and resume continues it', () => {
+  const { study, clock, events } = makeStudy();
+  study.joinPomodoro();
+  clock.advance(10 * 60 * 1000);
+
+  assert.strictEqual(study.pause(), true);
+  assert.strictEqual(study.pause(), false);
+  clock.advance(CONFIG.workSessionMs);
+  assert.deepStrictEqual(events, []);
+  assert.strictEqual(study.getStatus().isPaused, true);
+  assert.strictEqual(study.getStatus().remainingMs, 15 * 60 * 1000);
+
+  assert.strictEqual(study.resume(), true);
+  assert.strictEqual(study.getStatus().isPaused, false);
+  clock.advance(15 * 60 * 1000 - 1);
+  assert.deepStrictEqual(events, []);
+  clock.advance(1);
+  assert.deepStrictEqual(events, ['suggest']);
+});
+
+test('a paused break asks "ready?" only after it resumes and runs out', () => {
+  const { study, clock, events } = makeStudy();
+  study.joinPomodoro();
+  clock.advance(CONFIG.workSessionMs);
+  study.acceptBreak();
+  study.pause();
+  clock.advance(CONFIG.shortBreakMs * 2);
+  assert.strictEqual(count(events, 'askReady'), 0);
+
+  study.resume();
+  clock.advance(CONFIG.shortBreakMs);
+  assert.strictEqual(count(events, 'askReady'), 1);
+});
+
+test('pause and resume do nothing when the timer is off', () => {
+  const { study } = makeStudy();
+  assert.strictEqual(study.pause(), false);
+  assert.strictEqual(study.resume(), false);
+  assert.strictEqual(study.skipPhase(), null);
+});
+
+test('skipping a work round counts it and asks whether the user wants a break', () => {
+  const { study, events, suggestedKinds } = makeStudy();
+  study.joinPomodoro();
+
+  assert.strictEqual(study.skipPhase(), 'offer');
+  assert.deepStrictEqual(events, ['suggest']);
+  assert.deepStrictEqual(suggestedKinds, ['short']);
+  const status = study.getStatus();
+  assert.strictEqual(status.phase, 'offer');
+  assert.strictEqual(status.pendingQuestion, 'suggestion');
+  assert.strictEqual(status.completedPomodoros, 1);
+});
+
+test('the fourth skipped work round offers a long break', () => {
+  const { study, suggestedKinds } = makeStudy();
+  study.joinPomodoro();
+  for (let round = 1; round < CONFIG.longBreakEvery; round += 1) {
+    study.skipPhase();
+    study.declineBreak();
+  }
+  study.skipPhase();
+  assert.strictEqual(suggestedKinds[suggestedKinds.length - 1], 'long');
+});
+
+test('skipping a break asks whether the user is ready to keep working', () => {
+  const { study, clock, events } = makeStudy();
+  study.joinPomodoro();
+  clock.advance(CONFIG.workSessionMs);
+  study.acceptBreak();
+  clock.advance(60 * 1000);
+
+  assert.strictEqual(study.skipPhase(), 'ready');
+  assert.deepStrictEqual(events, ['suggest', 'breakStart', 'askReady']);
+  assert.strictEqual(study.getStatus().pendingQuestion, 'ready');
+  assert.strictEqual(study.getStatus().remainingMs, null);
+
+  // The break timer is gone, so it doesn't ask a second time on its own.
+  clock.advance(CONFIG.shortBreakMs);
+  assert.strictEqual(count(events, 'askReady'), 1);
+});
+
+test('skipping the overrun wait asks the ready question again now', () => {
+  const { study, clock, events } = makeStudy();
+  study.joinPomodoro();
+  clock.advance(CONFIG.workSessionMs);
+  study.acceptBreak();
+  clock.advance(CONFIG.shortBreakMs);
+  study.declineReady();
+
+  assert.strictEqual(study.skipPhase(), 'ready');
+  assert.strictEqual(count(events, 'askReady'), 2);
+});
+
+test('a skipped question that cannot be shown retries like a normal one', () => {
+  const { study, clock, events } = makeStudy({ suggest: false });
+  study.joinPomodoro();
+  study.skipPhase();
+  assert.strictEqual(count(events, 'suggest'), 1);
+  clock.advance(CONFIG.retryWhenBlockedMs);
+  assert.strictEqual(count(events, 'suggest'), 2);
+});
+
+test('skipping while paused clears the pause', () => {
+  const { study } = makeStudy();
+  study.joinPomodoro();
+  study.pause();
+  study.skipPhase();
+  assert.strictEqual(study.getStatus().isPaused, false);
+});
+
+test('stopping while paused clears the pause', () => {
+  const { study } = makeStudy();
+  study.joinPomodoro();
+  study.pause();
+  study.stopPomodoro();
+  const status = study.getStatus();
+  assert.strictEqual(status.isPaused, false);
+  assert.strictEqual(status.remainingMs, null);
+});

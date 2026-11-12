@@ -5,7 +5,8 @@
 // leave the loop at any time and join again later.
 //
 // The work countdown is wall-clock time, so it keeps running when the user
-// leaves productive apps. Timing and state only: every visible effect (nudge
+// leaves productive apps. Only the clock's own controls change that: pause()
+// and resume() freeze and continue it, skipPhase() ends it early. Timing and state only: every visible effect (nudge
 // bubble, frog pose) is a callback, so the whole flow can be tested with fake
 // timers in study/test/studyBreak.test.js.
 //
@@ -38,6 +39,9 @@ function createStudyBreak(callbacks, options = {}) {
   let phaseTimer = null;
   // When the current work, break or overrun phase ends, for getStatus().
   let phaseEndsAt = null;
+  // Time left in the phase while the user has paused it from the clock's
+  // controls, or null when the clock is running.
+  let pausedRemainingMs = null;
   let retryTimer = null;
   // Session kill switch ("Not today"). An explicit join or enable() clears it
   // again, so the user can change their mind.
@@ -62,6 +66,23 @@ function createStudyBreak(callbacks, options = {}) {
     retryTimer = null;
   }
 
+  // Runs onEnd after lengthMs and records when that is, for getStatus().
+  // Starting a phase always un-pauses the clock.
+  function schedulePhaseEnd(lengthMs, onEnd) {
+    pausedRemainingMs = null;
+    phaseEndsAt = now() + lengthMs;
+    phaseTimer = setTimer(() => {
+      phaseTimer = null;
+      phaseEndsAt = null;
+      onEnd();
+    }, lengthMs);
+  }
+
+  // Which break a finished round earns: every longBreakEvery-th is long.
+  function breakKindAfterRound(roundCount) {
+    return roundCount % config().longBreakEvery === 0 ? 'long' : 'short';
+  }
+
   // Starts the next wall-clock work round. Called when the user joins and
   // whenever a break, offer, or overrun ends.
   function startWorkRound() {
@@ -75,12 +96,7 @@ function createStudyBreak(callbacks, options = {}) {
     pendingQuestion = null;
     pendingBreakKind = null;
     currentBreakKind = null;
-    phaseEndsAt = now() + config().workSessionMs;
-    phaseTimer = setTimer(() => {
-      phaseTimer = null;
-      phaseEndsAt = null;
-      completeWorkRound();
-    }, config().workSessionMs);
+    schedulePhaseEnd(config().workSessionMs, completeWorkRound);
   }
 
   // The 25-minute round is over. Count it, choose the break length, and offer
@@ -89,7 +105,7 @@ function createStudyBreak(callbacks, options = {}) {
   function completeWorkRound() {
     if (isDisabled || !joined || state !== 'work') return;
     completedPomodoros += 1;
-    pendingBreakKind = completedPomodoros % config().longBreakEvery === 0 ? 'long' : 'short';
+    pendingBreakKind = breakKindAfterRound(completedPomodoros);
     state = 'offer';
     offerBreak();
   }
@@ -128,12 +144,7 @@ function createStudyBreak(callbacks, options = {}) {
     pendingBreakKind = null;
     currentBreakKind = kind;
     callbacks.onBreakStart(kind);
-    phaseEndsAt = now() + lengthMs;
-    phaseTimer = setTimer(() => {
-      phaseTimer = null;
-      phaseEndsAt = null;
-      askReady();
-    }, lengthMs);
+    schedulePhaseEnd(lengthMs, askReady);
   }
 
   function enterOverrun() {
@@ -143,12 +154,7 @@ function createStudyBreak(callbacks, options = {}) {
       state = 'overrun';
       callbacks.onOverrunStart();
     }
-    phaseEndsAt = now() + config().overrunMs;
-    phaseTimer = setTimer(() => {
-      phaseTimer = null;
-      phaseEndsAt = null;
-      askReady();
-    }, config().overrunMs);
+    schedulePhaseEnd(config().overrunMs, askReady);
   }
 
   function endBreak() {
@@ -237,12 +243,54 @@ function createStudyBreak(callbacks, options = {}) {
     enterOverrun();
   }
 
+  // True when a countdown is running (or paused) that the clock's controls
+  // can act on: a work round, a break, or the overrun wait.
+  function isInTimedPhase() {
+    return joined && !isDisabled && (state === 'work' || state === 'break' || state === 'overrun');
+  }
+
+  // Pause button: freezes the current countdown where it is. Unlike the
+  // continuous wall-clock rule, this is an explicit choice by the user.
+  function pause() {
+    if (!isInTimedPhase() || pausedRemainingMs !== null || phaseEndsAt === null) return false;
+    const remainingMs = Math.max(0, phaseEndsAt - now());
+    clearPhaseTimer();
+    pausedRemainingMs = remainingMs;
+    return true;
+  }
+
+  // Play button: continues the paused countdown from where it stopped.
+  function resume() {
+    if (!isInTimedPhase() || pausedRemainingMs === null) return false;
+    const onEnd = state === 'work' ? completeWorkRound : askReady;
+    schedulePhaseEnd(pausedRemainingMs, onEnd);
+    return true;
+  }
+
+  // Skip button: ends the current countdown now, exactly as if it had run
+  // out. A skipped work round counts as done and the buddy asks whether the
+  // user wants a break; a skipped break or overrun goes to "ready to keep
+  // working?". Returns 'offer' or 'ready' for the question it moved to, or
+  // null when there was nothing to skip.
+  function skipPhase() {
+    if (!isInTimedPhase()) return null;
+    clearPhaseTimer();
+    pausedRemainingMs = null;
+    if (state === 'work') {
+      completeWorkRound();
+      return 'offer';
+    }
+    askReady();
+    return 'ready';
+  }
+
   // "Not today": stop all Pomodoro timers and hand the frog back to its rest
   // pose if a break was running.
   function disable() {
     const wasShowingBreakPose = state === 'break' || state === 'overrun';
     isDisabled = true;
     joined = false;
+    pausedRemainingMs = null;
     pendingQuestion = null;
     pendingBreakKind = null;
     currentBreakKind = null;
@@ -259,6 +307,7 @@ function createStudyBreak(callbacks, options = {}) {
   function stopPomodoro() {
     if (!joined) return false;
     const wasShowingBreakPose = state === 'break' || state === 'overrun';
+    pausedRemainingMs = null;
     pendingQuestion = null;
     pendingBreakKind = null;
     currentBreakKind = null;
@@ -296,13 +345,16 @@ function createStudyBreak(callbacks, options = {}) {
   // Snapshot for the AI prompt and the clock: where the timer is, how long is
   // left in the current phase, and which work round the user is on.
   function getStatus() {
-    const remainingMs = phaseEndsAt === null ? null : Math.max(0, phaseEndsAt - now());
-    const nextBreakKind = (completedPomodoros + 1) % config().longBreakEvery === 0 ? 'long' : 'short';
+    const isPaused = pausedRemainingMs !== null;
+    let remainingMs = phaseEndsAt === null ? null : Math.max(0, phaseEndsAt - now());
+    if (isPaused) remainingMs = pausedRemainingMs;
+    const nextBreakKind = breakKindAfterRound(completedPomodoros + 1);
     return {
       phase: state,
       joined,
       isWorking,
       remainingMs,
+      isPaused,
       pendingQuestion,
       disabled: isDisabled,
       breakKind: currentBreakKind || pendingBreakKind,
@@ -323,6 +375,9 @@ function createStudyBreak(callbacks, options = {}) {
     endBreakEarly,
     noteQuestionHidden,
     stopPomodoro,
+    pause,
+    resume,
+    skipPhase,
     disable,
     looksReady,
     looksLikeStop,
